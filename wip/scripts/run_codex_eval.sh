@@ -14,7 +14,7 @@ PIER_BIN="${PIER_BIN:-pier}"
 CODEX_MODEL="${CODEX_MODEL:-openai/gpt-5.6-sol}"
 CODEX_VERSION="${CODEX_VERSION:-0.146.0}"
 CODEX_REASONING_EFFORT="${CODEX_REASONING_EFFORT:-high}"
-PIER_N_ATTEMPTS="${PIER_N_ATTEMPTS:-4}"
+PIER_N_ATTEMPTS="${PIER_N_ATTEMPTS:-1}"
 PIER_N_CONCURRENT="${PIER_N_CONCURRENT:-2}"
 PIER_JOB_NAME="${PIER_JOB_NAME:-}"
 CODEX_FORCE_AUTH_JSON="${CODEX_FORCE_AUTH_JSON:-1}"
@@ -31,7 +31,7 @@ usage() {
   -m, --model MODEL            Pier 模型标签；默认：openai/gpt-5.6-sol
       --codex-version VERSION  容器内 Codex CLI 版本；默认：0.146.0
       --reasoning-effort LEVEL Codex reasoning effort；默认：high
-  -k, --n-attempts N           每个任务的重复次数；默认：4
+  -k, --n-attempts N           每个任务的重复次数；默认：1
   -n, --n-concurrent N         并发 trial 数；默认：2
   -o, --jobs-dir PATH          结果目录；默认：仓库根目录下的 jobs
       --job-name NAME          Job 名称；默认自动包含模型、样本名和时间
