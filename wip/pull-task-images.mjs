@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, "..");
+const retryDelaysMs = [30_000, 60_000, 120_000];
 
 function printUsage() {
   console.error("Usage: node wip/pull-task-images.mjs <task-ids.txt>");
@@ -53,24 +54,83 @@ function getDockerImage(taskToml, taskId) {
   throw new Error(`Missing [environment].docker_image for task: ${taskId}`);
 }
 
-function run(command, args) {
+function run(command, args, { silent = false } = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: "inherit" });
+    const child = spawn(command, args, {
+      stdio: silent ? ["ignore", "ignore", "ignore"] : ["inherit", "pipe", "pipe"],
+    });
+    let output = "";
+
+    const forwardOutput = (stream, destination) => {
+      stream?.on("data", (chunk) => {
+        destination.write(chunk);
+        output = `${output}${chunk}`.slice(-65_536);
+      });
+    };
+
+    if (!silent) {
+      forwardOutput(child.stdout, process.stdout);
+      forwardOutput(child.stderr, process.stderr);
+    }
+
     child.once("error", reject);
-    child.once("exit", (code, signal) => {
-      if (code === 0) {
-        resolve();
-      } else {
-        reject(
-          new Error(
-            signal
-              ? `${command} terminated by signal ${signal}`
-              : `${command} exited with code ${code}`,
-          ),
-        );
-      }
+    child.once("close", (code, signal) => {
+      resolve({ code, signal, output });
     });
   });
+}
+
+function commandError(command, result) {
+  return new Error(
+    result.signal
+      ? `${command} terminated by signal ${result.signal}`
+      : `${command} exited with code ${result.code}`,
+  );
+}
+
+export function isRateLimitError(output) {
+  return /toomanyrequests|too many requests|rate exceeded/i.test(output);
+}
+
+function sleep(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+export async function ensureImage({
+  image,
+  platformArgs = [],
+  runCommand = run,
+  sleepFn = sleep,
+  delays = retryDelaysMs,
+  logger = console,
+}) {
+  const inspectResult = await runCommand(
+    "docker",
+    ["image", "inspect", image],
+    { silent: true },
+  );
+  if (inspectResult.code === 0) {
+    logger.log("Image already exists; skipping pull.");
+    return "skipped";
+  }
+
+  const pullArgs = ["pull", ...platformArgs, image];
+  for (let attempt = 0; ; attempt += 1) {
+    logger.log(`docker ${pullArgs.join(" ")}`);
+    const pullResult = await runCommand("docker", pullArgs);
+    if (pullResult.code === 0) return "pulled";
+
+    if (!isRateLimitError(pullResult.output) || attempt >= delays.length) {
+      throw commandError("docker", pullResult);
+    }
+
+    const delayMs = delays[attempt];
+    logger.warn(
+      `Public ECR rate limit reached; retrying in ${delayMs / 1_000}s `
+      + `(${attempt + 1}/${delays.length}).`,
+    );
+    await sleepFn(delayMs);
+  }
 }
 
 async function main() {
@@ -90,6 +150,8 @@ async function main() {
   const platformArgs = process.arch === "arm64"
     ? ["--platform", "linux/amd64"]
     : [];
+  let pulledCount = 0;
+  let skippedCount = 0;
 
   for (const [index, taskId] of taskIds.entries()) {
     const taskTomlPath = path.join(repoRoot, "tasks", taskId, "task.toml");
@@ -105,14 +167,23 @@ async function main() {
 
     const image = getDockerImage(taskToml, taskId);
     console.log(`\n[${index + 1}/${taskIds.length}] ${taskId}`);
-    console.log(`docker pull ${[...platformArgs, image].join(" ")}`);
-    await run("docker", ["pull", ...platformArgs, image]);
+    const result = await ensureImage({ image, platformArgs });
+    if (result === "skipped") {
+      skippedCount += 1;
+    } else {
+      pulledCount += 1;
+    }
   }
 
-  console.log(`\nPulled ${taskIds.length} task image(s).`);
+  console.log(
+    `\nCompleted ${taskIds.length} task image(s): `
+    + `${pulledCount} pulled, ${skippedCount} already present.`,
+  );
 }
 
-main().catch((error) => {
-  console.error(`\nError: ${error.message}`);
-  process.exitCode = 1;
-});
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(`\nError: ${error.message}`);
+    process.exitCode = 1;
+  });
+}
