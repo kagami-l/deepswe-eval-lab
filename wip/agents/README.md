@@ -39,11 +39,21 @@ Pier 0.3.0 通过 Python import path 加载自定义 Agent，因此本目录中�
 在启动 Pier 前设置 Kimi Code 环境变量：
 
 ```bash
-export KIMI_MODEL_NAME=k3
 export KIMI_MODEL_API_KEY='你的 API Key'
 export KIMI_MODEL_BASE_URL=https://api.kimi.com/coding/v1
 export KIMI_MODEL_MAX_CONTEXT_SIZE=1048576
 ```
+
+`KIMI_MODEL_NAME` 默认是 `k3`，只有使用其他模型时才需要显式设置。
+
+批量运行脚本也可以从 `wip/scripts/.env` 中读取 API Key：
+
+```dotenv
+KIMI_MODEL_API_KEY='你的 API Key'
+```
+
+宿主环境中已经存在的 `KIMI_MODEL_API_KEY` 优先于 `.env`。仓库的
+`.gitignore` 已忽略 `.env`，不要强制提交密钥文件。
 
 不要把真实 API Key 写进源码、任务配置或 Dockerfile。以下命令使用
 `${KIMI_MODEL_API_KEY}`，由 Pier 在运行时从宿主机环境中读取。
@@ -81,30 +91,49 @@ cd /Users/kgm/Projects/merico/deep-swe
 wip/scripts/run_kimi_sample_dev.sh
 ```
 
+指定其他任务列表：
+
+```bash
+wip/scripts/run_kimi_sample_dev.sh \
+  --task-list wip/data/selection/05_sample_confirm.txt
+```
+
 先检查最终命令但不运行评测：
 
 ```bash
 wip/scripts/run_kimi_sample_dev.sh --dry-run
 ```
 
-通过环境变量调整并发数、Job 名称或 Kimi Code 版本：
+通过参数调整并发数和每个 trial 的尝试次数：
 
 ```bash
-PIER_N_CONCURRENT=4 \
-PIER_JOB_NAME=kimi-code-sample-dev-v2 \
-KIMI_CODE_VERSION=0.30.0 \
-  wip/scripts/run_kimi_sample_dev.sh
+wip/scripts/run_kimi_sample_dev.sh \
+  --n-concurrent 4 \
+  --n-attempts 2
+```
+
+脚本默认生成包含 agent、模型、样本名和时间的 Job 名称，例如：
+
+```text
+kimi-code-k3-05_sample_dev-20260729-183000
+```
+
+也可以显式指定：
+
+```bash
+wip/scripts/run_kimi_sample_dev.sh \
+  --job-name kimi-code-k3-dev-baseline
 ```
 
 额外参数会原样传给 `pier run`：
 
 ```bash
-wip/scripts/run_kimi_sample_dev.sh --n-attempts 2 --debug
+wip/scripts/run_kimi_sample_dev.sh --debug
 ```
 
-默认并发数为 2。可以根据 API 限流、Docker 资源和预算调整
-`PIER_N_CONCURRENT`。首次运行时需要为各任务构建派生镜像，建议先用单个任务
-验证配置，再启动完整任务集。使用 `--help` 可以查看脚本支持的全部环境变量。
+`--n-concurrent` 默认是 2，`--n-attempts` 默认是 1。可以根据 API 限流、
+Docker 资源和预算调整。首次运行时需要为各任务构建派生镜像，建议先用单个
+任务验证配置，再启动完整任务集。使用 `--help` 可以查看脚本支持的全部参数。
 
 ## 安装与缓存机制
 
