@@ -1,0 +1,95 @@
+{
+  "generated_at_utc": "2026-07-29T05:14:09.413612+00:00",
+  "script": "/Users/kgm/Projects/merico/deep-swe/wip/scripts/select_discriminative_tasks.py",
+  "seed": 20260729,
+  "sample_size_per_block": 12,
+  "thresholds": {
+    "minimum_model_coverage": 17,
+    "minimum_effective_repeats_per_config": 3,
+    "maximum_error_rate": 0.05,
+    "maximum_verifier_timeouts": 1,
+    "broad_difficulty_min": 0.2,
+    "broad_difficulty_max": 0.8,
+    "broad_low_model_max_pass_rate": 0.25,
+    "broad_high_model_min_pass_rate": 0.75,
+    "broad_minimum_low_models": 3,
+    "broad_minimum_high_models": 3,
+    "core_difficulty_min": 0.3,
+    "core_difficulty_max": 0.7,
+    "core_minimum_low_models": 4,
+    "core_minimum_high_models": 4,
+    "core_minimum_item_rest_correlation": 0.3,
+    "scoring_sensitive_absolute_delta": 0.1
+  },
+  "excluded_models": [],
+  "input_hashes_sha256": {
+    "tasks.json": "bae967f6472943564c3fc5232fba3c8e0ac465c1be5ccf9dd4895d4ee9df6242",
+    "trials.json": "7844056bade4cee4a2c2964c9582bf7eb1344735a28695cae7d419055656417a",
+    "leaderboard-live.json": "d5fc4531d5b005c6e0040a82ddafe63225b1c172015cd499f2ec866f16f91cf1",
+    "release.json": "0b77963ed8c54ef40c5f744ade178b54bfae2662ed94f9235cee85eb542bdc85",
+    "v1-delta.json": "f6b2c0ef38dd34a3361929e383caa5f8255151f3596d3391f5922531bf2d3f58"
+  },
+  "input_metadata": {
+    "trial_scope": {
+      "source": "deep-swe",
+      "eval_scope": "full"
+    },
+    "excluded_models": [],
+    "harnesses": [
+      "mini-swe-agent"
+    ],
+    "n_tasks": 113,
+    "n_trials": 22586,
+    "n_effective_trials": 22438,
+    "n_excluded_trials": 148,
+    "excluded_error_categories": {
+      "model_routing_404": 73,
+      "provider_timeout": 36,
+      "rate_limit": 1,
+      "unclassified_exception": 5,
+      "upstream_provider_error": 3,
+      "verifier_timeout": 30
+    },
+    "n_configs": 50,
+    "n_base_models": 18,
+    "patch_changed_line_tertile_cutpoints": [
+      579,
+      769
+    ]
+  },
+  "layer_counts": {
+    "00_all": 113,
+    "01_stable": 99,
+    "02_broad_discriminative": 51,
+    "03_core_discriminative": 30
+  },
+  "dev_task_ids": [
+    "tengo-destructuring-bindings",
+    "valibot-recursive-schema-composition",
+    "sqlite-utils-safe-import-checkpoints",
+    "pebble-durability-wait-apis",
+    "bandit-incremental-cache-control",
+    "scriggo-method-declarations",
+    "adaptix-name-mapping-aliases",
+    "anko-typed-variable-bindings",
+    "mnamer-daemon-watch-lifecycle",
+    "skrub-duration-encoding",
+    "obsidian-linter-scoped-ignore-markers",
+    "dasel-html-document-format"
+  ],
+  "confirm_task_ids": [
+    "arcane-drift-detection-baselines",
+    "tengo-callable-instance-isolation",
+    "mobly-grouped-test-barriers",
+    "fastapi-deprecation-response-headers",
+    "anko-default-function-arguments",
+    "prometheus-typed-label-sorting",
+    "kombu-single-active-consumer-priority",
+    "textual-richlog-follow-state",
+    "tomlkit-toml-table-converters",
+    "cliffy-config-file-parsing",
+    "go-critic-doc-link-checker",
+    "clack-async-autocomplete-options"
+  ],
+  "interpretation": "Public trials use a single harness (mini-swe-agent). Treat the selected tasks as candidates for agent-system comparisons, then validate framework and coder-reviewer collaboration differences with local repeated runs."
+}

@@ -1,0 +1,1018 @@
+{
+  "scope": "v1.1 vs v1 on the 10 harness+model+reasoning-effort configs run in both versions. Same rollouts, re-graded: v1 is exit-code scoring, v1.1 is node-id scoring. Pass rate is over scored attempts.",
+  "compared_to": "v1",
+  "n_shared_configs": 10,
+  "n_tasks": 113,
+  "pooled": {
+    "v1": 0.5094,
+    "current": 0.5179
+  },
+  "configs": [
+    {
+      "config": "mini_swe_agent_gpt_5_5_xhigh",
+      "model": "gpt-5-5",
+      "reasoning_effort": "xhigh",
+      "v1": 0.7005,
+      "current": 0.6704,
+      "delta": -0.0301,
+      "n_v1": 444,
+      "n_current": 452
+    },
+    {
+      "config": "mini_swe_agent_gpt_5_5_high",
+      "model": "gpt-5-5",
+      "reasoning_effort": "high",
+      "v1": 0.6195,
+      "current": 0.6438,
+      "delta": 0.0243,
+      "n_v1": 452,
+      "n_current": 452
+    },
+    {
+      "config": "mini_swe_agent_claude_opus_4_8_max",
+      "model": "claude-opus-4-8",
+      "reasoning_effort": "max",
+      "v1": 0.5819,
+      "current": 0.5897,
+      "delta": 0.0079,
+      "n_v1": 452,
+      "n_current": 429
+    },
+    {
+      "config": "mini_swe_agent_claude_opus_4_8_xhigh",
+      "model": "claude-opus-4-8",
+      "reasoning_effort": "xhigh",
+      "v1": 0.5774,
+      "current": 0.5436,
+      "delta": -0.0338,
+      "n_v1": 452,
+      "n_current": 447
+    },
+    {
+      "config": "mini_swe_agent_gpt_5_5_medium",
+      "model": "gpt-5-5",
+      "reasoning_effort": "medium",
+      "v1": 0.4801,
+      "current": 0.5398,
+      "delta": 0.0597,
+      "n_v1": 452,
+      "n_current": 452
+    },
+    {
+      "config": "mini_swe_agent_claude_opus_4_8_high",
+      "model": "claude-opus-4-8",
+      "reasoning_effort": "high",
+      "v1": 0.5066,
+      "current": 0.5177,
+      "delta": 0.0111,
+      "n_v1": 452,
+      "n_current": 452
+    },
+    {
+      "config": "mini_swe_agent_gpt_5_4_xhigh",
+      "model": "gpt-5-4",
+      "reasoning_effort": "xhigh",
+      "v1": 0.5553,
+      "current": 0.5177,
+      "delta": -0.0376,
+      "n_v1": 452,
+      "n_current": 452
+    },
+    {
+      "config": "mini_swe_agent_claude_opus_4_8_medium",
+      "model": "claude-opus-4-8",
+      "reasoning_effort": "medium",
+      "v1": 0.4735,
+      "current": 0.4867,
+      "delta": 0.0133,
+      "n_v1": 452,
+      "n_current": 452
+    },
+    {
+      "config": "mini_swe_agent_gemini_3_5_flash_medium",
+      "model": "gemini-3-5-flash",
+      "reasoning_effort": "medium",
+      "v1": 0.2832,
+      "current": 0.3739,
+      "delta": 0.0907,
+      "n_v1": 452,
+      "n_current": 452
+    },
+    {
+      "config": "mini_swe_agent_claude_sonnet_4_6_high",
+      "model": "claude-sonnet-4-6",
+      "reasoning_effort": "high",
+      "v1": 0.3177,
+      "current": 0.2993,
+      "delta": -0.0183,
+      "n_v1": 447,
+      "n_current": 451
+    }
+  ],
+  "tasks": [
+    {
+      "task": "vulture-persistent-analysis-cache",
+      "v1": 0.775,
+      "current": 0.175,
+      "delta": -0.6,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "sqlfmt-create-table-ddl-formatting",
+      "v1": 0.425,
+      "current": 0.225,
+      "delta": -0.2,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "yaegi-go-embed-directives",
+      "v1": 0.725,
+      "current": 0.55,
+      "delta": -0.175,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "eicrud-keyset-pagination-cursor",
+      "v1": 0.375,
+      "current": 0.225,
+      "delta": -0.15,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "updo-policy-alerting",
+      "v1": 0.2245,
+      "current": 0.0769,
+      "delta": -0.1476,
+      "n_v1": 49,
+      "n_current": 39
+    },
+    {
+      "task": "participle-grammar-conflict-analysis",
+      "v1": 0.425,
+      "current": 0.2895,
+      "delta": -0.1355,
+      "n_v1": 40,
+      "n_current": 38
+    },
+    {
+      "task": "ofetch-per-origin-circuit-breaker",
+      "v1": 0.9474,
+      "current": 0.8182,
+      "delta": -0.1292,
+      "n_v1": 38,
+      "n_current": 33
+    },
+    {
+      "task": "go-git-worktree-merge-conflicts",
+      "v1": 0.65,
+      "current": 0.525,
+      "delta": -0.125,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "kgateway-consistent-hash-policy",
+      "v1": 0.7,
+      "current": 0.575,
+      "delta": -0.125,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "mnamer-daemon-watch-lifecycle",
+      "v1": 0.725,
+      "current": 0.6,
+      "delta": -0.125,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "obsidian-linter-auto-table-of-contents",
+      "v1": 0.125,
+      "current": 0.0,
+      "delta": -0.125,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "query-persist-restored-query-state",
+      "v1": 0.725,
+      "current": 0.6,
+      "delta": -0.125,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "testem-bail-on-test-failure",
+      "v1": 0.275,
+      "current": 0.15,
+      "delta": -0.125,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "httpx-multipart-response-parsing",
+      "v1": 0.6735,
+      "current": 0.55,
+      "delta": -0.1235,
+      "n_v1": 49,
+      "n_current": 40
+    },
+    {
+      "task": "bandit-interprocedural-taint-checks",
+      "v1": 0.575,
+      "current": 0.475,
+      "delta": -0.1,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "go-genai-streamed-function-args",
+      "v1": 0.825,
+      "current": 0.725,
+      "delta": -0.1,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "obsidian-linter-scoped-ignore-markers",
+      "v1": 0.85,
+      "current": 0.75,
+      "delta": -0.1,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "oxvg-structural-selector-preservation",
+      "v1": 0.2,
+      "current": 0.1,
+      "delta": -0.1,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "scriggo-method-declarations",
+      "v1": 0.7,
+      "current": 0.6,
+      "delta": -0.1,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "kea-atomic-signal-selectors",
+      "v1": 0.5833,
+      "current": 0.4865,
+      "delta": -0.0968,
+      "n_v1": 48,
+      "n_current": 37
+    },
+    {
+      "task": "cliffy-config-file-parsing",
+      "v1": 0.35,
+      "current": 0.275,
+      "delta": -0.075,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "textual-kitty-key-phases",
+      "v1": 0.5,
+      "current": 0.425,
+      "delta": -0.075,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "yjs-map-conflict-detection",
+      "v1": 0.825,
+      "current": 0.75,
+      "delta": -0.075,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "termenv-preserve-ansi-resets",
+      "v1": 0.175,
+      "current": 0.1081,
+      "delta": -0.0669,
+      "n_v1": 40,
+      "n_current": 37
+    },
+    {
+      "task": "kysely-window-grouping-helpers",
+      "v1": 0.8571,
+      "current": 0.8,
+      "delta": -0.0571,
+      "n_v1": 49,
+      "n_current": 40
+    },
+    {
+      "task": "python-statemachine-state-data-scoping",
+      "v1": 0.3061,
+      "current": 0.25,
+      "delta": -0.0561,
+      "n_v1": 49,
+      "n_current": 40
+    },
+    {
+      "task": "opa-rego-rule-profiling",
+      "v1": 0.5278,
+      "current": 0.475,
+      "delta": -0.0528,
+      "n_v1": 36,
+      "n_current": 40
+    },
+    {
+      "task": "go-critic-doc-link-checker",
+      "v1": 0.551,
+      "current": 0.5,
+      "delta": -0.051,
+      "n_v1": 49,
+      "n_current": 40
+    },
+    {
+      "task": "abs-stepped-slices",
+      "v1": 0.875,
+      "current": 0.825,
+      "delta": -0.05,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "dynamodb-toolbox-conditional-attribute-requirements",
+      "v1": 0.825,
+      "current": 0.775,
+      "delta": -0.05,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "happy-dom-deterministic-intersectionobserver",
+      "v1": 0.175,
+      "current": 0.125,
+      "delta": -0.05,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "httpx-deterministic-cookie-store",
+      "v1": 0.925,
+      "current": 0.875,
+      "delta": -0.05,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "ipython-session-bundle-replay",
+      "v1": 0.5,
+      "current": 0.45,
+      "delta": -0.05,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "sqlite-utils-safe-import-checkpoints",
+      "v1": 0.625,
+      "current": 0.575,
+      "delta": -0.05,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "wazero-multi-module-snapshots",
+      "v1": 0.675,
+      "current": 0.6316,
+      "delta": -0.0434,
+      "n_v1": 40,
+      "n_current": 38
+    },
+    {
+      "task": "aiomonitor-task-snapshots-diff",
+      "v1": 0.8367,
+      "current": 0.7949,
+      "delta": -0.0419,
+      "n_v1": 49,
+      "n_current": 39
+    },
+    {
+      "task": "fastapi-deprecation-response-headers",
+      "v1": 0.5918,
+      "current": 0.55,
+      "delta": -0.0418,
+      "n_v1": 49,
+      "n_current": 40
+    },
+    {
+      "task": "koota-deferred-mutation-buffer",
+      "v1": 0.2653,
+      "current": 0.225,
+      "delta": -0.0403,
+      "n_v1": 49,
+      "n_current": 40
+    },
+    {
+      "task": "drizzle-orm-window-function-builders",
+      "v1": 0.8776,
+      "current": 0.85,
+      "delta": -0.0276,
+      "n_v1": 49,
+      "n_current": 40
+    },
+    {
+      "task": "anko-default-function-arguments",
+      "v1": 0.775,
+      "current": 0.75,
+      "delta": -0.025,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "bandit-structured-nosec-directives",
+      "v1": 0.025,
+      "current": 0.0,
+      "delta": -0.025,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "csstree-shorthand-expansion-compression",
+      "v1": 0.325,
+      "current": 0.3,
+      "delta": -0.025,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "gql-incremental-graphql-delivery",
+      "v1": 0.05,
+      "current": 0.025,
+      "delta": -0.025,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "happy-dom-abort-pending-body-reads",
+      "v1": 1.0,
+      "current": 0.975,
+      "delta": -0.025,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "ink-grid-box-layout",
+      "v1": 0.175,
+      "current": 0.15,
+      "delta": -0.025,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "kombu-single-active-consumer-priority",
+      "v1": 0.65,
+      "current": 0.625,
+      "delta": -0.025,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "koota-pair-relation-tracking",
+      "v1": 0.175,
+      "current": 0.15,
+      "delta": -0.025,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "meriyah-explicit-resource-declarations",
+      "v1": 0.375,
+      "current": 0.35,
+      "delta": -0.025,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "mobly-grouped-test-barriers",
+      "v1": 0.65,
+      "current": 0.625,
+      "delta": -0.025,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "onedump-dump-encryption-pipeline",
+      "v1": 0.425,
+      "current": 0.4,
+      "delta": -0.025,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "textual-richlog-follow-state",
+      "v1": 0.625,
+      "current": 0.6,
+      "delta": -0.025,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "ts-pattern-match-each",
+      "v1": 0.725,
+      "current": 0.7,
+      "delta": -0.025,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "superjson-error-stack-serialization",
+      "v1": 0.3061,
+      "current": 0.2857,
+      "delta": -0.0204,
+      "n_v1": 49,
+      "n_current": 35
+    },
+    {
+      "task": "numba-stencil-boundary-modes",
+      "v1": 0.7692,
+      "current": 0.75,
+      "delta": -0.0192,
+      "n_v1": 39,
+      "n_current": 40
+    },
+    {
+      "task": "arcane-drift-detection-baselines",
+      "v1": 0.6122,
+      "current": 0.6,
+      "delta": -0.0122,
+      "n_v1": 49,
+      "n_current": 40
+    },
+    {
+      "task": "boa-hierarchical-evaluation-cancellation",
+      "v1": 0.5102,
+      "current": 0.5,
+      "delta": -0.0102,
+      "n_v1": 49,
+      "n_current": 40
+    },
+    {
+      "task": "httpx-streaming-json-iteration",
+      "v1": 0.3061,
+      "current": 0.3,
+      "delta": -0.0061,
+      "n_v1": 49,
+      "n_current": 40
+    },
+    {
+      "task": "katex-multicolumn-array-spans",
+      "v1": 0.2041,
+      "current": 0.2,
+      "delta": -0.0041,
+      "n_v1": 49,
+      "n_current": 40
+    },
+    {
+      "task": "abs-module-cache-flags",
+      "v1": 0.875,
+      "current": 0.875,
+      "delta": 0.0,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "helm-unified-manifest-stream",
+      "v1": 0.8,
+      "current": 0.8,
+      "delta": 0.0,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "koota-query-predicates",
+      "v1": 0.2,
+      "current": 0.2,
+      "delta": 0.0,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "pebble-durability-wait-apis",
+      "v1": 0.625,
+      "current": 0.625,
+      "delta": 0.0,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "returns-validated-error-accumulation",
+      "v1": 0.9,
+      "current": 0.9,
+      "delta": 0.0,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "sql-formatter-bigquery-pipe-formatting",
+      "v1": 0.875,
+      "current": 0.875,
+      "delta": 0.0,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "true-myth-iterable-collection-combinators",
+      "v1": 0.975,
+      "current": 0.975,
+      "delta": 0.0,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "valibot-recursive-schema-composition",
+      "v1": 0.6735,
+      "current": 0.675,
+      "delta": 0.0015,
+      "n_v1": 49,
+      "n_current": 40
+    },
+    {
+      "task": "fastapi-implicit-head-options",
+      "v1": 0.5102,
+      "current": 0.525,
+      "delta": 0.0148,
+      "n_v1": 49,
+      "n_current": 40
+    },
+    {
+      "task": "tomlkit-toml-table-converters",
+      "v1": 0.7347,
+      "current": 0.75,
+      "delta": 0.0153,
+      "n_v1": 49,
+      "n_current": 40
+    },
+    {
+      "task": "ytt-jsonpath-query-api",
+      "v1": 0.875,
+      "current": 0.8947,
+      "delta": 0.0197,
+      "n_v1": 40,
+      "n_current": 38
+    },
+    {
+      "task": "actionlint-action-pinning-lint",
+      "v1": 0.875,
+      "current": 0.9,
+      "delta": 0.025,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "adaptix-name-mapping-aliases",
+      "v1": 0.675,
+      "current": 0.7,
+      "delta": 0.025,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "anko-typed-variable-bindings",
+      "v1": 0.475,
+      "current": 0.5,
+      "delta": 0.025,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "awilix-async-container-initialization",
+      "v1": 0.275,
+      "current": 0.3,
+      "delta": 0.025,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "etree-xml-diff-patch",
+      "v1": 0.675,
+      "current": 0.7,
+      "delta": 0.025,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "mashumaro-flattened-dataclass-fields",
+      "v1": 0.225,
+      "current": 0.25,
+      "delta": 0.025,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "obsidian-linter-link-format-conversion",
+      "v1": 0.225,
+      "current": 0.25,
+      "delta": 0.025,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "tengo-callable-instance-isolation",
+      "v1": 0.5918,
+      "current": 0.625,
+      "delta": 0.0332,
+      "n_v1": 49,
+      "n_current": 40
+    },
+    {
+      "task": "effect-sse-httpapi-streaming",
+      "v1": 0.1837,
+      "current": 0.225,
+      "delta": 0.0413,
+      "n_v1": 49,
+      "n_current": 40
+    },
+    {
+      "task": "geo-shapeindex-serialization",
+      "v1": 0.525,
+      "current": 0.575,
+      "delta": 0.05,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "koota-composite-trait-aspects",
+      "v1": 0.325,
+      "current": 0.375,
+      "delta": 0.05,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "opa-template-string-reconstruction",
+      "v1": 0.625,
+      "current": 0.675,
+      "delta": 0.05,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "clack-async-autocomplete-options",
+      "v1": 0.2051,
+      "current": 0.275,
+      "delta": 0.0699,
+      "n_v1": 39,
+      "n_current": 40
+    },
+    {
+      "task": "psd-tools-blend-range-api",
+      "v1": 0.7755,
+      "current": 0.85,
+      "delta": 0.0745,
+      "n_v1": 49,
+      "n_current": 40
+    },
+    {
+      "task": "fd-deterministic-multi-key-sorting",
+      "v1": 0.4,
+      "current": 0.475,
+      "delta": 0.075,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "kombu-virtual-queue-dead-lettering",
+      "v1": 0.125,
+      "current": 0.2,
+      "delta": 0.075,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "koota-entity-snapshot-rollback",
+      "v1": 0.9,
+      "current": 0.975,
+      "delta": 0.075,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "optique-conditional-option-dependencies",
+      "v1": 0.25,
+      "current": 0.325,
+      "delta": 0.075,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "pest-character-class-coalescing",
+      "v1": 0.075,
+      "current": 0.15,
+      "delta": 0.075,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "pwntools-tube-multiplexing",
+      "v1": 0.4,
+      "current": 0.475,
+      "delta": 0.075,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "task-task-graph-export",
+      "v1": 0.75,
+      "current": 0.825,
+      "delta": 0.075,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "kcp-go-multiplexed-kcp-streams",
+      "v1": 0.5102,
+      "current": 0.5946,
+      "delta": 0.0844,
+      "n_v1": 49,
+      "n_current": 37
+    },
+    {
+      "task": "tengo-destructuring-bindings",
+      "v1": 0.6327,
+      "current": 0.725,
+      "delta": 0.0923,
+      "n_v1": 49,
+      "n_current": 40
+    },
+    {
+      "task": "goreleaser-retry-publish-auditing",
+      "v1": 0.5278,
+      "current": 0.625,
+      "delta": 0.0972,
+      "n_v1": 36,
+      "n_current": 40
+    },
+    {
+      "task": "expr-try-catch-errors",
+      "v1": 0.102,
+      "current": 0.2,
+      "delta": 0.098,
+      "n_v1": 49,
+      "n_current": 40
+    },
+    {
+      "task": "arktype-json-schema-refs-dependencies",
+      "v1": 0.275,
+      "current": 0.375,
+      "delta": 0.1,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "bandit-incremental-cache-control",
+      "v1": 0.475,
+      "current": 0.575,
+      "delta": 0.1,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "cattrs-partial-structuring-recovery",
+      "v1": 0.55,
+      "current": 0.65,
+      "delta": 0.1,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "prometheus-transactional-reload-status",
+      "v1": 0.025,
+      "current": 0.125,
+      "delta": 0.1,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "prometheus-typed-label-sorting",
+      "v1": 0.3673,
+      "current": 0.475,
+      "delta": 0.1077,
+      "n_v1": 49,
+      "n_current": 40
+    },
+    {
+      "task": "dasel-html-document-format",
+      "v1": 0.425,
+      "current": 0.55,
+      "delta": 0.125,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "wasmi-trap-coredumps",
+      "v1": 0.7,
+      "current": 0.825,
+      "delta": 0.125,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "igel-persist-feature-schema",
+      "v1": 0.3469,
+      "current": 0.475,
+      "delta": 0.1281,
+      "n_v1": 49,
+      "n_current": 40
+    },
+    {
+      "task": "langchain-request-coalescing",
+      "v1": 0.1429,
+      "current": 0.275,
+      "delta": 0.1321,
+      "n_v1": 49,
+      "n_current": 40
+    },
+    {
+      "task": "dateutil-rfc5545-timezone-interop",
+      "v1": 0.25,
+      "current": 0.4,
+      "delta": 0.15,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "quill-shared-toolbar-focus",
+      "v1": 0.0,
+      "current": 0.175,
+      "delta": 0.175,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "scc-bounded-memory-spilling",
+      "v1": 0.475,
+      "current": 0.65,
+      "delta": 0.175,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "vitest-duration-sharding",
+      "v1": 0.725,
+      "current": 0.9,
+      "delta": 0.175,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "helm-array-merge-strategies",
+      "v1": 0.175,
+      "current": 0.375,
+      "delta": 0.2,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "testem-per-launcher-reports",
+      "v1": 0.75,
+      "current": 0.95,
+      "delta": 0.2,
+      "n_v1": 40,
+      "n_current": 40
+    },
+    {
+      "task": "dynamodb-toolbox-lazy-recursive-schemas",
+      "v1": 0.551,
+      "current": 0.8,
+      "delta": 0.249,
+      "n_v1": 49,
+      "n_current": 40
+    },
+    {
+      "task": "skrub-duration-encoding",
+      "v1": 0.2245,
+      "current": 0.6,
+      "delta": 0.3755,
+      "n_v1": 49,
+      "n_current": 40
+    },
+    {
+      "task": "claude-code-by-agents-recursive-delegation",
+      "v1": 0.102,
+      "current": 0.5,
+      "delta": 0.398,
+      "n_v1": 49,
+      "n_current": 40
+    },
+    {
+      "task": "narwhals-rolling-window-suite",
+      "v1": 0.3,
+      "current": 0.95,
+      "delta": 0.65,
+      "n_v1": 40,
+      "n_current": 40
+    }
+  ]
+}

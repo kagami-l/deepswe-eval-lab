@@ -1,0 +1,74 @@
+# DeepSWE v1.1 筛选数据
+
+本目录保存用于筛选高区分度任务的官方公开数据快照，以及可复现的逐层筛选结果。
+
+## `official-v1.1/`
+
+下载自 DeepSWE 官网 `https://deepswe.datacurve.ai/artifacts/v1.1/`，当前快照的文件修改时间为 2026-07-25（`v1-delta.json` 为 2026-07-27）。完整性校验见 `SHA256SUMS`。
+
+| 文件 | 含义 | 是否进入主筛选 |
+| --- | --- | --- |
+| `tasks.json` | 113 个任务的 ID、语言、仓库、base commit、prompt 长度等元数据 | 是 |
+| `trials.json` | 22,586 次 rollout 的系统配置、通过/错误、分项分数、成本、tokens、steps 和工件状态 | 是，核心输入 |
+| `v1-delta.json` | 同一批共享 rollout 在 v1 和 v1.1 评分下的 task/config 差异 | 是，用于标记评分敏感题 |
+| `leaderboard-live.json` | 官网 configuration 级榜单及 pass@k、置信区间、成本等汇总 | 否，用于交叉核验 |
+| `release.json` | trajectory、patch、agent log、verifier 输出的公开下载 URL 模板 | 否，用于后续人工审计 |
+
+主筛选只使用 `source=deep-swe`、`eval_scope=full`、`included_in_score=true` 且 `errored=false` 的 trial。被排除 trial 不进入通过率分母，但会进入错误率和 verifier timeout 统计。
+
+## `selection/`
+
+由 `wip/scripts/select_discriminative_tasks.py` 生成。每一层同时保存 CSV 和 JSON，后层只包含通过前层和本层条件的任务：
+
+| 层 | 文件 | 含义 |
+| --- | --- | --- |
+| 00 | `00_all.*` | 全部任务及完整派生指标、各层布尔值和排除原因 |
+| 01 | `01_stable.*` | 高覆盖、每 config 至少 3 个有效重复、总错误率不高于 5%、verifier timeout 不超过 1 次 |
+| 02 | `02_broad_discriminative.*` | 难度 0.20–0.80，且至少 3 个低通过 base model 和 3 个高通过 base model |
+| 03 | `03_core_discriminative.*` | 难度收紧到 0.30–0.70，强弱端至少 4/4，config item-rest correlation 至少 0.30 |
+| 04 | `04_core_ranked.*` | 按区分度、重复稳定性和非极端难度综合排序的核心池 |
+| 05 | `05_sample_dev.*`、`05_sample_confirm.*` | 两组互斥的平衡抽样，默认每组 12 题 |
+| - | `manifest.json` | 输入哈希、阈值、随机种子、逐层数量和两组 task ID |
+
+逐层结果及集合关系如下。这种表示通常可以叫“树状图”或更准确地叫“层级关系示意图”：
+
+```text
+00_all：113 题
+└── 01_stable：99 题
+    └── 02_broad_discriminative：51 题
+        └── 03_core_discriminative：30 题
+            └── 04_core_ranked：同一批 30 题，仅重新排序
+                ├── 05_sample_dev：12 题
+                ├── 05_sample_confirm：12 题，与 dev 互斥
+                └── 未抽入本轮样本：6 题
+```
+
+因此，`03_core_discriminative` 是 `02_broad_discriminative` 经更严格条件筛出的子集；`04_core_ranked` 与 `03_core_discriminative` 的任务集合完全相同，不是另一套独立筛选，只是按照综合分数改变行顺序。两组 `05_sample_*` 都从这 30 题中抽取，也就是同时属于 `03_core_discriminative` 和 `04_core_ranked`；confirm 在抽样时明确排除了已经进入 dev 的题。
+
+难度条件同时检查 config 等权和 base-model 等权口径。前者更接近“模型 + effort + mini-swe-agent”这个完整系统，后者防止拥有五档 effort 的模型族在选题时获得五倍权重。
+
+排序中的组内噪声使用 `(task, config)` 重复均值的估计方差 `p(1-p)/n`，再与 config 间方差构造 signal ratio；它只影响核心池内部优先级，不作为额外硬过滤条件。
+
+运行：
+
+```bash
+python3 wip/scripts/select_discriminative_tasks.py
+```
+
+可以用 `--sample-size`、`--seed`、`--input-dir`、`--output-dir` 调整抽样和路径。筛选脚本只依赖 Python 标准库。脚本默认校验 `SHA256SUMS` 并拒绝对意外变化的输入运行；明确要分析更新后的官网快照时，先人工核查差异，再使用 `--allow-input-hash-mismatch`。
+
+如果待测 agent system 使用了官网公开结果中的模型，应做 leave-target-model-out，且可重复传入多个模型：
+
+```bash
+python3 wip/scripts/select_discriminative_tasks.py \
+  --exclude-model gpt-5-5 \
+  --exclude-model claude-opus-5
+```
+
+未指定 `--output-dir` 时，这类结果会自动写入独立的 `selection-leaveout-*` 目录，不覆盖全量基准结果。覆盖门槛会按剩余 base model 数同比例调整。
+
+## 对后续 agent-system 评测的解释
+
+后续把“agent 框架 + 模型”或“coder + reviewer 协作配置”作为一个整体 agent system 比较是合适的，也不改变当前的稳定性和区分度筛选主线。做整体效果排名时，不必拆解模型效应与框架效应：每个完整配置直接作为一个 treatment，在相同 task、预算、timeout 和重复次数下做配对比较即可。如果还要进一步声称“协作机制本身带来提升”，则需要增加同模型、同预算、无 reviewer 的 matched ablation，不能只比较两个整体配置。
+
+边界是：官网公开 rollout 全部来自 `mini-swe-agent`，所以本目录的核心池只能证明这些题能够区分“固定框架下的公开模型/effort 配置”。它是其他单 agent 或 collab agent 的候选池，不是框架或协作区分度的既成证据。建议先在 `05_sample_dev` 上调试，在不改规则的前提下用 `05_sample_confirm` 做确认；每个 agent system 每题至少 4 次，并单独记录基础设施错误。
