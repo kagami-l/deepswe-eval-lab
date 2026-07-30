@@ -8,13 +8,15 @@
 
 1. 以方便、可靠地在 DeepSWE/Pier 上运行为第一目标。
 2. 使用 Pier/Harbor 原生的任务隔离、工件提取和 verifier，不依赖 SWE-bench Pro runner。
-3. 分阶段 dogfood：首阶段使用本地 `sublang-ai/cligent`，待关注的评测任务稳定运行后再引入 `sublang-ai/playbook`，避免同时调试两层新基础设施。
+3. 分阶段 dogfood：首阶段使用 `@sublang/cligent`，待关注的评测任务稳定运行后再引入 `@sublang/playbook`，避免同时调试两层新基础设施。
 4. 隐藏测试和 verifier 不进入协作循环，只评价最终提交。
 
-本地依赖仓库：
+依赖包与本地仓库：
 
-- `cligent`：`/Users/kgm/Projects/merico/cligent`
-- `playbook`（第二阶段）：`/Users/kgm/Projects/merico/playbook`
+- `cligent`：npm `@sublang/cligent`（当前 0.16.0，与本地 checkout `/Users/kgm/Projects/merico/cligent` 的 v0.16.0 tag 一致）
+- `playbook`（第二阶段）：npm `@sublang/playbook`（当前 3.1.0，与本地 checkout `/Users/kgm/Projects/merico/playbook` 一致）
+
+默认从 npm 锁定精确版本安装；本地 tarball 仅作为修复迭代期的 override 通道（见第 11 节）。
 
 ## 2. 推荐架构
 
@@ -28,7 +30,7 @@ flowchart LR
     D --> V["cligent Reviewer LLM"]
     D --> J["本地 Reviewer JSON parser"]
     C --> APP["/app 主工作区"]
-    V --> WT["隔离 Review Worktree"]
+    V --> WT["隔离 Review 拷贝工作区"]
     APP --> G["Git checkpoint commits"]
     G --> PA["pre_artifacts.sh"]
     PA --> E["独立 verifier 环境"]
@@ -52,16 +54,16 @@ flowchart LR
 
 1. Pier 自定义 Agent 是宿主侧的薄 Python 适配层。
 2. `cligent`、Node runtime 和 coding-agent SDK/CLI 安装在任务容器中。
-3. Python 适配层通过 Harbor `environment.exec()` 启动容器内 runtime。
+3. Python 适配层通过 Pier `environment.exec()` 启动容器内 runtime。
 
 不建议为了宿主侧运行 cligent 而实现一套跨 Python/TypeScript 的远程执行 adapter；这会显著增加复杂度，也不利于 DeepSWE 原生运行。
 
 ## 4. Pier 自定义 Agent
 
-建议目录：
+建议目录（沿用仓库现有的 `wip/agents/` 约定，实现方式参考 `wip/agents/kimi_code_agent.py`）：
 
 ```text
-agents/deep_swe_collab/
+wip/agents/deep_swe_collab/
 ├── __init__.py
 ├── pier_agent.py
 ├── runtime/
@@ -77,28 +79,29 @@ agents/deep_swe_collab/
 └── tests/
 ```
 
-`pier_agent.py` 实现 Harbor `BaseAgent`：
+`pier_agent.py` 实现 `pier.agents.base.BaseAgent`（如需 `install_spec()` 派生镜像和 `populate_context_post_run()` 则继承 `BaseInstalledAgent`；pier 是 Harbor 的 fork 但运行时不使用 harbor 包，不要 import harbor）：
 
 - `setup(environment)`：
-  - 上传 runtime 和本地 cligent 依赖包；
-  - 安装 Node runtime 和所需 coding-agent SDK/CLI；
+  - 上传 runtime bundle；
+  - 安装 cligent（npm 锁定版本）和所需 coding-agent SDK/CLI——任务镜像是 Debian 12 且预装 Node v24.12.0，无需自装 Node；
   - 记录实际安装版本。
+  - 注意 agent setup 有独立的默认 360 秒超时（`--agent-setup-timeout-multiplier` 可放大），不占 agent 运行预算；批量运行时应改用 `install_spec()` 把安装步骤烘进派生镜像，避免每个 trial 重复在线安装。
 - `run(instruction, environment, context)`：
   - 将 DeepSWE instruction 安全写入容器；
   - 在 `/app` 上运行协作 workflow；
   - 收集 summary、token usage、耗时和 outcome；
   - 将最终数据写入 `/logs/agent/`；
-  - 回填 `AgentContext`。
+  - 回填 `AgentContext`（`n_input_tokens`、`n_output_tokens`、`cost_usd`、`n_agent_steps` 等；Modifier/Reviewer 分角色明细放入 `metadata`）。
 
-Pier 当前支持通过 import path 加载自定义 Agent。预期调用形式：
+Pier 通过 `--agent-import-path` 加载自定义 Agent（`--agent` 是内置 agent 的固定枚举，不能用于自定义类）。预期调用形式：
 
 ```bash
 pier run \
   -p tasks/fastapi-implicit-head-options \
-  --agent agents.deep_swe_collab.pier_agent:DeepSweCollabAgent \
+  --agent-import-path wip.agents.deep_swe_collab.pier_agent:DeepSweCollabAgent \
   --ak modifier_adapter=codex \
   --ak reviewer_adapter=claude \
-  --ak max_reviews=2
+  --ak max_reviews=3
 ```
 
 正式实验推荐使用 Pier job config 固化完整配置，而不是依赖较长的命令行。
@@ -107,7 +110,7 @@ pier run \
 
 ### 5.1 首阶段：手写 deterministic orchestrator
 
-首阶段不安装、不导入 `playbook`。用普通 TypeScript 编写小型控制循环，直接根据 Reviewer 严格 JSON 中的 `verdict` 决定交付或修订，不经过 Captain、Judge 或 LLM 控制面。
+首阶段不安装、不导入 `playbook`。用普通 TypeScript 编写小型控制循环，直接根据 Reviewer 严格 JSON 中是否存在 blocking finding 决定交付或修订（`verdict` 字段仅作交叉校验，见第 8 节），不经过 Captain、Judge 或 LLM 控制面。
 
 控制层实现统一接口，避免以后引入 playbook 时改动 Pier 和 cligent 集成：
 
@@ -129,9 +132,13 @@ prepare
                        → checkpoint_1
                        → review_2
                            ├── approve → deliver
-                           └── revise → final_revision
+                           └── revise → revision_2
                                             → checkpoint_2
-                                            → max_reviews_reached
+                                            → review_3
+                                                ├── approve → deliver
+                                                └── revise → final_revision
+                                                                 → checkpoint_3
+                                                                 → max_reviews_reached
 ```
 
 控制代码仍需显式记录上述状态和 transition event，以便测试、恢复和分析。这样有以下优点：
@@ -148,7 +155,7 @@ prepare
 
 ### 5.2 第二阶段：playbook backend
 
-待 3 题 smoke、12 题 dev 以及关注的正式评测任务稳定运行后，再增加 `PlaybookCollaborationEngine`。它与 direct engine 共用 prompts、Reviewer schema、cligent player、Git/worktree、outcome 和 artifact schema，只替换状态流转实现。
+待 3 题 smoke、12 题 dev 以及关注的正式评测任务稳定运行后，再增加 `PlaybookCollaborationEngine`。它与 direct engine 共用 prompts、Reviewer schema、cligent player、Git/拷贝工作区、outcome 和 artifact schema，只替换状态流转实现。
 
 第二阶段不直接使用 `@sublang/playbook` 自带的 CODE workflow，因为它包含 spex/spec、IR 和 Committer 等与 DeepSWE 无关的语义。应编写专用 workflow，并先通过 fake player 测试证明它与 direct engine 在相同输入序列下产生相同 transition 和 outcome，再运行真实任务。
 
@@ -160,19 +167,23 @@ prepare
 
 - 工作目录：`/app`。
 - 允许修改文件和运行公开测试。
-- 初始修改和所有修订复用同一个 session。
+- 初始修改和所有修订复用同一个 session（cligent 的 resume token 机制）；resume 失败时降级为 fresh session，并在 prompt 中重建完整上下文。
 - 初始 prompt 只接收公开 instruction、代码仓库和普通工程指令。
 - 修订 prompt 额外接收结构化 findings 和历史处理情况。
+- 每轮（初始或修订）失败、超时或产出无效 patch 时，harness 先 `git reset --hard` 回到上一个 checkpoint 并按基线清单清理新增 untracked 文件，再重试；每轮最多 `max_modifier_attempts`（默认 2）次，全部失败按第 13 节处理。
+- prompt 要求 Modifier 不自行 commit；若其仍然 commit（DeepSWE 原生 instruction 鼓励 commit，agent 可能习惯性执行），harness 容忍 HEAD 移动，把这些 commit 视为该轮修改的一部分并记录 protocol violation。
 
 ### 6.2 Reviewer
 
-- 工作目录：每轮独立的 detached Git worktree。
-- 每轮使用 fresh session，降低对上一轮结论的锚定。
+- 工作目录：每轮从当前 checkpoint 制作的独立完整拷贝（`cp -a`），不是 git worktree。
+- 每轮使用 fresh session，降低对上一轮结论的锚定；但第 N（N>1）轮 prompt 必须附带上一轮 findings 和 Modifier 的 accepted/rebutted/unresolved 处理记录，避免重提已被有据反驳的问题和 finding churn。
 - 可以读取完整代码、当前 patch、原始 instruction，并运行公开测试。
 - 只输出 findings，不对 `/app` 贡献代码。
-- 即使 Reviewer 修改或 commit，它也只影响临时 worktree。
+- 即使 Reviewer 修改或 commit，它也只影响临时拷贝。
 
-Reviewer 隔离不能只依赖 adapter permissions。不同 adapter 对“允许执行 shell，但禁止写文件”的表达能力并不完全一致，尤其 Bash 命令本身可能写入文件。独立 worktree 是跨 adapter 更可靠的事务边界。
+Reviewer 隔离不能只依赖 adapter permissions。不同 adapter 对“允许执行 shell，但禁止写文件”的表达能力并不一致（Kimi adapter 甚至直接拒绝 capability 策略），尤其 Bash 命令本身可能写入文件。独立拷贝是跨 adapter 更可靠的事务边界。
+
+不使用 `git worktree` 的原因：任务镜像的 `/app` 里通常带有 git 不追踪的环境文件（node_modules、venv、构建产物等），worktree 会全部丢失，导致 Reviewer 无法运行公开测试；SWE-bench Pro runner 的 workspace 实现正是因此弃用 worktree、改用完整目录拷贝。残余风险是项目配置对 `/app` 绝对路径的耦合可能使测试在拷贝目录中失败，须在 smoke run 中按语言逐一验证；确不可行的任务可降级为“Reviewer 只读审查、不跑测试”。
 
 ### 6.3 非 LLM 控制逻辑
 
@@ -186,16 +197,27 @@ Reviewer 隔离不能只依赖 adapter permissions。不同 adapter 对“允许
 
 这些操作都是本地确定性代码，不创建 `Cligent`，也不产生模型 token 或费用。因此实际模型调用严格限定为 Modifier 和 Reviewer。
 
+### 6.4 adapter 配置注意事项（容器内 headless）
+
+- Codex：必须以 `mode: 'bypass'` 运行（映射为 `:danger-full-access` + approval never）。Codex 自带的 OS 级沙箱在普通 Docker 容器内无法初始化，任何映射到 `:read-only`/`:workspace` profile 的 capability 策略都会失败；pier 内置 Codex agent 同样以 `--dangerously-bypass-approvals-and-sandbox` 运行，容器本身就是隔离边界。
+- cligent 的 `PermissionPolicy` 一旦提供，未显式设置的字段默认为 `ask`，而 headless 下 `ask` 等价于拒绝——各 adapter 的策略必须逐字段显式写全。
+- OpenCode：`websearch` 不在 capability 映射内，落到 `ask` 会让 headless run 无限挂起，必须在 opencode 配置中显式处理。
+- Kimi：拒绝一切 capability 策略（仅接受 `mode: 'auto'` 或不传 permissions），且不产出 cost 数据。
+- cligent 的 usage 是 per-run 粒度，跨轮/跨角色汇总由 orchestrator 自行累加。
+- cligent 无结构化输出能力，`DonePayload.result` 是自由文本——6.3 的本地 JSON parser 是必要设计而非可选项。
+
 ## 7. Git 与 DeepSWE patch 提取
 
-DeepSWE v1.1 的 `pre_artifacts.sh` 从 base commit 到最终 HEAD 提取已提交修改。因此所有可信 Modifier 状态都应机械 checkpoint：
+DeepSWE v1.1 的 `pre_artifacts.sh` 是严格的 commit-to-commit diff（`git diff --binary <base> HEAD`），工作区未提交修改和 untracked 文件都不会进入 patch。因此所有可信 Modifier 状态都应机械 checkpoint：
 
+0. Harness 启动时记录基线 untracked 清单（镜像在 base commit 时 `/app` 里已存在的未追踪文件）。
 1. Modifier 完成一轮修改。
-2. Harness 检查当前状态和 patch 是否有效。
-3. Harness 执行 `git add -A`。
+2. Harness 检查当前状态和 patch 是否有效；若 Modifier 自行 commit 过，容忍 HEAD 移动并记录。
+3. Harness 暂存全部修改，但排除基线 untracked 清单中的文件（等价于 `git add -u` + 仅添加新增的 untracked）。不能直接 `git add -A`：那会把镜像自带的基线文件提交进历史、污染最终 patch，甚至导致 verifier apply 失败。
 4. Harness 创建固定格式 checkpoint commit。
-5. Reviewer 从该 commit 创建 detached worktree。
+5. Reviewer 从该 checkpoint 制作独立完整拷贝（见 6.2）。
 6. 修订成功后创建新的 checkpoint commit。
+7. 交付前对干净基线做一次 `git apply --check` 终验，确保最终 patch 可应用。
 
 建议 commit message：
 
@@ -205,17 +227,17 @@ collab: revision 1
 collab: final revision
 ```
 
-DeepSWE verifier 只消费最终 diff，不要求中间 commit 历史整洁。机械 commit 可以避免引入第三个 Committer LLM，也保证最终未提交修改不会被 `pre_artifacts.sh` 丢失。
+DeepSWE verifier 只消费最终 diff，不要求中间 commit 历史整洁。机械 commit 可以避免引入第三个 Committer LLM，也保证最终修改不会被 `pre_artifacts.sh` 丢失。
 
 创建 review workspace 的概念流程：
 
 ```text
 /app HEAD at checkpoint-N
-  └── git worktree add --detach /tmp/deepswe-review-N HEAD
+  └── cp -a /app /tmp/deepswe-review-N
           └── Reviewer 在这里审查和运行公开测试
 ```
 
-review 结束后删除临时 worktree；无论 Reviewer 做了什么，都不能污染 `/app`。
+review 结束后删除临时拷贝；无论 Reviewer 做了什么，都不能污染 `/app`。
 
 ## 8. Reviewer 输出协议
 
@@ -255,8 +277,10 @@ Reviewer 输出严格 JSON。
 
 - `critical`、`major` 为 blocking findings。
 - `minor`、`suggestion` 仅记录，不阻止交付。
+- 仲裁以 findings 为准：是否进入修订由是否存在 blocking finding 决定；`verdict` 只作交叉校验，与 findings 矛盾时（如 `approve` 却带 critical finding）记录 `verdict_mismatch` 并按 findings 执行。
 - 非法 JSON 重试 Reviewer 一次，并明确要求修正格式。
-- Reviewer 进程或 API 失败属于基础设施错误，优先交给 Pier job retry，不伪装成正常评分结果。
+- 修订轮产出与上一 checkpoint 完全相同的 patch（no-change revision）时记录标记，不再消耗下一次 review，直接按当前 patch 交付并标记 `max_reviews_reached`。
+- Reviewer 进程或 API 失败、重试后仍非法的输出，按第 13 节的降级语义处理，不伪装成正常评分结果。
 - 第 `N` 次 review 仍有 blocking findings 时，Modifier 获得一次最终修订机会，但不执行第 `N+1` 次 review。
 - 此时正常交付最终 patch，但 outcome 标记为 `max_reviews_reached`，不能标记为 approved。
 
@@ -294,7 +318,7 @@ playbook runtime -- findings --> Modifier
 ...直到 approved、max_reviews_reached 或结构化失败
 ```
 
-初次调用 `handleBossInput()` 并产生 `START` 后，workflow 在终态前不再等待 Boss。后续所谓“指令”都是 runtime 依据初始 instruction 和中间 artifacts 构造的内部 Agent prompt，不是新的用户输入。任何 `awaitBossReply` 都属于此评测方案的建模错误，应在 artifact 校验或 smoke test 中直接拒绝。
+初次调用 `handleBossInput()` 并产生 `START` 后，workflow 在终态前不再等待 Boss。后续所谓“指令”都是 runtime 依据初始 instruction 和中间 artifacts 构造的内部 Agent prompt，不是新的用户输入。任何进入 `awaitBossReply` 的执行都属于此评测方案的建模错误。注意这无法在 artifact 编译层面禁止：GEARS 编译约定强制给每个 agent-invoking state 附带 `needsBossReply` 结果且无源头开关，实际执行点只能是（a）确定性 Judge 永不选择该 guard，（b）用 `resumableStateIds` 收紧可恢复状态集合，或（c）手写/后编辑 FSM artifact；smoke test 应对“落入 awaitBossReply”直接判失败。
 
 Captain 和 Judge 的 runtime 行为也不同：
 
@@ -313,15 +337,17 @@ Captain 和 Judge 的 runtime 行为也不同：
 
 这能使 playbook backend 仍保持严格的两个 LLM Agent。Judge trace 应标记 `implementation: deterministic`，其 token 和 cost 为“不适用”，而不是伪造为 0 token 的模型调用。
 
+另一个已知语义偏差：playbook runtime 的 player session 策略是固定的——每个 playerId 首次调用 fresh、之后必带存储的 resume token，FSM 层没有 per-call 开关。而本方案要求 Reviewer 每轮 fresh session（见 6.2）。第二阶段需要通过 `resolvePlayerId` 给每轮 review 派生不同的 playerId，或让 host 在 reviewer 调用上忽略 resume token；无论哪种方式，都必须纳入与 direct engine 的等价性测试。另外 playbook 的 fake player 测试设施是各测试文件内的本地函数、包不导出，等价性测试需要照抄该模式自建。
+
 如果希望连 `callJudge` port 和相应 trace 都消失，并让结构化 `PlayerResult` 直接成为 XState actor output，则需要修改 playbook 包的正式 runtime/compiler contract。可能的上游能力包括 `playerOutput.mode: 'structured-json'` 或可配置的 deterministic adjudicator，并需要同步修改 runtime 类型、player bridge、linker/compiler spec 和测试。这是有价值的 dogfooding 改进，但不是首版评测的前置条件。
 
 ## 10. Timeout 与成本控制
 
-DeepSWE 单任务默认 Agent timeout 为 5400 秒。多轮协作很容易耗尽这一预算。
+DeepSWE 单任务 Agent timeout 为 5400 秒（来自各 task.toml 的 `[agent] timeout_sec`，113/113 一致；verifier 独立为 1800 秒）。agent setup 阶段有单独的默认 360 秒超时，不占这一预算。多轮协作很容易耗尽 5400 秒。
 
 首版建议：
 
-- `max_reviews=2`；
+- `max_reviews=3`（与 SWE-bench Pro collab runner 的默认值一致，便于跨 benchmark 对比；这是上限而非保证，5400 秒预算内第三轮常常放不下，由 deadline 管理决定是否执行）；
 - 整体 deadline 由 runtime 统一管理；
 - Modifier 初始实现获得最大预算；
 - Reviewer 使用较短预算；
@@ -332,30 +358,34 @@ DeepSWE 单任务默认 Agent timeout 为 5400 秒。多轮协作很容易耗尽
 一种初始分配参考：
 
 ```text
-initial modifier   35–45 min
-review 1            8–10 min
-revision 1         12–15 min
-review 2            8–10 min
-final revision     使用剩余预算
+initial modifier          30–40 min
+review 1                   8–10 min
+revision 1                10–12 min
+review 2                   8–10 min
+revision 2                10–12 min
+review 3 / final revision  使用剩余预算，不足则跳过并提前交付
 ```
 
 实际分配应在 smoke run 后根据不同语言和仓库大小调整。
 
 ## 11. 依赖安装与可复现性
 
-为确保 dogfood 的是本地 checkout，而不是 npm registry 上的发布版本：
+默认从 npm 安装并锁定精确版本（当前 `@sublang/cligent@0.16.0` 与本地 checkout 一致）：
 
-1. 首阶段只在宿主机对 `cligent` checkout 执行 `npm pack`。
-2. 将 cligent tarball 和锁文件放入 Agent bundle。
-3. 在任务容器中安装本地 cligent tarball。
-4. 固定 Codex SDK、Claude Agent SDK 等依赖版本。
-5. 每个 trial 记录实际 package version 和 Git SHA。
+1. 容器内 `npm install @sublang/cligent@<pin>`，npm 自动解析 linux-x64/glibc 平台二进制（任务镜像是 Debian 12，无 musl 问题）。
+2. 固定 Codex SDK、Claude Agent SDK 等依赖版本；注意 cligent 的 codex adapter 一旦传 permissions 就需要完整的 `@openai/codex` 包（不只 `codex-sdk`），gemini/kimi 走 PATH 二进制而非 npm 依赖。
+3. 每个 trial 记录实际 package version（版本号可映射到 release tag 与 Git SHA）。
+4. 修复迭代期（发现 cligent bug、修复尚未发版时）用 override（如 `--ak cligent_tarball=...`）切换到本地 `npm pack` 产物；tarball 必须在联网侧打好（prepack 需要 devDeps 构建）。
 
-第二阶段再打包和安装本地 `playbook` checkout，并固定 XState 版本。首阶段锁文件中不应出现 playbook，以确保评测关键路径没有隐式依赖它。
+第二阶段同样以 npm `@sublang/playbook@<pin>` 为默认（当前 3.1.0 与本地一致），并固定 XState 版本（playbook 锁定 5.x）。首阶段锁文件中不应出现 playbook，以确保评测关键路径没有隐式依赖它。
 
-初期可以在 Agent setup 阶段在线安装依赖。正式批量运行前，建议制作 Linux x64 的预安装依赖包，减少 113 个 trial 重复下载 Node 和 SDK/CLI 所带来的延迟及失败率。
+初期可以在 Agent setup 阶段在线安装依赖（注意 360 秒 setup 超时）。正式批量运行前，改用 `install_spec()` 把安装步骤烘进派生镜像，减少 113 个 trial 重复下载 SDK/CLI 所带来的延迟及失败率。
 
-DeepSWE task 的 Agent phase 通常为 `no-network`。模型调用需要使用 Pier 的 `--allow-agent-host` 或 job config，为对应 API/Auth 域名建立最小 allowlist。API key 通过 Pier Agent env 注入，不写入 prompt、日志和 artifacts。
+网络与凭据的实际情况（以 pier 0.3.0 为准）：
+
+- task.toml 里的 `[agent] network_mode = "no-network"` 是 harbor 语义；pier 的 task 模型没有该字段、会静默忽略，真正的开关 `[environment] allow_internet` 默认为 True 且任务未设置。因此 **agent 容器实际有全网**，模型调用和在线安装都不需要网络豁免配置（`--allow-agent-host` 只存在于 harbor，pier 没有这个 flag）。
+- 代价是 benchmark 卫生（禁 git fetch 找答案等）只靠 prompt 约束和镜像的 git 手术（已删 origin 与未来 refs），没有网络层强制。如需收紧，pier 的机制是任务环境 `allow_internet=False` + 在 agent 代码中实现 `network_allowlist()`（egress proxy 仅在两者同时满足时启用），这是代码级配置而非 CLI flag。
+- API key 通过 Pier 的 `--ae/--agent-env` 注入（支持 `${VAR}` 引用宿主环境变量，job config 序列化时自动脱敏），不写入 prompt、日志和 artifacts。
 
 ## 12. Artifacts 与观测性
 
@@ -387,7 +417,7 @@ collab/
 - Modifier、Reviewer 的 adapter、model、effort；
 - `engine=direct` 和控制端实现版本；第二阶段增加 `engine=playbook`；
 - cligent、coding-agent SDK 版本；仅在第二阶段记录 playbook 版本；
-- 本地 cligent checkout SHA；仅在第二阶段记录 playbook checkout SHA；
+- cligent 安装来源（npm pin 版本，或迭代期 tarball 对应的 checkout SHA）；仅在第二阶段记录 playbook 的同类信息；
 - review count 和 workflow outcome；
 - Modifier、Reviewer 各自的 input/output tokens、tool uses、duration 和 cost；
 - 本地 JSON 解析和 transition 次数、duration，不将其计入模型 token/cost；
@@ -395,7 +425,8 @@ collab/
 - findings 的 accepted/rebutted/unresolved 状态；
 - checkpoint commit hashes；
 - final patch hash；
-- setup、agent、verifier 错误分类。
+- setup、agent、verifier 错误分类；
+- 卫生审计结果（record-only）：扫描日志和 artifacts 是否引用 harness 数据或上游 fix commit（移植 SWE-bench Pro runner 的 audit 思路），三个实验组统一执行。
 
 首版可以直接保存 cligent event stream；后续建议实现 cligent events 到 Harbor ATIF trajectory 的转换，使 Pier viewer、analyze 和 critique 能直接处理协作轨迹。
 
@@ -406,21 +437,19 @@ collab/
 ```text
 approved
 max_reviews_reached
+degraded            # 附 degraded_reason: reviewer_failed | invalid_review_output | revision_failed | timeout
 modifier_failed
-reviewer_failed
-invalid_review_output
-timeout
+timeout             # 初始实现阶段即超时、无可信 patch
 empty_patch
 checkpoint_failed
 ```
 
 其中：
 
-- `approved` 和 `max_reviews_reached` 可以正常送入 verifier。
-- 初始 Modifier 没有产生可信 patch 时，trial 应失败。
-- Reviewer API/进程异常和非法输出重试失败应标记为基础设施/Agent 错误，并允许 Pier job retry。
-- 不建议默认把 Reviewer 故障降级为正常交付，因为这会污染协作效果统计。
-- 如确实需要高完成率，可以增加显式 `degraded_delivery` 模式，但必须单独统计，不能与 approved 混合。
+- `approved`、`max_reviews_reached` 和 `degraded` 都正常送入 verifier；`degraded` 在统计中单独分层，绝不与 approved 混合。
+- 判定原则：**一旦存在可信 checkpoint，后续 Reviewer/修订/超时故障默认降级交付该 checkpoint**（outcome=degraded 并记录 degraded_reason），而不是丢弃成果、整个 trial 重跑。否则协作组会因纯基础设施抖动损失已有的有效 patch，而 Single 组永远交付工作区现状——这种不对称本身就会污染协作效果统计；降级交付 + 分层统计才能把基础设施噪声和协作质量分开。
+- 提供 `strict` 开关恢复 fail-hard 语义（degraded 不交付、trial 失败），供需要“纯净协作路径”的分析口径使用。
+- 初始 Modifier 没有产生可信 patch 时（modifier_failed / timeout / empty_patch / checkpoint_failed），trial 失败，标记为基础设施/Agent 错误并允许 Pier job retry。
 
 ## 14. 实验设计
 
@@ -454,13 +483,15 @@ checkpoint_failed
 - review 轮数；
 - Reviewer blocking finding 数量；
 - finding 修复率；
-- approved 与 max_reviews_reached 分层通过率；
+- approved、max_reviews_reached 与 degraded 分层通过率；
 - setup、Agent、verifier 基础设施错误率；
 - patch churn 和每轮新增/删除行数。
 
+冻结配置前先在 12 题 dev 上估算单 trial 成本（token 与 wall-clock）：三组 × 每题 ≥4 次 × 30 题 core 就是 ≥360 个 trial、单个上限 90 分钟双 Agent 调用，总预算需要在扩大规模前确认。
+
 ## 15. 任务抽样与推进顺序
 
-仓库已有稳定性和区分度筛选结果：
+仓库已有稳定性和区分度筛选结果（`wip/data/selection/`，清单文件 `05_sample_dev.txt` / `05_sample_confirm.txt`；另有与 03 同集合重排序的 `04_core_ranked`）：
 
 ```text
 00_all：113 题
@@ -473,7 +504,7 @@ checkpoint_failed
 
 推荐实验阶段：
 
-1. 现有 3 题 smoke：验证 harness、网络、认证、提交和 verifier。
+1. 现有 3 题 smoke（`wip/smoke_tasks.txt`）：验证 harness、网络、认证、提交和 verifier。
 2. `05_sample_dev` 12 题：调整 prompt、轮数、timeout 和失败语义。
 3. 冻结配置。
 4. `05_sample_confirm` 12 题：确认效果，避免继续针对 dev 调参。
@@ -493,22 +524,22 @@ checkpoint_failed
 
 ### Phase 2：单 cligent Modifier
 
-- 在容器安装本地 cligent。
+- 在容器安装 cligent（npm 锁定版本）。
 - 跑单个 Modifier。
-- 验证 API 认证、network allowlist、permissions、event stream、usage 和 timeout。
+- 验证 API 认证、adapter permissions 配置（含 Codex bypass，见 6.4）、event stream、usage 和 timeout。
 - 建立 Single baseline 所需产物。
 
 ### Phase 3：单轮审查
 
-- 增加 Reviewer 独立 worktree。
+- 增加 Reviewer 独立拷贝工作区，并验证公开测试在拷贝目录中可运行。
 - 实现严格 JSON review 和一次格式重试。
-- 实现 revision 和 checkpoint。
+- 实现 revision、基线 untracked 排除和 checkpoint。
 - 验证 Reviewer 修改不会污染 `/app`。
 
 ### Phase 4：完整 direct workflow
 
 - 增加第二次 review 和最终 revision。
-- 实现 deadline、异常语义、summary 和完整 artifacts。
+- 实现 deadline、降级交付语义（第 13 节）、summary 和完整 artifacts。
 - 增加 direct engine、fake adapter 和工作区隔离测试。
 
 ### Phase 5：首阶段实验
@@ -544,6 +575,8 @@ checkpoint_failed
 - event stream 是否足够生成统一协作轨迹。
 - usage/cost 是否能跨 adapter 一致汇总。
 - SDK/CLI 安装和版本探测是否适合短生命周期 benchmark 容器。
+- 是否值得新增结构化输出（JSON schema）能力，避免调用方自行解析最终文本。
+- `PermissionPolicy` 未设字段默认 `ask`（headless 下等于拒绝）是否应有更安全的默认值或显式校验。
 
 ### playbook
 
