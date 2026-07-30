@@ -65,19 +65,26 @@ flowchart LR
 ```text
 wip/agents/deep_swe_collab/
 ├── __init__.py
-├── pier_agent.py
-├── runtime/
-│   ├── package.json
-│   ├── package-lock.json
-│   ├── src/
-│   │   ├── collaboration-engine.ts
-│   │   ├── direct-engine.ts
-│   │   └── review-schema.ts
-│   └── dist/
-├── prompts/
-├── configs/
-└── tests/
+├── pier_agent.py          # Pier BaseInstalledAgent 适配层
+├── test_pier_agent.py     # unittest（含 install_spec 与 package.json 防漂移测试）
+├── README.md
+└── runtime/               # 容器内 TypeScript orchestrator
+    ├── package.json       # npm 锁定 @sublang/cligent + SDK 版本
+    ├── package-lock.json
+    ├── tsconfig.json
+    └── src/
+        ├── main.ts                  # 入口：读 config、写 summary.json、exit code
+        ├── collaboration-engine.ts  # CollaborationEngine 接口与 outcome 类型
+        ├── direct-engine.ts         # 首阶段确定性状态机
+        ├── agent-runner.ts          # AgentRunner 接口 + CligentRunner（6.4 的 adapter 配置）
+        ├── git-workspace.ts         # 基线 untracked、checkpoint、拷贝隔离、apply --check
+        ├── prompts.ts               # Modifier/Reviewer prompt 构造
+        ├── review-schema.ts         # 严格 JSON review 解析与仲裁
+        └── *.test.ts                # node:test 单测（fake runner 驱动状态机）
 ```
+
+`npm run build` 产出 `runtime/dist/`（不入库），`setup()` 上传到容器
+`/opt/collab-runtime/dist`；npm 依赖由 `install_spec()` 在派生镜像中安装。
 
 `pier_agent.py` 实现 `pier.agents.base.BaseAgent`（如需 `install_spec()` 派生镜像和 `populate_context_post_run()` 则继承 `BaseInstalledAgent`；pier 是 Harbor 的 fork 但运行时不使用 harbor 包，不要 import harbor）：
 
