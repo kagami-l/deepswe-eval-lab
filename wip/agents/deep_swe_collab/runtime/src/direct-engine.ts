@@ -71,8 +71,15 @@ export class DirectCollaborationEngine implements CollaborationEngine {
     modifier: emptyRoleUsage(),
     reviewer: emptyRoleUsage(),
   };
+  private readonly actualModels: { modifier: string | null; reviewer: string | null } = {
+    modifier: null,
+    reviewer: null,
+  };
   private findingsTotal = 0;
   private blockingFindingsTotal = 0;
+  private reviewCount = 0;
+  private revisionCount = 0;
+  private noChangeRevision = false;
 
   constructor(
     private readonly config: CollabConfig,
@@ -98,7 +105,14 @@ export class DirectCollaborationEngine implements CollaborationEngine {
       event,
       ...data,
     });
-    appendFileSync(join(this.config.outputDir, 'orchestrator-trace.jsonl'), line + '\n');
+    try {
+      appendFileSync(
+        join(this.config.outputDir, 'orchestrator-trace.jsonl'),
+        line + '\n',
+      );
+    } catch {
+      // Tracing must never take the engine down.
+    }
   }
 
   private makeEventSink(roundDir: string): EventSink {
@@ -112,6 +126,9 @@ export class DirectCollaborationEngine implements CollaborationEngine {
   }
 
   private addUsage(role: 'modifier' | 'reviewer', result: TurnResult): void {
+    if (result.actualModel !== null && this.actualModels[role] === null) {
+      this.actualModels[role] = result.actualModel;
+    }
     const bucket: RoleUsage = this.usage[role];
     bucket.turns += 1;
     bucket.wallMs += result.durationMs;
@@ -326,7 +343,33 @@ export class DirectCollaborationEngine implements CollaborationEngine {
 
   // --- main loop ----------------------------------------------------------
 
+  /**
+   * Engine-level backstop (design doc section 13): once a trusted checkpoint
+   * exists, an infrastructure exception (workspace copy, git, disk) degrades
+   * to delivering that checkpoint instead of discarding the work; before the
+   * first checkpoint it fails the trial while still preserving accumulated
+   * usage and the base commit in the summary.
+   */
   async run(): Promise<CollaborationResult> {
+    try {
+      return await this.execute();
+    } catch (err) {
+      const message = err instanceof Error ? (err.stack ?? err.message) : String(err);
+      const trusted =
+        this.lastCheckpoint !== '' && this.lastCheckpoint !== this.baseCommit;
+      this.trace('engine_exception', { trusted, message });
+      if (trusted) {
+        return this.finalize(
+          'degraded',
+          'infrastructure',
+          `post-checkpoint infrastructure failure: ${message}`,
+        );
+      }
+      return this.finalize('checkpoint_failed', null, message);
+    }
+  }
+
+  private async execute(): Promise<CollaborationResult> {
     await mkdir(join(this.config.outputDir, 'rounds'), { recursive: true });
     await mkdir(join(this.config.outputDir, 'final'), { recursive: true });
     await mkdir(this.config.workDir, { recursive: true });
@@ -350,9 +393,6 @@ export class DirectCollaborationEngine implements CollaborationEngine {
     let outcome: Outcome;
     let degradedReason: DegradedReason | null = null;
     let error: string | null = null;
-    let reviewCount = 0;
-    let revisionCount = 0;
-    let noChangeRevision = false;
 
     // --- initial implementation ------------------------------------------
     const initial = await this.modifierTurn({
@@ -372,11 +412,7 @@ export class DirectCollaborationEngine implements CollaborationEngine {
             : 'modifier_failed';
       error = `initial implementation failed (${initial.failKind})`;
       this.trace('initial_failed', { failKind: initial.failKind });
-      return this.finalize(outcome, degradedReason, error, {
-        reviewCount,
-        revisionCount,
-        noChangeRevision,
-      });
+      return this.finalize(outcome, degradedReason, error);
     }
 
     await this.checkpoint('collab: initial implementation');
@@ -410,7 +446,7 @@ export class DirectCollaborationEngine implements CollaborationEngine {
         outcome = 'degraded';
         break;
       }
-      reviewCount += 1;
+      this.reviewCount += 1;
       const review = reviewOutcome.review;
       this.findingsTotal += review.findings.length;
       const blocking = review.findings.filter((finding) =>
@@ -454,14 +490,14 @@ export class DirectCollaborationEngine implements CollaborationEngine {
         outcome = 'degraded';
         break;
       }
-      revisionCount += 1;
+      this.revisionCount += 1;
       await this.checkpoint(
         finalRound ? 'collab: final revision' : `collab: revision ${round}`,
       );
 
       if (!revision.changed) {
         // No-change revision: do not burn another review (section 8).
-        noChangeRevision = true;
+        this.noChangeRevision = true;
         outcome = 'max_reviews_reached';
         this.trace('no_change_revision', { round });
         break;
@@ -477,11 +513,7 @@ export class DirectCollaborationEngine implements CollaborationEngine {
     if (outcome === 'degraded') {
       error = `collab degraded: ${degradedReason}`;
     }
-    return this.finalize(outcome, degradedReason, error, {
-      reviewCount,
-      revisionCount,
-      noChangeRevision,
-    });
+    return this.finalize(outcome, degradedReason, error);
   }
 
   private async checkpoint(message: string): Promise<void> {
@@ -502,11 +534,6 @@ export class DirectCollaborationEngine implements CollaborationEngine {
     outcome: Outcome,
     degradedReason: DegradedReason | null,
     error: string | null,
-    counters: {
-      reviewCount: number;
-      revisionCount: number;
-      noChangeRevision: boolean;
-    },
   ): Promise<CollaborationResult> {
     let finalOutcome = outcome;
     let finalError = error;
@@ -553,13 +580,14 @@ export class DirectCollaborationEngine implements CollaborationEngine {
       baseCommit: this.baseCommit,
       finalCommit,
       checkpoints: this.checkpoints,
-      reviewCount: counters.reviewCount,
-      revisionCount: counters.revisionCount,
-      noChangeRevision: counters.noChangeRevision,
+      reviewCount: this.reviewCount,
+      revisionCount: this.revisionCount,
+      noChangeRevision: this.noChangeRevision,
       findingsTotal: this.findingsTotal,
       blockingFindingsTotal: this.blockingFindingsTotal,
       protocolViolations: this.protocolViolations,
       usage: this.usage,
+      actualModels: this.actualModels,
     };
     this.trace('finalized', {
       outcome: result.outcome,

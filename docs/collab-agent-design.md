@@ -445,7 +445,7 @@ collab/
 ```text
 approved
 max_reviews_reached
-degraded            # 附 degraded_reason: reviewer_failed | invalid_review_output | revision_failed | timeout
+degraded            # 附 degraded_reason: reviewer_failed | invalid_review_output | revision_failed | timeout | infrastructure
 modifier_failed
 timeout             # 初始实现阶段即超时、无可信 patch
 empty_patch

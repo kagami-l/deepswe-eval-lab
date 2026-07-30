@@ -48,6 +48,20 @@ function optionalNumber(
   return value;
 }
 
+/** Non-negative integer: maxReviews=0 runs the modifier-only control arm. */
+function optionalCount(
+  raw: Record<string, unknown>,
+  key: string,
+  fallback: number,
+): number {
+  const value = raw[key];
+  if (value === undefined || value === null) return fallback;
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+    throw new Error(`config.${key} must be a non-negative integer`);
+  }
+  return value;
+}
+
 function parseRole(raw: Record<string, unknown>, key: string): RoleConfig {
   const value = raw[key];
   if (typeof value !== 'object' || value === null) {
@@ -75,7 +89,7 @@ export function parseConfig(raw: Record<string, unknown>): CollabConfig {
     workDir: requireString(raw, 'workDir'),
     modifier: parseRole(raw, 'modifier'),
     reviewer: parseRole(raw, 'reviewer'),
-    maxReviews: optionalNumber(raw, 'maxReviews', 3),
+    maxReviews: optionalCount(raw, 'maxReviews', 3),
     maxAgentAttempts: optionalNumber(raw, 'maxAgentAttempts', 2),
     modifierTimeoutSec: optionalNumber(raw, 'modifierTimeoutSec', 2400),
     reviewerTimeoutSec: optionalNumber(raw, 'reviewerTimeoutSec', 600),
@@ -143,6 +157,7 @@ async function main(): Promise<number> {
           wallMs: 0,
         },
       },
+      actualModels: { modifier: null, reviewer: null },
     };
   }
 
@@ -150,8 +165,8 @@ async function main(): Promise<number> {
     engine: 'direct',
     runtimeVersion: RUNTIME_VERSION,
     generatedAt: new Date().toISOString(),
-    modifier: modifier.describe(),
-    reviewer: reviewer.describe(),
+    modifier: { ...modifier.describe(), actualModel: result.actualModels.modifier },
+    reviewer: { ...reviewer.describe(), actualModel: result.actualModels.reviewer },
     config: {
       maxReviews: config.maxReviews,
       maxAgentAttempts: config.maxAgentAttempts,

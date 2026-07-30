@@ -55,7 +55,8 @@ export type DegradedReason =
   | 'reviewer_failed'
   | 'invalid_review_output'
   | 'revision_failed'
-  | 'timeout';
+  | 'timeout'
+  | 'infrastructure';
 
 export interface RoleUsage {
   inputTokens: number;
@@ -81,6 +82,8 @@ export interface CollaborationResult {
   blockingFindingsTotal: number;
   protocolViolations: string[];
   usage: { modifier: RoleUsage; reviewer: RoleUsage };
+  /** Provider-resolved model per role, from the first cligent init event. */
+  actualModels: { modifier: string | null; reviewer: string | null };
 }
 
 export interface CollaborationEngine {

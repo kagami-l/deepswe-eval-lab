@@ -125,9 +125,9 @@ CODEX_FORCE_AUTH_JSON=1 KIMI_FORCE_AUTH_HOME=1 pier run \
 | kwarg | 默认 | 说明 |
 |---|---|---|
 | `modifier_adapter` / `reviewer_adapter` | `codex` / `claude` | 仅支持 `claude` / `codex` / `kimi`（首阶段排除 gemini/opencode，见设计文档 6.4） |
-| `modifier_model` / `reviewer_model` | 空 | 透传给 cligent |
-| `modifier_effort` / `reviewer_effort` | 空 | 透传给 cligent |
-| `max_reviews` | 3 | 与 SWE-bench Pro collab 默认一致；预算不足时后段轮次自动跳过 |
+| `modifier_model` / `reviewer_model` | 空 | 透传给 cligent；**正式评测请显式指定**（不指定时使用 provider 当时的默认模型）。无论是否指定，summary 中 `modifier.actualModel` / `reviewer.actualModel` 都会记录 provider 实际解析的模型（取自 cligent init 事件） |
+| `modifier_effort` / `reviewer_effort` | 空 | 透传给 cligent；正式评测建议显式指定 |
+| `max_reviews` | 3 | 与 SWE-bench Pro collab 默认一致；预算不足时后段轮次自动跳过。`0` 表示跳过审查、同一条管线跑 modifier-only（可作 Single 基线的 matched-pipeline 对照组） |
 | `max_agent_attempts` | 2 | 每轮（modifier/review）重试上限 |
 | `modifier_timeout_seconds` | 2400 | 初始实现单轮超时 |
 | `reviewer_timeout_seconds` | 600 | 每次 review 超时 |
@@ -157,7 +157,7 @@ final/git-status.txt
 |---|---|---|
 | `approved` | ✅ exit 0 | Reviewer 无 blocking finding |
 | `max_reviews_reached` | ✅ exit 0 | 用完 review 轮次后交付最终修订（含 no-change revision 短路） |
-| `degraded` | ✅ exit 0 | 已有可信 checkpoint 后 reviewer/修订/超时故障，交付该 checkpoint；`degraded_reason` 单独统计，`strict` 模式下改为失败 |
+| `degraded` | ✅ exit 0 | 已有可信 checkpoint 后 reviewer/修订/超时/基础设施故障（`reviewer_failed` / `invalid_review_output` / `revision_failed` / `timeout` / `infrastructure`），交付该 checkpoint；`degraded_reason` 单独统计，`strict` 模式下改为失败 |
 | `modifier_failed` / `timeout` / `empty_patch` / `checkpoint_failed` | ❌ exit 2 | 无可信 patch，trial 失败并允许 Pier retry |
 
 ## 测试

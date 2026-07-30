@@ -35,6 +35,8 @@ export interface TurnResult {
   usage: TurnUsage | null;
   durationMs: number;
   error: string | null;
+  /** Provider-resolved model reported by the adapter's init event. */
+  actualModel: string | null;
 }
 
 export type EventSink = (event: Record<string, unknown>) => void;
@@ -133,6 +135,7 @@ export class CligentRunner implements AgentRunner {
     let doneResult: string | undefined;
     let usage: TurnUsage | null = null;
     let errorMessage: string | null = null;
+    let actualModel: string | null = null;
 
     try {
       const overrides: Record<string, unknown> = {
@@ -144,7 +147,10 @@ export class CligentRunner implements AgentRunner {
       for await (const event of agent.run(request.prompt, overrides)) {
         eventSink({ label: request.label, ...event });
         const type = event.type as string;
-        if (type === 'text') {
+        if (type === 'init') {
+          const payload = event.payload as { model?: string } | undefined;
+          if (payload?.model && actualModel === null) actualModel = payload.model;
+        } else if (type === 'text') {
           const payload = event.payload as { content?: string } | undefined;
           if (payload?.content) textParts.push(payload.content);
         } else if (type === 'error') {
@@ -190,6 +196,7 @@ export class CligentRunner implements AgentRunner {
       usage,
       durationMs,
       error: errorMessage,
+      actualModel,
     };
   }
 }

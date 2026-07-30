@@ -46,6 +46,7 @@ function ok(finalText: string): TurnResult {
     usage: { inputTokens: 100, outputTokens: 50, toolUses: 3, costUsd: 0.01 },
     durationMs: 10,
     error: null,
+    actualModel: 'fake-model-v1',
   };
 }
 
@@ -58,6 +59,7 @@ function processFailure(): TurnResult {
     usage: null,
     durationMs: 5,
     error: 'boom',
+    actualModel: null,
   };
 }
 
@@ -157,6 +159,9 @@ test('approve on first review delivers with outcome approved', async (t) => {
   const summaryUsage = result.usage;
   assert.equal(summaryUsage.modifier.turns, 1);
   assert.equal(summaryUsage.reviewer.turns, 1);
+  // Provider-resolved models are captured from the init events.
+  assert.equal(result.actualModels.modifier, 'fake-model-v1');
+  assert.equal(result.actualModels.reviewer, 'fake-model-v1');
 });
 
 test('revise then approve counts one revision and passes findings context', async (t) => {
@@ -287,6 +292,59 @@ test('final round revision delivers as max_reviews_reached without extra review'
   assert.equal(result.revisionCount, 1);
   assert.match(git(repo, 'log', '-1', '--format=%s'), /collab: final revision/);
   assert.match(modifier.requests[1].prompt, /FINAL revision/);
+});
+
+test('maxReviews=0 delivers modifier-only through the same pipeline', async (t) => {
+  const { repo, config } = await makeFixture(t, { maxReviews: 0 });
+  const modifier = new FakeRunner('modifier', [
+    editFile(repo, 'src.txt', 'fixed without review\n'),
+  ]);
+  const reviewer = new FakeRunner('reviewer', []);
+  const engine = new DirectCollaborationEngine(config, modifier, reviewer);
+  const result = await engine.run();
+
+  assert.equal(result.outcome, 'max_reviews_reached');
+  assert.equal(result.deliverable, true);
+  assert.equal(result.reviewCount, 0);
+  assert.equal(reviewer.requests.length, 0);
+  const patch = await readFile(join(config.outputDir, 'final', 'patch.diff'), 'utf8');
+  assert.match(patch, /fixed without review/);
+});
+
+test('infrastructure exception after a trusted checkpoint degrades but delivers', async (t) => {
+  const { repo, config } = await makeFixture(t);
+  const modifier = new FakeRunner('modifier', [
+    editFile(repo, 'src.txt', 'fixed\n'),
+  ]);
+  // Empty script: the reviewer runner THROWS (infrastructure failure), which
+  // is different from a TurnResult process failure.
+  const reviewer = new FakeRunner('reviewer', []);
+  const engine = new DirectCollaborationEngine(config, modifier, reviewer);
+  const result = await engine.run();
+
+  assert.equal(result.outcome, 'degraded');
+  assert.equal(result.degradedReason, 'infrastructure');
+  assert.equal(result.deliverable, true);
+  assert.match(result.error ?? '', /script exhausted/);
+  // The trusted checkpoint and real usage survive into the summary.
+  assert.equal(result.checkpoints.length, 1);
+  assert.equal(result.usage.modifier.turns, 1);
+  const patch = await readFile(join(config.outputDir, 'final', 'patch.diff'), 'utf8');
+  assert.match(patch, /src\.txt/);
+});
+
+test('infrastructure exception before any checkpoint fails but keeps context', async (t) => {
+  const { config } = await makeFixture(t);
+  const modifier = new FakeRunner('modifier', []); // throws on first turn
+  const reviewer = new FakeRunner('reviewer', []);
+  const engine = new DirectCollaborationEngine(config, modifier, reviewer);
+  const result = await engine.run();
+
+  assert.equal(result.outcome, 'checkpoint_failed');
+  assert.equal(result.deliverable, false);
+  assert.match(result.error ?? '', /script exhausted/);
+  // The engine finalized itself: base commit is recorded, not blanked.
+  assert.notEqual(result.baseCommit, '');
 });
 
 test('modifier committing by itself is tolerated and recorded', async (t) => {
