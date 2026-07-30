@@ -31,14 +31,17 @@ RUNTIME_DIR = "/opt/collab-runtime"
 OUTPUT_DIR = "/logs/agent/collab"
 WORK_DIR = "/tmp/deepswe-collab"
 
+# Credential material stays under /tmp — never under /logs, which is synced
+# back to the host as artifacts.
+REMOTE_SECRETS_DIR = "/tmp/collab-secrets"
+REMOTE_CODEX_HOME = "/tmp/codex-home"
+REMOTE_KIMI_HOME = "/tmp/kimi-code-home"
+
 SUPPORTED_ADAPTERS = ("claude", "codex", "kimi")
 
-# Any-of credential environment variables required per adapter.
-ADAPTER_CREDENTIALS: dict[str, tuple[str, ...]] = {
-    "claude": ("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"),
-    "codex": ("OPENAI_API_KEY", "CODEX_API_KEY"),
-    "kimi": ("KIMI_CODE_HOME", "KIMI_MODEL_API_KEY"),
-}
+# Claude has no file-injection path (macOS stores its login in the Keychain);
+# the standard host-auth route is `claude setup-token` → CLAUDE_CODE_OAUTH_TOKEN.
+CLAUDE_CREDENTIAL_ENVS = ("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN")
 
 _SAFE_NPM_VERSION = re.compile(r"^[0-9A-Za-z][0-9A-Za-z._+-]*$")
 
@@ -261,17 +264,184 @@ npm cache clean --force
             )
         await environment.upload_dir(dist_dir, f"{RUNTIME_DIR}/dist")
 
+    # --- auth --------------------------------------------------------------
+
+    def _resolve_codex_auth_json_path(self) -> Path | None:
+        """Which host auth.json to inject for Codex, if any.
+
+        Mirrors pier's built-in Codex agent:
+          - CODEX_AUTH_JSON_PATH=<path> → use that specific file;
+          - CODEX_FORCE_AUTH_JSON=<truthy> → use ~/.codex/auth.json
+            (the `codex login` OAuth credential);
+          - neither → None (OPENAI_API_KEY / CODEX_API_KEY auth).
+        """
+        explicit = self._get_env("CODEX_AUTH_JSON_PATH")
+        if explicit:
+            path = Path(explicit)
+            if not path.is_file():
+                raise ValueError(
+                    f"CODEX_AUTH_JSON_PATH points to non-existent file: {explicit}"
+                )
+            return path
+        if parse_bool_env_value(
+            self._get_env("CODEX_FORCE_AUTH_JSON"),
+            name="CODEX_FORCE_AUTH_JSON",
+            default=False,
+        ):
+            default = Path.home() / ".codex" / "auth.json"
+            if not default.is_file():
+                raise ValueError(
+                    f"CODEX_FORCE_AUTH_JSON is set but {default} does not exist; "
+                    "run `codex login` first"
+                )
+            return default
+        return None
+
+    def _resolve_kimi_auth_home(self) -> Path | None:
+        """Which host Kimi Code home to inject, if any.
+
+        cligent drives Kimi Code over ACP, which requires the OAuth
+        credential created by `kimi login` (`credentials/kimi-code.json`):
+          - KIMI_AUTH_HOME_PATH=<dir> → use that Kimi Code home;
+          - KIMI_FORCE_AUTH_HOME=<truthy> → use ~/.kimi-code;
+          - neither → None (KIMI_MODEL_* provider-config passthrough only).
+        """
+        explicit = self._get_env("KIMI_AUTH_HOME_PATH")
+        home: Path | None = None
+        if explicit:
+            home = Path(explicit)
+            if not home.is_dir():
+                raise ValueError(
+                    f"KIMI_AUTH_HOME_PATH points to non-existent directory: {explicit}"
+                )
+        elif parse_bool_env_value(
+            self._get_env("KIMI_FORCE_AUTH_HOME"),
+            name="KIMI_FORCE_AUTH_HOME",
+            default=False,
+        ):
+            home = Path.home() / ".kimi-code"
+            if not home.is_dir():
+                raise ValueError(
+                    f"KIMI_FORCE_AUTH_HOME is set but {home} does not exist; "
+                    "run `kimi login` first"
+                )
+        if home is not None and not (home / "credentials" / "kimi-code.json").is_file():
+            raise ValueError(
+                f"Kimi Code home {home} has no credentials/kimi-code.json; "
+                "run `kimi login` first"
+            )
+        return home
+
+    async def _configure_codex_auth(
+        self, environment: BaseEnvironment, env: dict[str, str]
+    ) -> None:
+        """Materialize ``$CODEX_HOME/auth.json`` the same way pier's built-in
+        Codex agent does: from an injected host auth.json, or from
+        OPENAI_API_KEY. cligent's codex adapter spawns the ``codex`` binary,
+        which inherits CODEX_HOME from the runtime process."""
+        env["CODEX_HOME"] = REMOTE_CODEX_HOME
+        remote_auth = f"{REMOTE_SECRETS_DIR}/codex-auth.json"
+        await self.exec_as_agent(
+            environment,
+            command=f'mkdir -p "$CODEX_HOME" {shlex.quote(REMOTE_SECRETS_DIR)}',
+            env=env,
+        )
+        auth_json_path = self._resolve_codex_auth_json_path()
+        if auth_json_path is not None:
+            self.logger.debug("Codex auth: injecting %s", auth_json_path)
+            await environment.upload_file(auth_json_path, remote_auth)
+            if environment.default_user is not None:
+                await self.exec_as_root(
+                    environment,
+                    command=f"chown {environment.default_user} {shlex.quote(remote_auth)}",
+                )
+            await self.exec_as_agent(
+                environment,
+                command=(
+                    f"chmod 600 {shlex.quote(remote_auth)} && "
+                    f'ln -sf {shlex.quote(remote_auth)} "$CODEX_HOME/auth.json"'
+                ),
+                env=env,
+            )
+        elif self._has_env("OPENAI_API_KEY"):
+            self.logger.debug("Codex auth: materializing auth.json from OPENAI_API_KEY")
+            await self.exec_as_agent(
+                environment,
+                command=(
+                    f"umask 077 && cat >{shlex.quote(remote_auth)} <<EOF\n"
+                    '{\n  "OPENAI_API_KEY": "${OPENAI_API_KEY}"\n}\nEOF\n'
+                    f'ln -sf {shlex.quote(remote_auth)} "$CODEX_HOME/auth.json"'
+                ),
+                env=env,
+            )
+        # CODEX_API_KEY-only setups rely on plain env passthrough.
+
+    async def _configure_kimi_auth(
+        self, environment: BaseEnvironment, env: dict[str, str]
+    ) -> None:
+        """Reconstruct an owner-only Kimi Code home in the container from the
+        host login (config.toml + credentials/), following cligent's own CI
+        harness. Without an injected home, only KIMI_MODEL_* provider config
+        is passed through — note ACP mode still expects a `kimi login`
+        credential."""
+        env["KIMI_CODE_HOME"] = REMOTE_KIMI_HOME
+        env.setdefault("KIMI_DISABLE_TELEMETRY", "1")
+        env.setdefault("KIMI_CODE_NO_AUTO_UPDATE", "1")
+        env.setdefault("KIMI_DISABLE_CRON", "1")
+        await self.exec_as_agent(
+            environment,
+            command='mkdir -p "$KIMI_CODE_HOME/credentials"',
+            env=env,
+        )
+        home = self._resolve_kimi_auth_home()
+        if home is None:
+            return
+        self.logger.debug("Kimi auth: injecting home from %s", home)
+        await environment.upload_dir(
+            home / "credentials", f"{REMOTE_KIMI_HOME}/credentials"
+        )
+        if (home / "config.toml").is_file():
+            await environment.upload_file(
+                home / "config.toml", f"{REMOTE_KIMI_HOME}/config.toml"
+            )
+        if environment.default_user is not None:
+            await self.exec_as_root(
+                environment,
+                command=f"chown -R {environment.default_user} {REMOTE_KIMI_HOME}",
+            )
+        await self.exec_as_agent(
+            environment,
+            command=f"chmod -R go-rwx {REMOTE_KIMI_HOME}",
+            env=env,
+        )
+
     # --- run ---------------------------------------------------------------
 
     def _require_credentials(self) -> None:
         missing: list[str] = []
-        for adapter in sorted(self.adapters_in_use):
-            keys = ADAPTER_CREDENTIALS[adapter]
-            if not any(self._has_env(key) for key in keys):
-                missing.append(f"{adapter}: one of {' / '.join(keys)}")
+        if "claude" in self.adapters_in_use and not any(
+            self._has_env(key) for key in CLAUDE_CREDENTIAL_ENVS
+        ):
+            missing.append(f"claude: one of {' / '.join(CLAUDE_CREDENTIAL_ENVS)}")
+        if "codex" in self.adapters_in_use:
+            if self._resolve_codex_auth_json_path() is None and not (
+                self._has_env("OPENAI_API_KEY") or self._has_env("CODEX_API_KEY")
+            ):
+                missing.append(
+                    "codex: OPENAI_API_KEY / CODEX_API_KEY, or host auth via "
+                    "CODEX_FORCE_AUTH_JSON=1 / CODEX_AUTH_JSON_PATH"
+                )
+        if "kimi" in self.adapters_in_use:
+            if self._resolve_kimi_auth_home() is None and not self._has_env(
+                "KIMI_MODEL_API_KEY"
+            ):
+                missing.append(
+                    "kimi: host auth via KIMI_FORCE_AUTH_HOME=1 / "
+                    "KIMI_AUTH_HOME_PATH, or KIMI_MODEL_API_KEY"
+                )
         if missing:
             raise ValueError(
-                "Missing adapter credentials (pass via `pier run --ae`): "
+                "Missing adapter credentials (pass via `pier run --ae` or host env): "
                 + "; ".join(missing)
             )
 
@@ -314,6 +484,10 @@ npm cache clean --force
         del context  # Populated from summary.json after the run.
         self._require_credentials()
         env = self._runtime_env()
+        if "codex" in self.adapters_in_use:
+            await self._configure_codex_auth(environment, env)
+        if "kimi" in self.adapters_in_use:
+            await self._configure_kimi_auth(environment, env)
 
         staging = self.logs_dir / "collab-input"
         staging.mkdir(parents=True, exist_ok=True)

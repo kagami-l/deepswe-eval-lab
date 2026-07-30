@@ -4,14 +4,59 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from pier.models.agent.context import AgentContext
 
 from wip.agents.deep_swe_collab.pier_agent import (
     OUTPUT_DIR,
+    REMOTE_CODEX_HOME,
+    REMOTE_KIMI_HOME,
+    REMOTE_SECRETS_DIR,
     RUNTIME_DIR,
     DeepSweCollabAgent,
 )
+
+
+class _FakeExecResult:
+    return_code = 0
+    stdout = ""
+    stderr = ""
+
+
+class FakeEnvironment:
+    """Records exec/upload calls made by the auth-injection helpers."""
+
+    default_user = "agent"
+
+    def __init__(self) -> None:
+        self.commands: list[dict[str, object]] = []
+        self.uploads: list[tuple[str, str, str]] = []
+
+    def agent_process_env(self, env: dict[str, str] | None) -> dict[str, str]:
+        return dict(env or {})
+
+    async def exec(
+        self,
+        command: str,
+        user: str | int | None = None,
+        env: dict[str, str] | None = None,
+        cwd: str | None = None,
+        timeout_sec: int | None = None,
+    ) -> _FakeExecResult:
+        del cwd, timeout_sec
+        self.commands.append({"command": command, "user": user, "env": dict(env or {})})
+        return _FakeExecResult()
+
+    async def upload_file(self, source_path: Path | str, target_path: str) -> None:
+        self.uploads.append(("file", str(source_path), target_path))
+
+    async def upload_dir(self, source_dir: Path | str, target_dir: str) -> None:
+        self.uploads.append(("dir", str(source_dir), target_dir))
+
+    def all_commands(self) -> str:
+        return "\n".join(str(entry["command"]) for entry in self.commands)
+
 
 RUNTIME_PACKAGE_JSON = Path(__file__).parent / "runtime" / "package.json"
 
@@ -99,6 +144,202 @@ class ValidationTests(unittest.TestCase):
 
             ok = make_agent(Path(directory))
             ok._require_credentials()  # Should not raise.
+
+
+class CodexAuthTests(unittest.TestCase):
+    def test_explicit_auth_json_path_resolves_and_satisfies_credentials(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            auth = Path(directory) / "auth.json"
+            auth.write_text("{}")
+            agent = make_agent(
+                Path(directory),
+                extra_env={
+                    "ANTHROPIC_API_KEY": "k",
+                    "CODEX_AUTH_JSON_PATH": str(auth),
+                },
+            )
+            self.assertEqual(agent._resolve_codex_auth_json_path(), auth)
+            agent._require_credentials()  # Should not raise.
+
+    def test_missing_auth_json_path_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            agent = make_agent(
+                Path(directory),
+                extra_env={
+                    "ANTHROPIC_API_KEY": "k",
+                    "CODEX_AUTH_JSON_PATH": str(Path(directory) / "nope.json"),
+                },
+            )
+            with self.assertRaises(ValueError):
+                agent._resolve_codex_auth_json_path()
+
+    def test_force_auth_json_reads_home_codex_login(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory) / "home"
+            (home / ".codex").mkdir(parents=True)
+            (home / ".codex" / "auth.json").write_text("{}")
+            agent = make_agent(
+                Path(directory),
+                extra_env={"ANTHROPIC_API_KEY": "k", "CODEX_FORCE_AUTH_JSON": "1"},
+            )
+            with mock.patch(
+                "wip.agents.deep_swe_collab.pier_agent.Path.home",
+                return_value=home,
+            ):
+                self.assertEqual(
+                    agent._resolve_codex_auth_json_path(),
+                    home / ".codex" / "auth.json",
+                )
+
+    def test_force_disabled_without_key_fails_credentials(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            agent = make_agent(
+                Path(directory),
+                extra_env={"ANTHROPIC_API_KEY": "k", "CODEX_FORCE_AUTH_JSON": "0"},
+            )
+            with self.assertRaises(ValueError) as caught:
+                agent._require_credentials()
+            self.assertIn("codex", str(caught.exception))
+
+
+class KimiAuthTests(unittest.TestCase):
+    @staticmethod
+    def make_kimi_home(root: Path) -> Path:
+        home = root / "kimi-home"
+        (home / "credentials").mkdir(parents=True)
+        (home / "credentials" / "kimi-code.json").write_text("{}")
+        (home / "config.toml").write_text("theme = 'dark'\n")
+        return home
+
+    def test_auth_home_path_resolves_and_satisfies_credentials(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = self.make_kimi_home(Path(directory))
+            agent = make_agent(
+                Path(directory),
+                modifier_adapter="kimi",
+                extra_env={
+                    "ANTHROPIC_API_KEY": "k",
+                    "KIMI_AUTH_HOME_PATH": str(home),
+                },
+            )
+            self.assertEqual(agent._resolve_kimi_auth_home(), home)
+            agent._require_credentials()  # Should not raise.
+
+    def test_home_without_login_credential_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory) / "empty-home"
+            home.mkdir()
+            agent = make_agent(
+                Path(directory),
+                modifier_adapter="kimi",
+                extra_env={
+                    "ANTHROPIC_API_KEY": "k",
+                    "KIMI_AUTH_HOME_PATH": str(home),
+                },
+            )
+            with self.assertRaises(ValueError) as caught:
+                agent._resolve_kimi_auth_home()
+            self.assertIn("kimi login", str(caught.exception))
+
+    def test_kimi_without_auth_or_key_fails_credentials(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            agent = make_agent(
+                Path(directory),
+                modifier_adapter="kimi",
+                extra_env={"ANTHROPIC_API_KEY": "k"},
+            )
+            with self.assertRaises(ValueError) as caught:
+                agent._require_credentials()
+            self.assertIn("kimi", str(caught.exception))
+
+
+class AuthInjectionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_codex_auth_json_is_uploaded_and_linked(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            auth = Path(directory) / "auth.json"
+            auth.write_text("{}")
+            agent = make_agent(
+                Path(directory),
+                extra_env={
+                    "ANTHROPIC_API_KEY": "k",
+                    "CODEX_AUTH_JSON_PATH": str(auth),
+                },
+            )
+            environment = FakeEnvironment()
+            env: dict[str, str] = {}
+            await agent._configure_codex_auth(environment, env)
+
+            self.assertEqual(env["CODEX_HOME"], REMOTE_CODEX_HOME)
+            self.assertIn(
+                ("file", str(auth), f"{REMOTE_SECRETS_DIR}/codex-auth.json"),
+                environment.uploads,
+            )
+            commands = environment.all_commands()
+            self.assertIn("ln -sf", commands)
+            self.assertIn('"$CODEX_HOME/auth.json"', commands)
+            chowns = [c for c in environment.commands if c["user"] == "root"]
+            self.assertTrue(any("chown" in str(c["command"]) for c in chowns))
+
+    async def test_codex_api_key_mode_materializes_without_leaking(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            agent = make_agent(
+                Path(directory),
+                extra_env={
+                    "ANTHROPIC_API_KEY": "k",
+                    "OPENAI_API_KEY": "sk-super-secret",
+                },
+            )
+            environment = FakeEnvironment()
+            env: dict[str, str] = {}
+            await agent._configure_codex_auth(environment, env)
+
+            self.assertEqual(environment.uploads, [])
+            commands = environment.all_commands()
+            self.assertIn("${OPENAI_API_KEY}", commands)
+            self.assertNotIn("sk-super-secret", commands)
+            self.assertIn('"$CODEX_HOME/auth.json"', commands)
+
+    async def test_kimi_home_is_uploaded_with_owner_only_permissions(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = KimiAuthTests.make_kimi_home(Path(directory))
+            agent = make_agent(
+                Path(directory),
+                reviewer_adapter="kimi",
+                extra_env={
+                    "OPENAI_API_KEY": "k",
+                    "KIMI_AUTH_HOME_PATH": str(home),
+                },
+            )
+            environment = FakeEnvironment()
+            env: dict[str, str] = {}
+            await agent._configure_kimi_auth(environment, env)
+
+            self.assertEqual(env["KIMI_CODE_HOME"], REMOTE_KIMI_HOME)
+            self.assertIn(
+                ("dir", str(home / "credentials"), f"{REMOTE_KIMI_HOME}/credentials"),
+                environment.uploads,
+            )
+            self.assertIn(
+                ("file", str(home / "config.toml"), f"{REMOTE_KIMI_HOME}/config.toml"),
+                environment.uploads,
+            )
+            commands = environment.all_commands()
+            self.assertIn("chmod -R go-rwx", commands)
+
+    async def test_kimi_provider_config_mode_skips_upload(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            agent = make_agent(
+                Path(directory),
+                reviewer_adapter="kimi",
+                extra_env={"OPENAI_API_KEY": "k", "KIMI_MODEL_API_KEY": "mk"},
+            )
+            environment = FakeEnvironment()
+            env: dict[str, str] = {}
+            await agent._configure_kimi_auth(environment, env)
+
+            self.assertEqual(environment.uploads, [])
+            self.assertEqual(env["KIMI_CODE_HOME"], REMOTE_KIMI_HOME)
+            self.assertEqual(env["KIMI_DISABLE_TELEMETRY"], "1")
 
 
 class RuntimeConfigTests(unittest.TestCase):

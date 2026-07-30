@@ -393,6 +393,7 @@ review 3 / final revision  使用剩余预算，不足则跳过并提前交付
 - task.toml 里的 `[agent] network_mode = "no-network"` 是 harbor 语义；pier 的 task 模型没有该字段、会静默忽略，真正的开关 `[environment] allow_internet` 默认为 True 且任务未设置。因此 **agent 容器实际有全网**，模型调用和在线安装都不需要网络豁免配置（`--allow-agent-host` 只存在于 harbor，pier 没有这个 flag）。
 - 代价是 benchmark 卫生（禁 git fetch 找答案等）只靠 prompt 约束和镜像的 git 手术（已删 origin 与未来 refs），没有网络层强制。如需收紧，pier 的机制是任务环境 `allow_internet=False` + 在 agent 代码中实现 `network_allowlist()`（egress proxy 仅在两者同时满足时启用），这是代码级配置而非 CLI flag。
 - API key 通过 Pier 的 `--ae/--agent-env` 注入（支持 `${VAR}` 引用宿主环境变量，job config 序列化时自动脱敏），不写入 prompt、日志和 artifacts。
+- 除 API key 外，支持复用宿主机登录态：Codex 走 `CODEX_FORCE_AUTH_JSON=1` / `CODEX_AUTH_JSON_PATH`（与 pier 内置 Codex agent 同机制，上传 `~/.codex/auth.json` 并落到容器 `$CODEX_HOME/auth.json`）；Kimi 走 `KIMI_FORCE_AUTH_HOME=1` / `KIMI_AUTH_HOME_PATH`（上传 `~/.kimi-code` 的 `config.toml` + `credentials/`，ACP 模式要求 `kimi login` 凭据）；Claude 无文件注入路径（macOS 凭据在 Keychain），标准做法是 `claude setup-token` → `CLAUDE_CODE_OAUTH_TOKEN`。凭据文件一律放容器 `/tmp`，不进会同步回宿主的 `/logs`。
 
 ## 12. Artifacts 与观测性
 
