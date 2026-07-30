@@ -202,7 +202,7 @@ Reviewer 隔离不能只依赖 adapter permissions。不同 adapter 对“允许
 - Codex：必须以 `mode: 'bypass'` 运行（映射为 `:danger-full-access` + approval never）。Codex 自带的 OS 级沙箱在普通 Docker 容器内无法初始化，任何映射到 `:read-only`/`:workspace` profile 的 capability 策略都会失败；pier 内置 Codex agent 同样以 `--dangerously-bypass-approvals-and-sandbox` 运行，容器本身就是隔离边界。
 - cligent 的 `PermissionPolicy` 一旦提供，未显式设置的字段默认为 `ask`，而 headless 下 `ask` 等价于拒绝——各 adapter 的策略必须逐字段显式写全。
 - OpenCode：`websearch` 不在 capability 映射内，落到 `ask` 会让 headless run 无限挂起，必须在 opencode 配置中显式处理。
-- Kimi：拒绝一切 capability 策略（仅接受 `mode: 'auto'` 或不传 permissions），且不产出 cost 数据。
+- Kimi：拒绝一切 capability 策略（仅接受 `mode: 'auto'` 或不传 permissions），且不产出 cost 数据。必须使用新版 Kimi Code CLI（npm `@moonshot-ai/kimi-code`，cligent 通过其 `kimi acp` 子命令驱动），不是旧版 Python `kimi-cli`；两代二进制同名 `kimi` 且 cligent 从 PATH 解析，容器 setup 应复用 `wip/agents/kimi_code_agent.py` 的安装与版本校验逻辑，并在安装后探针确认 `acp` 子命令存在。
 - cligent 的 usage 是 per-run 粒度，跨轮/跨角色汇总由 orchestrator 自行累加。
 - cligent 无结构化输出能力，`DonePayload.result` 是自由文本——6.3 的本地 JSON parser 是必要设计而非可选项。
 
