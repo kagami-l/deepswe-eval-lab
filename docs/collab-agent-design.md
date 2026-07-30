@@ -2,7 +2,7 @@
 
 ## 1. 目标
 
-在 DeepSWE 评测集上运行自定义的“修改 → 审查 → 修订”协作流程，比较单 Agent、自审和异构 Agent 协作的效果。
+在 DeepSWE 评测集上运行自定义的“修改 → 审查 → 修订”协作流程，比较单 Agent、自审和异构 Agent 协作的效果。协作 treatment 只包含 Modifier 和 Reviewer 两个 LLM Agent；状态流转和结构化输出判定由本地确定性控制逻辑完成，不引入 Captain/Judge 模型调用。
 
 设计优先级如下：
 
@@ -23,8 +23,10 @@ flowchart LR
     P["Pier / Harbor"] --> A["DeepSweCollabAgent"]
     A --> R["容器内协作 Runtime"]
     R --> PB["playbook 状态机"]
-    PB --> C["cligent Modifier"]
-    PB --> V["cligent Reviewer"]
+    PB --> D["Deterministic control plane"]
+    PB --> C["cligent Modifier LLM"]
+    PB --> V["cligent Reviewer LLM"]
+    D --> J["本地 JSON guard parser"]
     C --> APP["/app 主工作区"]
     V --> WT["隔离 Review Worktree"]
     APP --> G["Git checkpoint commits"]
@@ -36,8 +38,9 @@ flowchart LR
 
 - Pier/Harbor：准备任务环境、执行自定义 Agent、管理网络策略、提取 patch、运行 verifier 和汇总 reward。
 - `DeepSweCollabAgent`：Pier 自定义 Agent 适配层，负责安装和启动容器内协作 Runtime，并回填 AgentContext。
-- `playbook`：表达和执行有限状态机，控制修改、审查、修订、重试、轮数和最终交付。
+- `playbook`：表达和执行有限状态机，控制修改、审查、修订、重试、轮数和最终交付；workflow 不定义直接 Captain 工作。
 - `cligent`：统一驱动 Codex、Claude Code、OpenCode 等 coding-agent SDK/CLI，提供事件流、session、usage、permissions 和 abort。
+- Deterministic control plane：将唯一的初始任务输入映射为固定 FSM 入口事件，并把 Reviewer 的严格 JSON 输出机械映射为 guard；它不调用模型、不消耗 token。
 - Git：保存每轮可信修改。DeepSWE 的 `pre_artifacts.sh` 从最终 HEAD 提取相对 base commit 的 patch。
 
 ## 3. 为什么在任务容器内运行 cligent/playbook
@@ -110,6 +113,10 @@ pier run \
 
 应新建一个只表达 DeepSWE 协作实验语义的 playbook。
 
+该 playbook 通过嵌入式六端口 runtime 运行，而不是直接调用 `playbook run` CLI。嵌入式 host 可以精确绑定两个 `Cligent` player、提供 deterministic `callJudge`，并对未使用的 `callCaptain` 设置 fail-fast stub。这样既复用 playbook 的状态机和 trace，又不会因为通用 CLI 的 Captain 绑定引入第三个 LLM。
+
+该 workflow 是非交互式的：Pier/harness 以 Boss 身份只提交一次任务输入，内容就是当前 task 的 `instruction.md`。runtime 将这次输入映射为 `START` 后，后续 Modifier prompt、Reviewer prompt 和修订反馈都由 FSM 根据既有 instruction、patch 和 findings 自动生成，不再请求新的 Boss 输入。workflow 不得包含 `awaitBossReply` 或其他等待人工回复的状态；遇到信息不足时，Agent 应基于仓库和 instruction 作合理假设，无法继续则返回结构化失败。
+
 首版建议显式展开两轮 review，而不是一开始就实现动态循环：
 
 ```text
@@ -158,6 +165,16 @@ prepare
 - 即使 Reviewer 修改或 commit，它也只影响临时 worktree。
 
 Reviewer 隔离不能只依赖 adapter permissions。不同 adapter 对“允许执行 shell，但禁止写文件”的表达能力并不完全一致，尤其 Bash 命令本身可能写入文件。独立 worktree 是跨 adapter 更可靠的事务边界。
+
+### 6.3 非 LLM 控制端口
+
+playbook host 还需实现以下控制端口，但不为它们创建 `Cligent`：
+
+- `callCaptain`：workflow 不包含 `captain` actor，端口实现为 fail-fast stub；一旦意外调用即判配置或编译错误。
+- `classifyBossText`：把 Pier/harness 代表 Boss 提交的唯一 DeepSWE instruction 确定性映射为固定的 `START` 事件，不做自然语言意图分类。
+- `callJudge`：解析自定义 `buildJudgePrompt` 产生的 JSON envelope，并返回 `{guard, ...payload}`；整个过程是本地纯函数。
+
+因此实际模型调用严格限定为 Modifier 和 Reviewer。playbook trace 中暂时仍可能出现 `judge.call.started/finished`，但这些记录表示本地 guard 判定，不对应 LLM 请求、token 或费用。
 
 ## 7. Git 与 DeepSWE patch 提取
 
@@ -239,20 +256,52 @@ Modifier 应逐条记录：
 - rebutted：有证据地反驳；
 - unresolved：未完成或不确定。
 
-## 9. playbook Judge 问题
+## 9. playbook Captain/Judge 边界
 
-当前 playbook linked runtime 通常通过 Captain/Judge 将 player 的自然语言结果分类到 FSM guard。这样即使 workflow 只有 Modifier 和 Reviewer 两个业务角色，实际仍可能产生额外的隐藏 judge 调用。
+playbook 术语在参考 workflow 的自然语言和 runtime 中容易混淆，本方案按以下含义使用：
 
-首版推荐：
+| 概念 | 在通用 playbook 中 | 在本方案中 |
+|---|---|---|
+| Boss | 发起请求并可能继续回复的人或外部系统 | Pier/harness；只提交一次 `instruction.md` |
+| Boss input | Boss 发给 workflow 的输入 | task 的 `instruction.md`，即唯一初始指令 |
+| Captain | workflow 的协调视角；只有编译出 `src: 'captain'` 时才是实际 Agent actor | 不实例化，也不调用 |
+| Player | 执行具体工作的 Agent | Modifier 和 Reviewer |
+| Judge | 把 player 输出判定为 FSM guard/payload 的端口 | 本地确定性 JSON parser，不是 LLM |
 
-- 将 Reviewer 的同一 adapter/model 同时用于 Captain/Judge；
-- Judge 调用使用 fresh session；
-- Judge 不允许使用工具；
-- Judge token、费用、时延与 Reviewer 审查调用分开统计。
+因此，`instruction.md` 相当于“用户给系统的唯一任务输入”，但它不是 Captain。更准确的对应关系是：Pier/harness 代表 Boss，`instruction.md` 是 Boss input；playbook runtime 负责确定性编排，Modifier 和 Reviewer 执行工作。
 
-这仍然只有两种业务 Agent 配置，但必须在实验报告中明确 control-plane 调用的存在。
+参考 CODE workflow 中诸如 “Captain shall relay to Coder” 的表述，不等于必须先调用一个 Captain LLM 再调用 Coder。这里的 Captain 可以只是流程描述中的协调主体；如果编译结果直接进入 player actor，runtime 只调用相应 Player。只有 FSM 中实际存在 `src: 'captain'` 状态时才会调用 `callCaptain`。
 
-一个值得反馈给 playbook 开发者的后续能力是：允许严格结构化 player 输出直接驱动 deterministic guard，不经过 LLM Judge。DeepSWE Reviewer JSON 是该需求的典型使用场景。
+本方案的完整输入与执行序列是：
+
+```text
+Pier/harness (Boss) -- instruction.md, exactly once --> playbook runtime
+playbook runtime -- initial prompt --> Modifier
+playbook runtime -- patch + instruction --> Reviewer
+playbook runtime -- findings --> Modifier
+...直到 approved、max_reviews_reached 或结构化失败
+```
+
+初次调用 `handleBossInput()` 并产生 `START` 后，workflow 在终态前不再等待 Boss。后续所谓“指令”都是 runtime 依据初始 instruction 和中间 artifacts 构造的内部 Agent prompt，不是新的用户输入。任何 `awaitBossReply` 都属于此评测方案的建模错误，应在 artifact 校验或 smoke test 中直接拒绝。
+
+Captain 和 Judge 的 runtime 行为也不同：
+
+- Captain 是一种 agent actor。只有 FSM 中存在 `src: 'captain'` 状态时才会调用 `callCaptain`。
+- Judge 是 player 输出到 FSM guard 之间的 adjudication port。当前共享 player bridge 会在每次 `callPlayer` 完成后调用 `callJudge`。
+
+本方案不定义任何 Captain 状态，因此不会产生 Captain Agent 调用。`callCaptain` 只保留为公共 runtime contract 要求的 fail-fast stub。
+
+当前 playbook 包还不能仅通过重新编写自然语言 workflow 完全跳过 `callJudge` port，但 port 不必由 LLM 实现。首版使用 deterministic Judge：
+
+1. 自定义 artifact 的 `buildJudgePrompt` 把 `stateId`、合法 guards 和 player `finalText` 编码为确定性 JSON envelope。
+2. 嵌入式 host 的 `callJudge` 解析 envelope。
+3. Modifier 状态机械选择唯一的成功 guard。
+4. Reviewer 状态解析严格 JSON 中的 `verdict`，将 `approve` 映射为 `approved`，将 `revise` 映射为 `needsRevision`。
+5. Findings 原文通过 verbatim payload 或 JSON 字符串进入 FSM context，不让另一个模型重述。
+
+这使实际协作系统保持严格的两个 LLM Agent。Judge trace 应标记 `implementation: deterministic`，其 token 和 cost 为“不适用”，而不是伪造为 0 token 的模型调用。
+
+如果希望连 `callJudge` port 和相应 trace 都消失，并让结构化 `PlayerResult` 直接成为 XState actor output，则需要修改 playbook 包的正式 runtime/compiler contract。可能的上游能力包括 `playerOutput.mode: 'structured-json'` 或可配置的 deterministic adjudicator，并需要同步修改 runtime 类型、player bridge、linker/compiler spec 和测试。这是有价值的 dogfooding 改进，但不是首版评测的前置条件。
 
 ## 10. Timeout 与成本控制
 
@@ -321,11 +370,13 @@ collab/
 
 `summary.json` 至少记录：
 
-- Modifier、Reviewer、Captain/Judge 的 adapter、model、effort；
+- Modifier、Reviewer 的 adapter、model、effort；
+- 控制端实现版本，以及 `classifyBossText`、`callJudge` 均为 deterministic 的声明；
 - cligent、playbook、coding-agent SDK 版本；
 - 本地 cligent/playbook checkout SHA；
 - review count 和 workflow outcome；
-- 每个角色的 input/output tokens、tool uses、duration 和 cost；
+- Modifier、Reviewer 各自的 input/output tokens、tool uses、duration 和 cost；
+- 本地 guard 判定次数和 duration，不将其计入模型 token/cost；
 - findings 数量及严重级别；
 - findings 的 accepted/rebutted/unresolved 状态；
 - checkpoint commit hashes；
@@ -475,13 +526,14 @@ checkpoint_failed
 
 - 专用 benchmark workflow 的编译体验。
 - 有限次数循环、deadline 和异常路径的表达能力。
-- 是否需要 deterministic structured-output guard，避免隐藏 LLM Judge。
+- 现有 `buildJudgePrompt` + deterministic `callJudge` 方案是否足够稳定和自然。
+- 是否应新增 structured-output player mode，让合法结构化结果直接驱动 guard 并省略 `callJudge` port。
 - headless embedding 下 trace 和 artifact 是否足够完整。
 - Player role alias、fresh/resume session 选择是否易于控制。
 - 是否方便向 Pier/ATIF 等外部观测系统输出结构化轨迹。
 
 ## 18. 结论
 
-推荐把整个协作系统实现为 Pier 的一个自定义复合 Agent：Pier 是 benchmark harness，playbook 是协作控制面，cligent 是 Agent 执行面，Git checkpoint 是协作系统与 DeepSWE verifier 之间唯一的提交接口。
+推荐把整个协作系统实现为 Pier 的一个自定义复合 Agent：Pier 是 benchmark harness，playbook 是协作控制面，cligent 只执行 Modifier 和 Reviewer 两个 LLM Agent，本地 deterministic parser 负责入口事件与 guard 判定，Git checkpoint 是协作系统与 DeepSWE verifier 之间唯一的提交接口。
 
 这样既符合 DeepSWE/Harbor 的原生运行方式，也能真正覆盖 cligent 和 playbook 在隔离环境、长任务、多轮协作、恢复、事件和可观测性方面的实际使用体验。
