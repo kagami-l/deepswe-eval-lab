@@ -38,9 +38,11 @@ npm run build        # 产出 dist/，setup 时上传到容器 /opt/collab-runti
 （`/tmp/codex-home`、`/tmp/kimi-code-home`、`/tmp/collab-secrets`），
 不会进入 `/logs`（`/logs` 会作为 artifacts 同步回宿主机）。
 
-环境变量既可以在宿主 shell `export`（agent 通过宿主环境读取），也可以用
-`pier run --ae KEY='${KEY}'` 显式传入（`--ae` 支持 `${VAR}` 引用宿主变量，
-job config 序列化时自动脱敏）。
+环境变量既可以在宿主 shell `export`（每个 adapter 的凭据变量按 allowlist
+自动转发进容器，无关宿主变量不会带入），也可以用 `pier run --ae KEY='${KEY}'`
+显式传入（`--ae` 支持 `${VAR}` 引用宿主变量，job config 序列化时自动脱敏，
+且优先级高于宿主 export）。注入的凭据在 agent 结束后（含异常退出）会
+best-effort 清理。
 
 ### Codex
 
@@ -68,16 +70,24 @@ Keychain，不是可拷贝文件。标准做法二选一：
 
 ### Kimi
 
-cligent 通过新版 Kimi Code CLI 的 `kimi acp`（ACP over stdio）驱动。注意
+cligent 通过新版 Kimi Code CLI 的 `kimi acp`（ACP over stdio）驱动。
 **ACP 模式要求 `kimi login` 产生的 OAuth 凭据**（`credentials/kimi-code.json`），
-仅 `KIMI_MODEL_API_KEY` 的 provider 配置在 ACP 下可能不足——正式使用请走
-凭据注入：
+因此 Kimi 角色必须走凭据注入，仅有 `KIMI_MODEL_API_KEY` 无法通过启动校验：
 
 | 方式 | 配置 | 说明 |
 |---|---|---|
 | 宿主 kimi 登录（推荐） | `KIMI_FORCE_AUTH_HOME=1` | 上传宿主机 `~/.kimi-code` 的 `config.toml` + `credentials/` 到容器 `$KIMI_CODE_HOME`，chmod 700（做法与 cligent 自身 CI 一致；不上传 `bin/`，容器内 CLI 由 `install_spec()` 按 `kimi_code_version` 固定安装） |
 | 指定 Kimi home | `KIMI_AUTH_HOME_PATH=/path/to/kimi-home` | 同上，但用指定目录 |
-| Provider 配置 | `--ae KIMI_MODEL_API_KEY=... KIMI_MODEL_NAME=... KIMI_MODEL_BASE_URL=...` | 纯环境变量透传，注意上面的 ACP caveat |
+
+`KIMI_MODEL_*`（API key / model / base URL）作为**辅助配置**仍会转发进容器，
+但不构成独立凭据；待某个 Kimi Code/cligent 版本确认支持 provider-key ACP
+认证后再放开。
+
+> ⚠️ **并发/批量警告**：每个 trial 都会从同一宿主 Kimi home 克隆 OAuth
+> 凭据，而克隆运行可能旋转 refresh credential 使源凭据失效（cligent 文档
+> 明确警告过此行为）。Kimi 参与的批量或 `--n-concurrent > 1` 评测前，必须
+> 先用真实凭据验证 token 刷新行为，并为每个 worker 准备独立登录态；不要让
+> 多个并发容器共享同一份可旋转 refresh credential。单任务 smoke 不受影响。
 
 注意：宿主机若同时装过旧版 Python `kimi-cli`（同名二进制 `kimi`），不影响
 容器——容器内安装步骤自带 `kimi --help | grep -q acp` 探针，装错会直接失败。

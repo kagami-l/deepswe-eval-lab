@@ -114,3 +114,19 @@ Kimi home 的目录创建、owner 修正和权限收紧也基本正确。
 3. 为 Kimi 批量评测设计 refresh token 生命周期和并发策略。
 4. 在 `finally` 中清理容器内临时凭据。
 5. 分别执行 Codex、Claude、Kimi 的真实凭据 smoke test。
+
+## 处理记录（2026-07-30）
+
+Findings 1、2、4 已修复；Finding 3 以文档警告落地，实际策略推迟到 Kimi
+批量评测前用真实凭据验证后确定。
+
+| Finding | 状态 | 处理方式 |
+| --- | --- | --- |
+| [P1] 宿主 export 的凭据未注入容器 | ✅ 已修复（采用建议的 allowlist 方案） | `_runtime_env()` 按 adapter 从 `_get_env()` 显式转发受控 allowlist（claude: `ANTHROPIC_API_KEY`/`CLAUDE_CODE_OAUTH_TOKEN`；codex: `OPENAI_API_KEY`/`CODEX_API_KEY`/`OPENAI_BASE_URL`；kimi: `KIMI_MODEL_*`）作为 base 层，`--ae` 值经 `build_process_env` 合并顺序天然覆盖；宿主控制变量（`CODEX_FORCE_AUTH_JSON` 等）与无关宿主变量不转发。Codex API-key 分支补 `env.setdefault("OPENAI_API_KEY", ...)`（与 pier 内置 agent 一致），杜绝空 key auth.json。README「export 或 --ae 均可」的承诺现在成立 |
+| [P1] `KIMI_MODEL_API_KEY` 被当成充分凭据 | ✅ 已修复 | `_require_credentials()` 对 kimi 角色要求 `_resolve_kimi_auth_home()` 非空，错误信息明确指出 ACP 需要 `kimi login` OAuth 凭据；`KIMI_MODEL_*` 降级为辅助配置（仍转发进容器但不构成凭据）。README 同步，并注明待上游确认支持 provider-key ACP 后再恢复 |
+| [P1] Kimi OAuth clone/refresh 生命周期 | ⏸ 文档警告，策略推迟 | 按建议属于批量评测前置项而非代码可修：README 认证章节新增显著警告（并发/批量前必须用真实凭据验证 token 刷新行为，为每个 worker 准备独立登录态，不共享可旋转 refresh credential；单任务 smoke 不受影响） |
+| [P2] 注入凭据未清理 | ✅ 已修复 | `run()` 将 auth 注入与 orchestrator 调用包进 `try/finally`，finally 中 best-effort `rm -rf /tmp/collab-secrets /tmp/codex-home /tmp/kimi-code-home`（仅 codex/kimi 参与时执行）；清理失败只记 warning，不覆盖原始异常。补充说明：verifier 运行于独立环境（`environment_mode=separate`），泄漏面主要是保留的调试容器 |
+
+处理后验证：Python unittest 30/30（新增 7 个：宿主 export 转发、`--ae` 优先、
+无关变量不转发、kimi provider-only 拒绝、成功/失败路径的清理、claude-only
+跳过清理）；ruff 通过。真实凭据 live smoke test 仍待执行（建议实施顺序第 5 项）。

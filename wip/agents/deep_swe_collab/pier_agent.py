@@ -365,6 +365,7 @@ npm cache clean --force
             )
         elif self._has_env("OPENAI_API_KEY"):
             self.logger.debug("Codex auth: materializing auth.json from OPENAI_API_KEY")
+            env.setdefault("OPENAI_API_KEY", self._get_env("OPENAI_API_KEY") or "")
             await self.exec_as_agent(
                 environment,
                 command=(
@@ -431,14 +432,15 @@ npm cache clean --force
                     "codex: OPENAI_API_KEY / CODEX_API_KEY, or host auth via "
                     "CODEX_FORCE_AUTH_JSON=1 / CODEX_AUTH_JSON_PATH"
                 )
-        if "kimi" in self.adapters_in_use:
-            if self._resolve_kimi_auth_home() is None and not self._has_env(
-                "KIMI_MODEL_API_KEY"
-            ):
-                missing.append(
-                    "kimi: host auth via KIMI_FORCE_AUTH_HOME=1 / "
-                    "KIMI_AUTH_HOME_PATH, or KIMI_MODEL_API_KEY"
-                )
+        if "kimi" in self.adapters_in_use and self._resolve_kimi_auth_home() is None:
+            # cligent 0.16.0 drives Kimi Code over ACP, which requires the
+            # `kimi login` OAuth credential; KIMI_MODEL_* provider config
+            # alone is not sufficient and would only fail at the first turn.
+            missing.append(
+                "kimi: host auth via KIMI_FORCE_AUTH_HOME=1 / KIMI_AUTH_HOME_PATH "
+                "(a `kimi login` OAuth credential; KIMI_MODEL_* alone is not "
+                "sufficient for ACP)"
+            )
         if missing:
             raise ValueError(
                 "Missing adapter credentials (pass via `pier run --ae` or host env): "
@@ -471,8 +473,33 @@ npm cache clean --force
             "keepWorkspaces": self.keep_workspaces,
         }
 
+    # Host credential/config env vars forwarded into the container, per
+    # adapter in use. Host-side control variables (CODEX_FORCE_AUTH_JSON,
+    # KIMI_AUTH_HOME_PATH, ...) are deliberately not forwarded.
+    FORWARDED_ENVS: dict[str, tuple[str, ...]] = {
+        "claude": ("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"),
+        "codex": ("OPENAI_API_KEY", "CODEX_API_KEY", "OPENAI_BASE_URL"),
+        "kimi": (
+            "KIMI_MODEL_API_KEY",
+            "KIMI_MODEL_NAME",
+            "KIMI_MODEL_BASE_URL",
+            "KIMI_MODEL_MAX_CONTEXT_SIZE",
+        ),
+    }
+
     def _runtime_env(self) -> dict[str, str]:
-        return self.build_process_env({"CI": "1", "NO_COLOR": "1"})
+        """Runtime env for the orchestrator process.
+
+        Host-exported credentials must actually reach the container, not just
+        pass the fail-fast check: the per-adapter allowlist is copied from
+        ``_get_env()`` as the base layer, so job-level ``--ae`` values still
+        override it in ``build_process_env``.
+        """
+        base: dict[str, str | None] = {"CI": "1", "NO_COLOR": "1"}
+        for adapter in sorted(self.adapters_in_use):
+            for key in self.FORWARDED_ENVS[adapter]:
+                base[key] = self._get_env(key)
+        return self.build_process_env(base)
 
     @with_prompt_template
     async def run(
@@ -484,31 +511,56 @@ npm cache clean --force
         del context  # Populated from summary.json after the run.
         self._require_credentials()
         env = self._runtime_env()
-        if "codex" in self.adapters_in_use:
-            await self._configure_codex_auth(environment, env)
-        if "kimi" in self.adapters_in_use:
-            await self._configure_kimi_auth(environment, env)
+        try:
+            if "codex" in self.adapters_in_use:
+                await self._configure_codex_auth(environment, env)
+            if "kimi" in self.adapters_in_use:
+                await self._configure_kimi_auth(environment, env)
 
-        staging = self.logs_dir / "collab-input"
-        staging.mkdir(parents=True, exist_ok=True)
-        (staging / "instruction.md").write_text(instruction)
-        (staging / "config.json").write_text(
-            json.dumps(self.build_runtime_config(), indent=2)
-        )
+            staging = self.logs_dir / "collab-input"
+            staging.mkdir(parents=True, exist_ok=True)
+            (staging / "instruction.md").write_text(instruction)
+            (staging / "config.json").write_text(
+                json.dumps(self.build_runtime_config(), indent=2)
+            )
 
-        await self.exec_as_agent(environment, command=f"mkdir -p {OUTPUT_DIR}")
-        await environment.upload_file(
-            staging / "instruction.md", f"{OUTPUT_DIR}/instruction.md"
-        )
-        await environment.upload_file(
-            staging / "config.json", f"{OUTPUT_DIR}/config.json"
-        )
+            await self.exec_as_agent(environment, command=f"mkdir -p {OUTPUT_DIR}")
+            await environment.upload_file(
+                staging / "instruction.md", f"{OUTPUT_DIR}/instruction.md"
+            )
+            await environment.upload_file(
+                staging / "config.json", f"{OUTPUT_DIR}/config.json"
+            )
 
-        command = (
-            f"cd {RUNTIME_DIR} && "
-            f"node dist/main.js --config {OUTPUT_DIR}/config.json"
-        )
-        await self.exec_as_agent(environment, command=command, env=env)
+            command = (
+                f"cd {RUNTIME_DIR} && "
+                f"node dist/main.js --config {OUTPUT_DIR}/config.json"
+            )
+            await self.exec_as_agent(environment, command=command, env=env)
+        finally:
+            await self._cleanup_credentials(environment)
+
+    async def _cleanup_credentials(self, environment: BaseEnvironment) -> None:
+        """Best-effort removal of injected credential material.
+
+        The verifier runs in a separate environment, but containers kept for
+        debugging (or left behind by aborted runs) should not retain secrets.
+        Failures are logged and never mask the original agent exception.
+        """
+        if not (self.adapters_in_use & {"codex", "kimi"}):
+            return
+        try:
+            await self.exec_as_agent(
+                environment,
+                command=(
+                    f"rm -rf {REMOTE_SECRETS_DIR} {REMOTE_CODEX_HOME} "
+                    f"{REMOTE_KIMI_HOME}"
+                ),
+            )
+        except Exception:
+            self.logger.warning(
+                "Failed to clean up injected credentials", exc_info=True
+            )
 
     # --- context -----------------------------------------------------------
 

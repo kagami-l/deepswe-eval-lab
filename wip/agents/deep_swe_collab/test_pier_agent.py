@@ -19,9 +19,10 @@ from wip.agents.deep_swe_collab.pier_agent import (
 
 
 class _FakeExecResult:
-    return_code = 0
-    stdout = ""
-    stderr = ""
+    def __init__(self, return_code: int = 0) -> None:
+        self.return_code = return_code
+        self.stdout = ""
+        self.stderr = ""
 
 
 class FakeEnvironment:
@@ -32,6 +33,7 @@ class FakeEnvironment:
     def __init__(self) -> None:
         self.commands: list[dict[str, object]] = []
         self.uploads: list[tuple[str, str, str]] = []
+        self.fail_command_containing: str | None = None
 
     def agent_process_env(self, env: dict[str, str] | None) -> dict[str, str]:
         return dict(env or {})
@@ -46,6 +48,11 @@ class FakeEnvironment:
     ) -> _FakeExecResult:
         del cwd, timeout_sec
         self.commands.append({"command": command, "user": user, "env": dict(env or {})})
+        if (
+            self.fail_command_containing is not None
+            and self.fail_command_containing in command
+        ):
+            return _FakeExecResult(return_code=1)
         return _FakeExecResult()
 
     async def upload_file(self, source_path: Path | str, target_path: str) -> None:
@@ -453,6 +460,113 @@ class NetworkTests(unittest.TestCase):
             domains = agent.network_allowlist().domains
             self.assertIn("gateway.example.test", domains)
             self.assertIn("api.moonshot.ai", domains)
+
+
+class RuntimeEnvTests(unittest.TestCase):
+    def test_host_exported_credentials_are_forwarded(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            agent = make_agent(Path(directory), extra_env={})
+            host = {
+                "OPENAI_API_KEY": "host-openai",
+                "ANTHROPIC_API_KEY": "host-anthropic",
+                "CODEX_FORCE_AUTH_JSON": "1",
+                "KIMI_MODEL_API_KEY": "host-kimi",
+                "GITHUB_TOKEN": "unrelated",
+            }
+            with mock.patch.dict("os.environ", host, clear=False):
+                env = agent._runtime_env()
+            self.assertEqual(env["OPENAI_API_KEY"], "host-openai")
+            self.assertEqual(env["ANTHROPIC_API_KEY"], "host-anthropic")
+            # Host-side control vars and unrelated secrets stay on the host.
+            self.assertNotIn("CODEX_FORCE_AUTH_JSON", env)
+            self.assertNotIn("GITHUB_TOKEN", env)
+            # Kimi vars only forwarded when a role uses kimi.
+            self.assertNotIn("KIMI_MODEL_API_KEY", env)
+
+    def test_kimi_role_forwards_kimi_provider_config(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            agent = make_agent(Path(directory), reviewer_adapter="kimi", extra_env={})
+            with mock.patch.dict(
+                "os.environ",
+                {"KIMI_MODEL_API_KEY": "host-kimi", "KIMI_MODEL_NAME": "k3"},
+                clear=False,
+            ):
+                env = agent._runtime_env()
+            self.assertEqual(env["KIMI_MODEL_API_KEY"], "host-kimi")
+            self.assertEqual(env["KIMI_MODEL_NAME"], "k3")
+
+    def test_agent_env_overrides_host_export(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            agent = make_agent(
+                Path(directory),
+                extra_env={"OPENAI_API_KEY": "ae-key", "ANTHROPIC_API_KEY": "k"},
+            )
+            with mock.patch.dict(
+                "os.environ", {"OPENAI_API_KEY": "host-key"}, clear=False
+            ):
+                env = agent._runtime_env()
+            self.assertEqual(env["OPENAI_API_KEY"], "ae-key")
+
+
+class KimiCredentialGateTests(unittest.TestCase):
+    def test_provider_key_alone_is_not_sufficient_for_acp(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            agent = make_agent(
+                Path(directory),
+                modifier_adapter="kimi",
+                extra_env={"ANTHROPIC_API_KEY": "k", "KIMI_MODEL_API_KEY": "mk"},
+            )
+            with self.assertRaises(ValueError) as caught:
+                agent._require_credentials()
+            self.assertIn("kimi login", str(caught.exception))
+
+
+class CleanupTests(unittest.IsolatedAsyncioTestCase):
+    def make_codex_agent(self, directory: Path) -> DeepSweCollabAgent:
+        auth = directory / "auth.json"
+        auth.write_text("{}")
+        return make_agent(
+            directory,
+            extra_env={
+                "ANTHROPIC_API_KEY": "k",
+                "CODEX_AUTH_JSON_PATH": str(auth),
+            },
+        )
+
+    async def test_credentials_cleaned_after_successful_run(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            agent = self.make_codex_agent(Path(directory))
+            environment = FakeEnvironment()
+            await agent.run("do the task", environment, AgentContext())
+            last_command = str(environment.commands[-1]["command"])
+            self.assertIn("rm -rf", last_command)
+            for path in (
+                "/tmp/collab-secrets",
+                "/tmp/codex-home",
+                "/tmp/kimi-code-home",
+            ):
+                self.assertIn(path, last_command)
+
+    async def test_credentials_cleaned_even_when_orchestrator_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            agent = self.make_codex_agent(Path(directory))
+            environment = FakeEnvironment()
+            environment.fail_command_containing = "dist/main.js"
+            with self.assertRaises(Exception):
+                await agent.run("do the task", environment, AgentContext())
+            self.assertIn("rm -rf", str(environment.commands[-1]["command"]))
+
+    async def test_claude_only_run_skips_credential_cleanup(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            agent = make_agent(
+                Path(directory),
+                modifier_adapter="claude",
+                reviewer_adapter="claude",
+                extra_env={"ANTHROPIC_API_KEY": "k"},
+            )
+            environment = FakeEnvironment()
+            await agent.run("do the task", environment, AgentContext())
+            self.assertNotIn("rm -rf /tmp/collab-secrets", environment.all_commands())
 
 
 if __name__ == "__main__":
