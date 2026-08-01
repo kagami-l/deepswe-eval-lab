@@ -12,9 +12,10 @@ TASKS_DIR="${PIER_TASKS_DIR:-$REPO_ROOT/tasks}"
 JOBS_DIR="${PIER_JOBS_DIR:-$REPO_ROOT/jobs}"
 PIER_BIN="${PIER_BIN:-pier}"
 MINI_SWE_MODEL="${MINI_SWE_MODEL:-deepseek/deepseek-v4-pro}"
-MINI_SWE_AGENT_VERSION="${MINI_SWE_AGENT_VERSION:-}"
+MINI_SWE_AGENT_VERSION="${MINI_SWE_AGENT_VERSION:-2.4.6}"
 MINI_SWE_COST_LIMIT="${MINI_SWE_COST_LIMIT:-0}"
 MINI_SWE_REASONING_EFFORT="${MINI_SWE_REASONING_EFFORT:-}"
+MINI_SWE_PYPI_INDEX="${MINI_SWE_PYPI_INDEX:-https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple}"
 MINI_SWE_ENV_FILE="${MINI_SWE_ENV_FILE:-$SCRIPT_DIR/.env}"
 PIER_N_ATTEMPTS="${PIER_N_ATTEMPTS:-1}"
 PIER_N_CONCURRENT="${PIER_N_CONCURRENT:-2}"
@@ -30,7 +31,8 @@ usage() {
 选项：
   -t, --task-list PATH            任务 ID 列表；默认：05_sample_dev.txt
   -m, --model PROVIDER/MODEL      模型；默认：deepseek/deepseek-v4-pro
-      --mini-swe-version VERSION  容器内 mini-swe-agent 版本；默认不固定
+      --mini-swe-version VERSION  容器内 mini-swe-agent 版本；默认：2.4.6
+      --pypi-index-url URL        安装依赖的 PyPI 源；默认：清华镜像
       --cost-limit USD            mini-swe-agent cost limit；默认：0（不限制）
       --reasoning-effort LEVEL    可选的模型 reasoning effort
   -k, --n-attempts N              每个任务的重复次数；默认：1
@@ -51,7 +53,7 @@ DeepSeek 官方认证：
 
 可选环境变量：
   MINI_SWE_MODEL、MINI_SWE_AGENT_VERSION、MINI_SWE_COST_LIMIT
-  MINI_SWE_REASONING_EFFORT、MINI_SWE_ENV_FILE
+  MINI_SWE_REASONING_EFFORT、MINI_SWE_PYPI_INDEX、MINI_SWE_ENV_FILE
   PIER_TASKS_DIR、PIER_JOBS_DIR、PIER_JOB_NAME
   PIER_N_ATTEMPTS、PIER_N_CONCURRENT、PIER_BIN
 
@@ -160,6 +162,16 @@ while [[ "$#" -gt 0 ]]; do
       [[ -n "$MINI_SWE_AGENT_VERSION" ]] || die "--mini-swe-version 需要一个版本号"
       shift
       ;;
+    --pypi-index-url)
+      [[ "$#" -ge 2 && -n "$2" ]] || die "$1 需要一个 URL"
+      MINI_SWE_PYPI_INDEX="$2"
+      shift 2
+      ;;
+    --pypi-index-url=*)
+      MINI_SWE_PYPI_INDEX="${1#*=}"
+      [[ -n "$MINI_SWE_PYPI_INDEX" ]] || die "--pypi-index-url 需要一个 URL"
+      shift
+      ;;
     --cost-limit)
       [[ "$#" -ge 2 && -n "$2" ]] || die "$1 需要一个非负数字"
       MINI_SWE_COST_LIMIT="$2"
@@ -241,6 +253,8 @@ is_nonnegative_number "$MINI_SWE_COST_LIMIT" || \
   die "MINI_SWE_REASONING_EFFORT 不能包含空白字符"
 [[ "$MINI_SWE_MODEL" == */* ]] || \
   die "模型必须是 provider/model 格式，例如 deepseek/deepseek-v4-pro：$MINI_SWE_MODEL"
+[[ "$MINI_SWE_PYPI_INDEX" =~ ^https?://[^[:space:]]+$ ]] || \
+  die "MINI_SWE_PYPI_INDEX 必须是 HTTP(S) URL：$MINI_SWE_PYPI_INDEX"
 
 provider="${MINI_SWE_MODEL%%/*}"
 api_key_var=""
@@ -297,9 +311,10 @@ command=(
   "$PIER_BIN" run
   --path "$TASKS_DIR"
   "${include_args[@]}"
-  --agent mini-swe-agent
+  --agent-import-path wip.agents.mini_swe_agent:OptimizedMiniSweAgent
   --model "$MINI_SWE_MODEL"
   --agent-kwarg "cost_limit=$MINI_SWE_COST_LIMIT"
+  --agent-kwarg "pypi_index_url=$MINI_SWE_PYPI_INDEX"
 )
 
 if [[ -n "$MINI_SWE_AGENT_VERSION" ]]; then
@@ -331,11 +346,8 @@ echo "  Job 名称：$PIER_JOB_NAME"
 echo "  结果目录：$JOBS_DIR/$PIER_JOB_NAME"
 echo "  模型：$MINI_SWE_MODEL"
 echo "  Provider：${provider}（默认 endpoint 由 LiteLLM provider 决定）"
-if [[ -n "$MINI_SWE_AGENT_VERSION" ]]; then
-  echo "  mini-swe-agent：$MINI_SWE_AGENT_VERSION"
-else
-  echo "  mini-swe-agent：未固定（首次构建时解析；正式实验建议显式固定版本）"
-fi
+echo "  mini-swe-agent：${MINI_SWE_AGENT_VERSION}（优化安装 adapter）"
+echo "  PyPI：$MINI_SWE_PYPI_INDEX"
 echo "  Cost limit：$MINI_SWE_COST_LIMIT"
 if [[ -n "$MINI_SWE_REASONING_EFFORT" ]]; then
   echo "  Reasoning effort：$MINI_SWE_REASONING_EFFORT"
