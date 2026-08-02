@@ -1,0 +1,142 @@
+"""Pier OpenCode adapter with terminal-event lifecycle cleanup."""
+
+from __future__ import annotations
+
+import shlex
+from pathlib import Path
+from typing import Any
+
+from pier.agents.installed.base import NonZeroAgentExitCodeError, with_prompt_template
+from pier.agents.installed.opencode import OpenCode
+from pier.environments.base import BaseEnvironment
+from pier.models.agent.context import AgentContext
+
+
+_REMOTE_RUNNER = "/installed-agent/opencode-watchdog.mjs"
+_WATCHDOG_LOG = "/logs/agent/opencode-watchdog.jsonl"
+
+
+def _non_negative_float(name: str, value: Any) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a non-negative number") from exc
+    if parsed < 0:
+        raise ValueError(f"{name} must be a non-negative number")
+    return parsed
+
+
+class OpenCodeWatchdogAgent(OpenCode):
+    """Stock OpenCode behavior with direct-file logging and a terminal watchdog."""
+
+    def __init__(
+        self,
+        *args: Any,
+        terminal_grace_seconds: Any = 10,
+        terminate_grace_seconds: Any = 5,
+        poll_interval_ms: Any = 100,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self.terminal_grace_seconds = _non_negative_float(
+            "terminal_grace_seconds", terminal_grace_seconds
+        )
+        self.terminate_grace_seconds = _non_negative_float(
+            "terminate_grace_seconds", terminate_grace_seconds
+        )
+        self.poll_interval_ms = _non_negative_float("poll_interval_ms", poll_interval_ms)
+
+    async def setup(self, environment: BaseEnvironment) -> None:
+        await super().setup(environment)
+        runner = Path(__file__).with_name("opencode_watchdog_runner.mjs")
+        await environment.upload_file(runner, _REMOTE_RUNNER)
+
+    def _runtime_env(self) -> dict[str, str]:
+        if not self.model_name or "/" not in self.model_name:
+            raise ValueError("Model name must be in the format provider/model_name")
+        provider, _ = self.model_name.split("/", 1)
+        env = self.build_process_env()
+        provider_keys = {
+            "amazon-bedrock": ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION"),
+            "anthropic": ("ANTHROPIC_API_KEY",),
+            "azure": ("AZURE_RESOURCE_NAME", "AZURE_API_KEY"),
+            "deepseek": ("DEEPSEEK_API_KEY",),
+            "github-copilot": ("GITHUB_TOKEN",),
+            "google": (
+                "GEMINI_API_KEY",
+                "GOOGLE_GENERATIVE_AI_API_KEY",
+                "GOOGLE_APPLICATION_CREDENTIALS",
+                "GOOGLE_CLOUD_PROJECT",
+                "GOOGLE_CLOUD_LOCATION",
+                "GOOGLE_GENAI_USE_VERTEXAI",
+                "GOOGLE_API_KEY",
+            ),
+            "groq": ("GROQ_API_KEY",),
+            "huggingface": ("HF_TOKEN",),
+            "llama": ("LLAMA_API_KEY",),
+            "mistral": ("MISTRAL_API_KEY",),
+            "openai": ("OPENAI_API_KEY", "OPENAI_BASE_URL"),
+            "opencode": ("OPENCODE_API_KEY",),
+            "openrouter": ("OPENROUTER_API_KEY",),
+            "xai": ("XAI_API_KEY",),
+        }
+        for key in provider_keys.get(provider, ()):
+            if value := self._get_env(key):
+                env[key] = value
+        env["OPENCODE_FAKE_VCS"] = "git"
+        return env
+
+    @with_prompt_template
+    async def run(
+        self,
+        instruction: str,
+        environment: BaseEnvironment,
+        context: AgentContext,
+    ) -> None:
+        del context
+        env = self._runtime_env()
+
+        if skills_command := self._build_register_skills_command():
+            await self.exec_as_agent(environment, command=skills_command, env=env)
+        if mcp_command := self._build_register_config_command():
+            await self.exec_as_agent(environment, command=mcp_command, env=env)
+
+        cli_flags = self.build_cli_flags()
+        opencode_args = [
+            "opencode",
+            f"--model={self.model_name}",
+            "run",
+            "--format=json",
+        ]
+        if cli_flags:
+            # build_cli_flags is produced from validated Pier CLI kwargs.
+            opencode_args.extend(shlex.split(cli_flags))
+        opencode_args.extend(
+            ["--thinking", "--dangerously-skip-permissions", "--", instruction]
+        )
+
+        command = [
+            "node",
+            _REMOTE_RUNNER,
+            "--output",
+            "/logs/agent/opencode.txt",
+            "--state-log",
+            _WATCHDOG_LOG,
+            "--terminal-grace-ms",
+            str(round(self.terminal_grace_seconds * 1000)),
+            "--terminate-grace-ms",
+            str(round(self.terminate_grace_seconds * 1000)),
+            "--poll-interval-ms",
+            str(round(self.poll_interval_ms)),
+            "--",
+            *opencode_args,
+        ]
+        shell_command = ". ~/.nvm/nvm.sh; " + " ".join(
+            shlex.quote(part) for part in command
+        )
+        await self.exec_as_agent(environment, command=shell_command, env=env)
+
+        if messages := self._error_messages():
+            raise NonZeroAgentExitCodeError(
+                "OpenCode emitted error event(s): " + "; ".join(messages[:3])
+            )

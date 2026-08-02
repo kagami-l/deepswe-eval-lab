@@ -312,7 +312,7 @@ command=(
   "$PIER_BIN" run
   --path "$TASKS_DIR"
   "${include_args[@]}"
-  --agent opencode
+  --agent-import-path wip.agents.opencode_watchdog_agent:OpenCodeWatchdogAgent
   --model "$OPENCODE_MODEL"
   --agent-kwarg "version=$OPENCODE_VERSION"
 )

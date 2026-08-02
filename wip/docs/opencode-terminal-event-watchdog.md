@@ -2,13 +2,26 @@
 
 ## 状态与结论
 
-本文只保存修复设计，当前暂不修改 Pier 或 OpenCode adapter。短期内如果目标是评测
-`deepseek/deepseek-v4-pro`，优先改用 Pier 内置的 `mini-swe-agent`，运行入口见
-`wip/scripts/run_mini_swe_eval.sh`。
+方案已在仓库内实现，不修改 Pier site-packages：
+
+- 自定义 adapter：`wip/agents/opencode_watchdog_agent.py`
+- 容器内 runner：`wip/agents/opencode_watchdog_runner.mjs`
+- fake-process 测试：`wip/agents/test_opencode_watchdog.py`
+- 运行入口：`wip/scripts/run_opencode_eval.sh`
+
+运行脚本默认通过 `--agent-import-path` 使用 watchdog adapter。Pier 内置 OpenCode adapter
+仍保持原样。
 
 已观察到的问题不是普通的“模型响应慢”：OpenCode 已经输出表示任务完成的
-`step_finish` 事件，进程却一直不退出，Pier 最终只能在 agent 总超时处将它记为
-`AgentTimeoutError`。
+`step_finish` 事件，但 Pier 所等待的容器命令一直不返回，最终只能在 agent 总超时处将它
+记为 `AgentTimeoutError`。现有证据可以确认 hang 发生在 terminal event 之后的进程/管道
+收尾阶段，但仅凭事件日志和进程仍存活，不能严格区分以下两种机制：
+
+1. OpenCode 主进程自身没有完成收尾或仍在等待后代进程。
+2. OpenCode 已进入退出路径，但后代进程继承了 stdout pipe，导致 `tee` 收不到 EOF，整个
+   shell pipeline 无法结束。
+
+这两种机制可能同时存在，修复设计应分别覆盖，避免把尚未完成的根因归因写成定论。
 
 证据包括：
 
@@ -19,7 +32,7 @@
   会话收尾而不是模型生成或工具执行。
 - 单任务 job `opencode-deepseek-v4-pro-one_task-20260801-121525` 使用 OpenCode
   1.18.10，日志最后一行已经是主 session 的 `step_finish(reason="stop")`；代码已提交、
-  工作区干净且 `go test ./...` 通过，但 OpenCode 主进程和 `tee` 仍然存活。
+  工作区干净且 `go test ./...` 通过，但 Pier 所执行的 `opencode | tee` pipeline 仍未返回。
 - 日志里没有与超时相对应的 provider error、429 或重试风暴。简单本机调用也能在数秒内
   正常完成。因此已有证据更符合 OpenCode 的进程/会话生命周期 hang，而不是 DeepSeek
   API 普遍响应慢。
@@ -30,6 +43,20 @@
 - [OpenCode v1.18.10 release](https://github.com/anomalyco/opencode/releases/tag/v1.18.10)
 
 ## 两种修复分别解决什么
+
+### 与 SWE-bench Pro 执行模型的关系
+
+SWE-bench Pro 的自定义 adapter 直接用 `subprocess.Popen` 启动 OpenCode，把 stdout/stderr
+绑定到普通文件，并用 `start_new_session=True` 建立可整体清理的宿主进程组。它等待的是
+OpenCode 主进程，不需要等待 `tee` 获得 EOF，因此天然避开了 Pier 当前日志 pipeline 的一类
+退出阻塞。
+
+Pier 的调用链则是“宿主 Pier → `docker compose exec` → 容器内 shell → OpenCode”。宿主
+管理的 `docker compose exec` 进程与容器内 OpenCode 不在同一个 PID namespace，不能只给
+宿主 subprocess 增加 `start_new_session=True` 就获得同等的容器内进程组控制。
+
+这里的对比用于解释为什么同一 OpenCode 在两套评测流程中的表现不同，不表示需要把 Pier
+重构成 SWE-bench Pro 的执行模型。本文方案只在自定义 adapter/容器 runner 边界内解决问题。
 
 ### 去掉 `tee`，直接重定向
 
@@ -48,8 +75,8 @@ opencode ... </dev/null > /logs/agent/opencode.txt 2>&1
 它简化了进程拓扑，能解决这一类问题：OpenCode 主进程已经退出，但某个残留子进程仍继承
 stdout pipe，导致 `tee` 永远等不到 EOF，shell 也就不返回。
 
-但单任务复现中 OpenCode 主进程本身在 terminal event 后仍存活。直接重定向后 shell 仍然
-会等待这个主进程，所以它不是当前问题的完整修复。
+现有复现尚不能证明 hang 只由 `tee` 引起；如果 OpenCode 主进程自身仍未退出，直接重定向后
+shell 仍会等待它。因此直接重定向是低成本的必要简化，但不应被当作当前问题的完整修复。
 
 ### terminal-event watchdog
 
@@ -71,7 +98,8 @@ session 明确输出 `step_finish(reason="stop")` 后，watchdog 给 OpenCode �
 
 runner 的职责：
 
-1. 以新的 process group/session 启动 OpenCode。
+1. 在容器 PID namespace 内以新的 process group/session 启动 OpenCode；不能用宿主
+   `docker compose exec` 的进程组代替。
 2. stdin 使用 `/dev/null`，stdout 和 stderr 使用同一个已打开的日志文件描述符，直接写入
    `/logs/agent/opencode.txt`，不创建 `tee` 管道。
 3. watchdog 自己轮询新增日志字节，按行解析 JSON；未完成的半行留到下一轮，不把非 JSON
