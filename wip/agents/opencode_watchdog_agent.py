@@ -28,6 +28,61 @@ def _non_negative_float(name: str, value: Any) -> float:
     return parsed
 
 
+def _replace_ask(value: Any) -> Any:
+    if value == "ask":
+        return "deny"
+    if isinstance(value, dict):
+        return {key: _replace_ask(child) for key, child in value.items()}
+    if isinstance(value, list):
+        return [_replace_ask(child) for child in value]
+    return value
+
+
+def _no_ask_permissions(value: Any, *, default_action: str = "allow") -> dict[str, Any]:
+    if isinstance(value, str):
+        permissions: dict[str, Any] = {
+            "*": "deny" if value == "ask" else value
+        }
+    elif isinstance(value, dict):
+        permissions = {
+            key: _replace_ask(action) for key, action in value.items()
+        }
+    else:
+        permissions = {}
+
+    permissions.setdefault("*", default_action)
+    # Headless benchmark runs cannot answer these prompts. External read-only
+    # dependencies (for example Go's module cache) are useful task context and
+    # the task container is already the isolation boundary.
+    permissions.update(
+        {
+            "external_directory": "allow",
+            "doom_loop": "deny",
+            "question": "deny",
+        }
+    )
+    read = permissions.get("read")
+    if isinstance(read, str):
+        read_permissions: dict[str, Any] = {
+            "*": "deny" if read == "ask" else read
+        }
+    elif isinstance(read, dict):
+        read_permissions = {
+            key: _replace_ask(action) for key, action in read.items()
+        }
+    else:
+        read_permissions = {"*": "allow"}
+    read_permissions.update(
+        {
+            "*.env": "deny",
+            "*.env.*": "deny",
+            "*.env.example": "allow",
+        }
+    )
+    permissions["read"] = read_permissions
+    return permissions
+
+
 class OpenCodeWatchdogAgent(OpenCode):
     """Stock OpenCode behavior with direct-file logging and a terminal watchdog."""
 
@@ -99,6 +154,23 @@ class OpenCodeWatchdogAgent(OpenCode):
                 env[key] = value
         env["OPENCODE_FAKE_VCS"] = "git"
         return env
+
+    def _build_runtime_config(self, *, include_mcp: bool) -> dict[str, Any]:
+        """Enforce a deterministic no-prompt policy for parent and subagents."""
+
+        config = super()._build_runtime_config(include_mcp=include_mcp)
+        config["permission"] = _no_ask_permissions(config.get("permission"))
+        agents = config.get("agent")
+        if not isinstance(agents, dict):
+            agents = {}
+            config["agent"] = agents
+        for name in ("build", "plan", "general", "explore"):
+            agent = agents.get(name)
+            if not isinstance(agent, dict):
+                agent = {}
+                agents[name] = agent
+            agent["permission"] = _no_ask_permissions(agent.get("permission"))
+        return config
 
     @with_prompt_template
     async def run(

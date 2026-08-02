@@ -172,6 +172,29 @@ class OpenCodeWatchdogAgentTests(unittest.TestCase):
             )
             self.assertEqual(agent._shell_prefix(), "")
 
+    def test_runtime_config_forces_no_ask_for_all_builtin_agents(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            agent = OpenCodeWatchdogAgent(
+                logs_dir=Path(directory),
+                model_name="deepseek/deepseek-v4-pro",
+                opencode_config={
+                    "permission": {"bash": "ask"},
+                    "agent": {"explore": {"permission": {"read": "ask"}}},
+                },
+            )
+            config = agent._build_runtime_config(include_mcp=True)
+            policies = [config["permission"]] + [
+                config["agent"][name]["permission"]
+                for name in ("build", "plan", "general", "explore")
+            ]
+            for policy in policies:
+                self.assertEqual(policy["*"], "allow")
+                self.assertEqual(policy["external_directory"], "allow")
+                self.assertEqual(policy["question"], "deny")
+                self.assertEqual(policy["doom_loop"], "deny")
+                self.assertEqual(policy["read"]["*.env"], "deny")
+                self.assertNotIn("ask", json.dumps(policy))
+
 
 if __name__ == "__main__":
     unittest.main()

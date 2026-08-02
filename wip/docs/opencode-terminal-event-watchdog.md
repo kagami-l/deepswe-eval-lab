@@ -16,6 +16,11 @@ runtime，之后直接运行每个任务的原始镜像，并把 runtime 只读�
 `/opt/opencode-runtime`。这避免了 Pier 为每个不同基础镜像重复执行 apt、NVM 和 npm 安装。
 可用 `--per-task-runtime` 回退到逐任务安装；Pier 内置 OpenCode adapter 仍保持原样。
 
+adapter 同时强制 parent 及 `build`、`plan`、`general`、`explore` 内置子 agent 使用 no-ask
+权限策略。普通操作和外部依赖目录访问默认允许，`question` 与 `doom_loop` 明确拒绝，env
+文件读取明确拒绝；用户配置中残留的任何 `ask` 会改写为 `deny`。这是为了避免 headless
+评测停在无人能够回答的权限请求上。
+
 已观察到的问题不是普通的“模型响应慢”：OpenCode 已经输出表示任务完成的
 `step_finish` 事件，但 Pier 所等待的容器命令一直不返回，最终只能在 agent 总超时处将它
 记为 `AgentTimeoutError`。现有证据可以确认 hang 发生在 terminal event 之后的进程/管道
