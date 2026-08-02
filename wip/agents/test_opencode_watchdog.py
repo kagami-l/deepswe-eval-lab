@@ -10,7 +10,10 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from pier.models.agent.context import AgentContext
-from wip.agents.opencode_watchdog_agent import OpenCodeWatchdogAgent
+from wip.agents.opencode_watchdog_agent import (
+    OpenCodeWatchdogAgent,
+    SharedRuntimeOpenCodeWatchdogAgent,
+)
 
 
 RUNNER = Path(__file__).with_name("opencode_watchdog_runner.mjs")
@@ -154,6 +157,20 @@ class OpenCodeWatchdogAgentTests(unittest.TestCase):
             self.assertIn("opencode-watchdog.mjs", command)
             self.assertIn("opencode.txt", command)
             self.assertNotIn(" tee ", command)
+
+    def test_shared_runtime_skips_install_and_uses_mounted_binaries(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            agent = SharedRuntimeOpenCodeWatchdogAgent(
+                logs_dir=Path(directory),
+                model_name="deepseek/deepseek-v4-pro",
+                version="1.18.10",
+            )
+            self.assertIsNone(agent.install_spec())
+            self.assertEqual(
+                agent._opencode_executable(),
+                "/opt/opencode-runtime/bin/opencode",
+            )
+            self.assertEqual(agent._shell_prefix(), "")
 
 
 if __name__ == "__main__":

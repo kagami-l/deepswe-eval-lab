@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import shlex
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,7 @@ from pier.models.agent.context import AgentContext
 
 _REMOTE_RUNNER = "/installed-agent/opencode-watchdog.mjs"
 _WATCHDOG_LOG = "/logs/agent/opencode-watchdog.jsonl"
+_SAFE_RUNTIME_PATH = re.compile(r"^/[0-9A-Za-z._+/-]+$")
 
 
 def _non_negative_float(name: str, value: Any) -> float:
@@ -50,6 +52,18 @@ class OpenCodeWatchdogAgent(OpenCode):
         await super().setup(environment)
         runner = Path(__file__).with_name("opencode_watchdog_runner.mjs")
         await environment.upload_file(runner, _REMOTE_RUNNER)
+
+    def _runner_path(self) -> str:
+        return _REMOTE_RUNNER
+
+    def _node_executable(self) -> str:
+        return "node"
+
+    def _opencode_executable(self) -> str:
+        return "opencode"
+
+    def _shell_prefix(self) -> str:
+        return ". ~/.nvm/nvm.sh; "
 
     def _runtime_env(self) -> dict[str, str]:
         if not self.model_name or "/" not in self.model_name:
@@ -103,7 +117,7 @@ class OpenCodeWatchdogAgent(OpenCode):
 
         cli_flags = self.build_cli_flags()
         opencode_args = [
-            "opencode",
+            self._opencode_executable(),
             f"--model={self.model_name}",
             "run",
             "--format=json",
@@ -116,8 +130,8 @@ class OpenCodeWatchdogAgent(OpenCode):
         )
 
         command = [
-            "node",
-            _REMOTE_RUNNER,
+            self._node_executable(),
+            self._runner_path(),
             "--output",
             "/logs/agent/opencode.txt",
             "--state-log",
@@ -131,7 +145,7 @@ class OpenCodeWatchdogAgent(OpenCode):
             "--",
             *opencode_args,
         ]
-        shell_command = ". ~/.nvm/nvm.sh; " + " ".join(
+        shell_command = self._shell_prefix() + " ".join(
             shlex.quote(part) for part in command
         )
         await self.exec_as_agent(environment, command=shell_command, env=env)
@@ -140,3 +154,57 @@ class OpenCodeWatchdogAgent(OpenCode):
             raise NonZeroAgentExitCodeError(
                 "OpenCode emitted error event(s): " + "; ".join(messages[:3])
             )
+
+
+class SharedRuntimeOpenCodeWatchdogAgent(OpenCodeWatchdogAgent):
+    """OpenCode watchdog backed by a read-only shared runtime image mount."""
+
+    def __init__(
+        self,
+        *args: Any,
+        runtime_path: str = "/opt/opencode-runtime",
+        **kwargs: Any,
+    ) -> None:
+        normalized = runtime_path.rstrip("/")
+        if (
+            normalized in {"", "/"}
+            or not _SAFE_RUNTIME_PATH.fullmatch(normalized)
+            or "//" in normalized
+            or "/../" in f"{normalized}/"
+            or "/./" in f"{normalized}/"
+        ):
+            raise ValueError("runtime_path must be a safe absolute container path")
+        self.runtime_path = normalized
+        super().__init__(*args, **kwargs)
+
+    def install_spec(self) -> None:  # type: ignore[override]
+        """Use the task image directly; the environment mounts the runtime."""
+
+        return None
+
+    def get_version_command(self) -> str | None:
+        return None
+
+    async def setup(self, environment: BaseEnvironment) -> None:
+        await self.exec_as_agent(
+            environment,
+            command=(
+                "set -euo pipefail; "
+                f"test -x {shlex.quote(self._node_executable())}; "
+                f"test -x {shlex.quote(self._opencode_executable())}; "
+                f"test -r {shlex.quote(self._runner_path())}; "
+                f"{shlex.quote(self._opencode_executable())} --version"
+            ),
+        )
+
+    def _runner_path(self) -> str:
+        return f"{self.runtime_path}/watchdog/opencode-watchdog.mjs"
+
+    def _node_executable(self) -> str:
+        return f"{self.runtime_path}/bin/node"
+
+    def _opencode_executable(self) -> str:
+        return f"{self.runtime_path}/bin/opencode"
+
+    def _shell_prefix(self) -> str:
+        return ""

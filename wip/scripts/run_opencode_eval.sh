@@ -14,6 +14,11 @@ PIER_BIN="${PIER_BIN:-pier}"
 OPENCODE_MODEL="${OPENCODE_MODEL:-deepseek/deepseek-v4-pro}"
 OPENCODE_VERSION="${OPENCODE_VERSION:-1.18.10}"
 OPENCODE_VARIANT="${OPENCODE_VARIANT:-}"
+OPENCODE_RUNTIME_MODE="${OPENCODE_RUNTIME_MODE:-shared}"
+OPENCODE_RUNTIME_IMAGE="${OPENCODE_RUNTIME_IMAGE:-}"
+OPENCODE_RUNTIME_PATH="${OPENCODE_RUNTIME_PATH:-/opt/opencode-runtime}"
+OPENCODE_RUNTIME_PLATFORM="${OPENCODE_RUNTIME_PLATFORM:-linux/amd64}"
+OPENCODE_RUNTIME_DOCKERFILE="$REPO_ROOT/wip/docker/opencode-runtime/Dockerfile"
 PIER_N_ATTEMPTS="${PIER_N_ATTEMPTS:-1}"
 PIER_N_CONCURRENT="${PIER_N_CONCURRENT:-2}"
 PIER_JOB_NAME="${PIER_JOB_NAME:-}"
@@ -32,6 +37,12 @@ usage() {
   -m, --model PROVIDER/MODEL     模型；默认：deepseek/deepseek-v4-pro
       --opencode-version VERSION 容器内 opencode-ai 版本；默认：1.18.10
       --variant VARIANT          透传 opencode 的 --variant（可选）
+      --runtime-mode MODE        shared（默认）或 per-task
+      --runtime-image IMAGE      shared runtime 镜像；默认按 OpenCode 版本命名
+      --runtime-platform PLATFORM 默认：linux/amd64
+      --rebuild-runtime          强制重新构建 shared runtime
+      --shared-runtime           等价于 --runtime-mode shared
+      --per-task-runtime         回退到逐任务安装 OpenCode
   -k, --n-attempts N             每个任务的重复次数；默认：1
   -n, --n-concurrent N           并发 trial 数；默认：2
   -o, --jobs-dir PATH            结果目录；默认：仓库根目录下的 jobs
@@ -50,6 +61,8 @@ usage() {
 
 可选环境变量：
   OPENCODE_MODEL、OPENCODE_VERSION、OPENCODE_VARIANT
+  OPENCODE_RUNTIME_MODE、OPENCODE_RUNTIME_IMAGE
+  OPENCODE_RUNTIME_PATH、OPENCODE_RUNTIME_PLATFORM
   OPENCODE_ENV_FILE、OPENCODE_AUTH_JSON
   PIER_TASKS_DIR、PIER_JOBS_DIR、PIER_JOB_NAME
   PIER_N_ATTEMPTS、PIER_N_CONCURRENT、PIER_BIN
@@ -76,6 +89,7 @@ is_positive_integer() {
 }
 
 DRY_RUN=0
+REBUILD_RUNTIME=0
 PIER_ARGS=()
 
 while [[ "$#" -gt 0 ]]; do
@@ -126,6 +140,45 @@ while [[ "$#" -gt 0 ]]; do
     --variant=*)
       OPENCODE_VARIANT="${1#*=}"
       [[ -n "$OPENCODE_VARIANT" ]] || die "--variant 不能为空"
+      shift
+      ;;
+    --runtime-mode)
+      [[ "$#" -ge 2 && -n "$2" ]] || die "$1 需要 shared 或 per-task"
+      OPENCODE_RUNTIME_MODE="$2"
+      shift 2
+      ;;
+    --runtime-mode=*)
+      OPENCODE_RUNTIME_MODE="${1#*=}"
+      shift
+      ;;
+    --runtime-image)
+      [[ "$#" -ge 2 && -n "$2" ]] || die "$1 需要镜像名称"
+      OPENCODE_RUNTIME_IMAGE="$2"
+      shift 2
+      ;;
+    --runtime-image=*)
+      OPENCODE_RUNTIME_IMAGE="${1#*=}"
+      shift
+      ;;
+    --runtime-platform)
+      [[ "$#" -ge 2 && -n "$2" ]] || die "$1 需要平台"
+      OPENCODE_RUNTIME_PLATFORM="$2"
+      shift 2
+      ;;
+    --runtime-platform=*)
+      OPENCODE_RUNTIME_PLATFORM="${1#*=}"
+      shift
+      ;;
+    --rebuild-runtime)
+      REBUILD_RUNTIME=1
+      shift
+      ;;
+    --shared-runtime)
+      OPENCODE_RUNTIME_MODE="shared"
+      shift
+      ;;
+    --per-task-runtime)
+      OPENCODE_RUNTIME_MODE="per-task"
       shift
       ;;
     -k|--n-attempts)
@@ -188,6 +241,21 @@ is_positive_integer "$PIER_N_CONCURRENT" || die "PIER_N_CONCURRENT 必须是正�
   die "OPENCODE_VARIANT 不能包含空白字符"
 [[ "$OPENCODE_MODEL" == */* ]] || \
   die "模型必须是 provider/model 格式，例如 deepseek/deepseek-v4-pro：$OPENCODE_MODEL"
+case "$OPENCODE_RUNTIME_MODE" in
+  shared|per-task) ;;
+  *) die "runtime 模式必须是 shared 或 per-task：$OPENCODE_RUNTIME_MODE" ;;
+esac
+[[ "$OPENCODE_RUNTIME_PATH" =~ ^/[0-9A-Za-z._+/-]+$ && "$OPENCODE_RUNTIME_PATH" != "/" ]] || \
+  die "OPENCODE_RUNTIME_PATH 必须是安全的容器绝对路径：$OPENCODE_RUNTIME_PATH"
+[[ "$OPENCODE_RUNTIME_PLATFORM" =~ ^linux/(amd64|arm64)$ ]] || \
+  die "runtime platform 仅支持 linux/amd64 或 linux/arm64：$OPENCODE_RUNTIME_PLATFORM"
+if [[ "$OPENCODE_RUNTIME_MODE" == "shared" ]]; then
+  if [[ -z "$OPENCODE_RUNTIME_IMAGE" ]]; then
+    OPENCODE_RUNTIME_IMAGE="deep-swe/opencode-runtime:${OPENCODE_VERSION}"
+  fi
+  [[ "$OPENCODE_RUNTIME_IMAGE" =~ ^[0-9A-Za-z][0-9A-Za-z._/:@+-]*$ ]] || \
+    die "OPENCODE_RUNTIME_IMAGE 格式不合法：$OPENCODE_RUNTIME_IMAGE"
+fi
 
 provider="${OPENCODE_MODEL%%/*}"
 
@@ -308,14 +376,59 @@ if [[ -z "$PIER_JOB_NAME" ]]; then
   PIER_JOB_NAME="opencode-${safe_model_name}-${sample_name}-$(date +%Y%m%d-%H%M%S)"
 fi
 
+runtime_image_cached=0
+if [[ "$OPENCODE_RUNTIME_MODE" == "shared" ]]; then
+  command -v docker >/dev/null 2>&1 || die "shared runtime 需要 Docker 命令"
+  [[ -f "$OPENCODE_RUNTIME_DOCKERFILE" ]] || \
+    die "shared runtime Dockerfile 不存在：$OPENCODE_RUNTIME_DOCKERFILE"
+  if docker image inspect "$OPENCODE_RUNTIME_IMAGE" >/dev/null 2>&1; then
+    runtime_image_cached=1
+  fi
+  if [[ "$runtime_image_cached" -eq 1 && "$REBUILD_RUNTIME" -eq 0 ]]; then
+    actual_platform="$(docker image inspect "$OPENCODE_RUNTIME_IMAGE" --format '{{.Os}}/{{.Architecture}}')"
+    [[ "$actual_platform" == "$OPENCODE_RUNTIME_PLATFORM" ]] || \
+      die "shared runtime 平台不匹配：期望 ${OPENCODE_RUNTIME_PLATFORM}，实际 ${actual_platform}；请使用 --rebuild-runtime"
+    actual_version="$(docker image inspect "$OPENCODE_RUNTIME_IMAGE" --format '{{index .Config.Labels "io.merico.deep-swe.opencode.version"}}')"
+    if [[ -n "$actual_version" && "$actual_version" != "<no value>" ]]; then
+      [[ "$actual_version" == "$OPENCODE_VERSION" ]] || \
+        die "shared runtime 版本不匹配：期望 ${OPENCODE_VERSION}，实际 ${actual_version}；请使用 --rebuild-runtime"
+    fi
+  fi
+  if [[ "$DRY_RUN" -eq 0 && ("$runtime_image_cached" -eq 0 || "$REBUILD_RUNTIME" -eq 1) ]]; then
+    echo "准备 shared OpenCode runtime（只需为该版本构建一次）："
+    echo "  镜像：$OPENCODE_RUNTIME_IMAGE"
+    echo "  平台：$OPENCODE_RUNTIME_PLATFORM"
+    DOCKER_BUILDKIT=1 docker build \
+      --platform "$OPENCODE_RUNTIME_PLATFORM" \
+      --file "$OPENCODE_RUNTIME_DOCKERFILE" \
+      --build-arg "OPENCODE_VERSION=$OPENCODE_VERSION" \
+      --tag "$OPENCODE_RUNTIME_IMAGE" \
+      "$REPO_ROOT"
+    docker image inspect "$OPENCODE_RUNTIME_IMAGE" >/dev/null 2>&1 || \
+      die "shared runtime 构建结束但镜像不可用：$OPENCODE_RUNTIME_IMAGE"
+    runtime_image_cached=1
+  fi
+fi
+
 command=(
   "$PIER_BIN" run
   --path "$TASKS_DIR"
   "${include_args[@]}"
-  --agent-import-path wip.agents.opencode_watchdog_agent:OpenCodeWatchdogAgent
   --model "$OPENCODE_MODEL"
   --agent-kwarg "version=$OPENCODE_VERSION"
 )
+
+if [[ "$OPENCODE_RUNTIME_MODE" == "shared" ]]; then
+  command+=(
+    --agent-import-path wip.agents.opencode_watchdog_agent:SharedRuntimeOpenCodeWatchdogAgent
+    --agent-kwarg "runtime_path=$OPENCODE_RUNTIME_PATH"
+    --environment-import-path wip.environments.opencode_runtime:SharedOpenCodeRuntimeDockerEnvironment
+    --environment-kwarg "runtime_image=$OPENCODE_RUNTIME_IMAGE"
+    --environment-kwarg "runtime_target=$OPENCODE_RUNTIME_PATH"
+  )
+else
+  command+=(--agent-import-path wip.agents.opencode_watchdog_agent:OpenCodeWatchdogAgent)
+fi
 
 if [[ -n "$OPENCODE_VARIANT" ]]; then
   command+=(--agent-kwarg "variant=$OPENCODE_VARIANT")
@@ -342,6 +455,20 @@ echo "  Job 名称：$PIER_JOB_NAME"
 echo "  结果目录：$JOBS_DIR/$PIER_JOB_NAME"
 echo "  模型：$OPENCODE_MODEL"
 echo "  OpenCode CLI：$OPENCODE_VERSION"
+if [[ "$OPENCODE_RUNTIME_MODE" == "shared" ]]; then
+  if [[ "$REBUILD_RUNTIME" -eq 1 && "$DRY_RUN" -eq 1 ]]; then
+    runtime_status="dry-run；实际运行时将重新构建"
+  elif [[ "$runtime_image_cached" -eq 1 ]]; then
+    runtime_status="本地已就绪"
+  else
+    runtime_status="dry-run；实际运行时将构建一次"
+  fi
+  echo "  Runtime：shared（${OPENCODE_RUNTIME_IMAGE}，${runtime_status}）"
+  echo "  Runtime 挂载：${OPENCODE_RUNTIME_PATH}（只读）"
+  echo "  任务镜像：直接运行，不构建 OpenCode 安装层"
+else
+  echo "  Runtime：per-task（逐任务安装 OpenCode）"
+fi
 if [[ -n "$OPENCODE_VARIANT" ]]; then
   echo "  Variant：$OPENCODE_VARIANT"
 fi

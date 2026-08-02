@@ -6,11 +6,15 @@
 
 - 自定义 adapter：`wip/agents/opencode_watchdog_agent.py`
 - 容器内 runner：`wip/agents/opencode_watchdog_runner.mjs`
+- shared runtime：`wip/docker/opencode-runtime/Dockerfile`
+- shared environment：`wip/environments/opencode_runtime.py`
 - fake-process 测试：`wip/agents/test_opencode_watchdog.py`
 - 运行入口：`wip/scripts/run_opencode_eval.sh`
 
-运行脚本默认通过 `--agent-import-path` 使用 watchdog adapter。Pier 内置 OpenCode adapter
-仍保持原样。
+运行脚本默认使用 shared runtime watchdog adapter：一次构建固定版本的 Node/OpenCode
+runtime，之后直接运行每个任务的原始镜像，并把 runtime 只读挂载到
+`/opt/opencode-runtime`。这避免了 Pier 为每个不同基础镜像重复执行 apt、NVM 和 npm 安装。
+可用 `--per-task-runtime` 回退到逐任务安装；Pier 内置 OpenCode adapter 仍保持原样。
 
 已观察到的问题不是普通的“模型响应慢”：OpenCode 已经输出表示任务完成的
 `step_finish` 事件，但 Pier 所等待的容器命令一直不返回，最终只能在 agent 总超时处将它
