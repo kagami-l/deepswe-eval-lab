@@ -3,8 +3,12 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
-from wip.agents.mini_swe_agent import OptimizedMiniSweAgent
+from wip.agents.mini_swe_agent import (
+    OptimizedMiniSweAgent,
+    SharedRuntimeMiniSweAgent,
+)
 
 
 class OptimizedMiniSweAgentTests(unittest.TestCase):
@@ -71,6 +75,54 @@ class OptimizedMiniSweAgentTests(unittest.TestCase):
                 )
             with self.assertRaises(ValueError):
                 self.make_agent(logs_dir, uv_fallback_version="0.9.18; bad")
+
+
+class SharedRuntimeMiniSweAgentTests(unittest.IsolatedAsyncioTestCase):
+    def make_agent(self, logs_dir: Path, **kwargs: object) -> SharedRuntimeMiniSweAgent:
+        return SharedRuntimeMiniSweAgent(
+            logs_dir=logs_dir,
+            model_name="deepseek/deepseek-v4-pro",
+            version="2.4.6",
+            **kwargs,
+        )
+
+    def test_shared_runtime_disables_pier_agent_image_build(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            agent = self.make_agent(Path(directory))
+
+        self.assertIsNone(agent.install_spec())
+        self.assertIsNone(agent.get_version_command())
+
+    async def test_setup_only_writes_path_shim_and_verifies_runtime(self) -> None:
+        class FakeEnvironment:
+            def __init__(self) -> None:
+                self.calls: list[dict[str, object]] = []
+
+            def agent_process_env(self, env: dict[str, str]) -> dict[str, str]:
+                return env
+
+            async def exec(self, **kwargs: object) -> SimpleNamespace:
+                self.calls.append(kwargs)
+                return SimpleNamespace(return_code=0, stdout="", stderr="")
+
+        with tempfile.TemporaryDirectory() as directory:
+            agent = self.make_agent(Path(directory))
+            environment = FakeEnvironment()
+            await agent.setup(environment)  # type: ignore[arg-type]
+
+        self.assertEqual(len(environment.calls), 1)
+        command = str(environment.calls[0]["command"])
+        self.assertIn("/opt/mini-swe-runtime/bin/mini-swe-agent", command)
+        self.assertIn('$HOME/.local/bin/env', command)
+        self.assertNotIn("uv tool install", command)
+
+    async def test_extra_packages_require_a_custom_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            agent = self.make_agent(
+                Path(directory), extra_python_packages=["google-auth"]
+            )
+            with self.assertRaisesRegex(ValueError, "extra_python_packages"):
+                await agent.setup(SimpleNamespace())  # type: ignore[arg-type]
 
 
 if __name__ == "__main__":

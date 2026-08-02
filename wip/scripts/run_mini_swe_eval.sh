@@ -17,6 +17,12 @@ MINI_SWE_COST_LIMIT="${MINI_SWE_COST_LIMIT:-0}"
 MINI_SWE_REASONING_EFFORT="${MINI_SWE_REASONING_EFFORT:-}"
 MINI_SWE_PYPI_INDEX="${MINI_SWE_PYPI_INDEX:-https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple}"
 MINI_SWE_ENV_FILE="${MINI_SWE_ENV_FILE:-$SCRIPT_DIR/.env}"
+MINI_SWE_BASE_IMAGE_MODE="${MINI_SWE_BASE_IMAGE_MODE:-remote}"
+MINI_SWE_RUNTIME_MODE="${MINI_SWE_RUNTIME_MODE:-shared}"
+MINI_SWE_RUNTIME_IMAGE="${MINI_SWE_RUNTIME_IMAGE:-}"
+MINI_SWE_RUNTIME_PATH="${MINI_SWE_RUNTIME_PATH:-/opt/mini-swe-runtime}"
+MINI_SWE_RUNTIME_PLATFORM="${MINI_SWE_RUNTIME_PLATFORM:-linux/amd64}"
+MINI_SWE_RUNTIME_DOCKERFILE="$REPO_ROOT/wip/docker/mini-swe-runtime/Dockerfile"
 PIER_N_ATTEMPTS="${PIER_N_ATTEMPTS:-1}"
 PIER_N_CONCURRENT="${PIER_N_CONCURRENT:-2}"
 PIER_JOB_NAME="${PIER_JOB_NAME:-}"
@@ -35,6 +41,16 @@ usage() {
       --pypi-index-url URL        安装依赖的 PyPI 源；默认：清华镜像
       --cost-limit USD            mini-swe-agent cost limit；默认：0（不限制）
       --reasoning-effort LEVEL    可选的模型 reasoning effort
+      --runtime-mode MODE         agent runtime：shared（默认，只构建/下载一次）
+                                  或 per-task（兼容模式，每个任务构建安装层）
+      --runtime-image IMAGE       shared runtime 镜像；默认按 agent 版本生成本地标签
+      --rebuild-runtime           即使本地已有 shared runtime 也重新构建
+      --shared-runtime            等价于 --runtime-mode shared（默认）
+      --per-task-runtime          等价于 --runtime-mode per-task
+      --base-image-mode MODE      基础镜像策略：remote（默认；per-task 使用
+                                  BuildKit）、require-local 或 prefer-local
+      --require-local-images      等价于 --base-image-mode require-local
+      --remote-base-images        等价于 --base-image-mode remote（默认）
   -k, --n-attempts N              每个任务的重复次数；默认：1
   -n, --n-concurrent N            并发 trial 数；默认：2
   -o, --jobs-dir PATH             结果目录；默认：仓库根目录下的 jobs
@@ -54,6 +70,8 @@ DeepSeek 官方认证：
 可选环境变量：
   MINI_SWE_MODEL、MINI_SWE_AGENT_VERSION、MINI_SWE_COST_LIMIT
   MINI_SWE_REASONING_EFFORT、MINI_SWE_PYPI_INDEX、MINI_SWE_ENV_FILE
+  MINI_SWE_BASE_IMAGE_MODE、MINI_SWE_RUNTIME_MODE、MINI_SWE_RUNTIME_IMAGE
+  MINI_SWE_RUNTIME_PATH、MINI_SWE_RUNTIME_PLATFORM
   PIER_TASKS_DIR、PIER_JOBS_DIR、PIER_JOB_NAME
   PIER_N_ATTEMPTS、PIER_N_CONCURRENT、PIER_BIN
 
@@ -120,6 +138,7 @@ read_key_from_dotenv() {
 }
 
 DRY_RUN=0
+REBUILD_RUNTIME=0
 PIER_ARGS=()
 
 while [[ "$#" -gt 0 ]]; do
@@ -191,6 +210,56 @@ while [[ "$#" -gt 0 ]]; do
       [[ -n "$MINI_SWE_REASONING_EFFORT" ]] || die "--reasoning-effort 不能为空"
       shift
       ;;
+    --runtime-mode)
+      [[ "$#" -ge 2 && -n "$2" ]] || die "$1 需要一个模式"
+      MINI_SWE_RUNTIME_MODE="$2"
+      shift 2
+      ;;
+    --runtime-mode=*)
+      MINI_SWE_RUNTIME_MODE="${1#*=}"
+      [[ -n "$MINI_SWE_RUNTIME_MODE" ]] || die "--runtime-mode 不能为空"
+      shift
+      ;;
+    --runtime-image)
+      [[ "$#" -ge 2 && -n "$2" ]] || die "$1 需要一个镜像名称"
+      MINI_SWE_RUNTIME_IMAGE="$2"
+      shift 2
+      ;;
+    --runtime-image=*)
+      MINI_SWE_RUNTIME_IMAGE="${1#*=}"
+      [[ -n "$MINI_SWE_RUNTIME_IMAGE" ]] || die "--runtime-image 不能为空"
+      shift
+      ;;
+    --rebuild-runtime)
+      REBUILD_RUNTIME=1
+      shift
+      ;;
+    --shared-runtime)
+      MINI_SWE_RUNTIME_MODE="shared"
+      shift
+      ;;
+    --per-task-runtime)
+      MINI_SWE_RUNTIME_MODE="per-task"
+      shift
+      ;;
+    --base-image-mode)
+      [[ "$#" -ge 2 && -n "$2" ]] || die "$1 需要一个模式"
+      MINI_SWE_BASE_IMAGE_MODE="$2"
+      shift 2
+      ;;
+    --base-image-mode=*)
+      MINI_SWE_BASE_IMAGE_MODE="${1#*=}"
+      [[ -n "$MINI_SWE_BASE_IMAGE_MODE" ]] || die "--base-image-mode 不能为空"
+      shift
+      ;;
+    --require-local-images)
+      MINI_SWE_BASE_IMAGE_MODE="require-local"
+      shift
+      ;;
+    --remote-base-images)
+      MINI_SWE_BASE_IMAGE_MODE="remote"
+      shift
+      ;;
     -k|--n-attempts)
       [[ "$#" -ge 2 && -n "$2" ]] || die "$1 需要一个正整数"
       PIER_N_ATTEMPTS="$2"
@@ -255,6 +324,27 @@ is_nonnegative_number "$MINI_SWE_COST_LIMIT" || \
   die "模型必须是 provider/model 格式，例如 deepseek/deepseek-v4-pro：$MINI_SWE_MODEL"
 [[ "$MINI_SWE_PYPI_INDEX" =~ ^https?://[^[:space:]]+$ ]] || \
   die "MINI_SWE_PYPI_INDEX 必须是 HTTP(S) URL：$MINI_SWE_PYPI_INDEX"
+case "$MINI_SWE_BASE_IMAGE_MODE" in
+  prefer-local|require-local|remote) ;;
+  *) die "基础镜像策略必须是 prefer-local、require-local 或 remote：$MINI_SWE_BASE_IMAGE_MODE" ;;
+esac
+case "$MINI_SWE_RUNTIME_MODE" in
+  shared|per-task) ;;
+  *) die "runtime 模式必须是 shared 或 per-task：$MINI_SWE_RUNTIME_MODE" ;;
+esac
+[[ "$MINI_SWE_RUNTIME_PATH" =~ ^/[0-9A-Za-z._+/-]+$ && "$MINI_SWE_RUNTIME_PATH" != "/" ]] || \
+  die "MINI_SWE_RUNTIME_PATH 必须是安全的容器绝对路径：$MINI_SWE_RUNTIME_PATH"
+[[ "$MINI_SWE_RUNTIME_PLATFORM" =~ ^linux/(amd64|arm64)$ ]] || \
+  die "MINI_SWE_RUNTIME_PLATFORM 仅支持 linux/amd64 或 linux/arm64：$MINI_SWE_RUNTIME_PLATFORM"
+if [[ "$MINI_SWE_RUNTIME_MODE" == "shared" ]]; then
+  [[ -n "$MINI_SWE_AGENT_VERSION" ]] || \
+    die "shared runtime 必须显式固定 MINI_SWE_AGENT_VERSION"
+  if [[ -z "$MINI_SWE_RUNTIME_IMAGE" ]]; then
+    MINI_SWE_RUNTIME_IMAGE="deep-swe/mini-swe-runtime:${MINI_SWE_AGENT_VERSION}"
+  fi
+  [[ "$MINI_SWE_RUNTIME_IMAGE" =~ ^[0-9A-Za-z][0-9A-Za-z._/:@+-]*$ ]] || \
+    die "MINI_SWE_RUNTIME_IMAGE 格式不合法：$MINI_SWE_RUNTIME_IMAGE"
+fi
 
 provider="${MINI_SWE_MODEL%%/*}"
 api_key_var=""
@@ -284,6 +374,7 @@ else
 fi
 
 include_args=()
+task_names=()
 task_count=0
 while IFS= read -r task || [[ -n "$task" ]]; do
   task="${task%$'\r'}"
@@ -294,6 +385,7 @@ while IFS= read -r task || [[ -n "$task" ]]; do
   [[ -f "$TASKS_DIR/$task/task.toml" ]] || \
     die "任务不存在或缺少 task.toml：$TASKS_DIR/$task"
   include_args+=(--include-task-name "$task")
+  task_names+=("$task")
   task_count=$((task_count + 1))
 done < "$TASK_LIST"
 
@@ -307,15 +399,118 @@ if [[ -z "$PIER_JOB_NAME" ]]; then
   PIER_JOB_NAME="mini-swe-${safe_model_name}-${sample_name}-$(date +%Y%m%d-%H%M%S)"
 fi
 
+cached_base_count=0
+missing_base_images=()
+if [[ "$MINI_SWE_BASE_IMAGE_MODE" != "remote" ]]; then
+  command -v docker >/dev/null 2>&1 || die "本地基础镜像模式需要 Docker 命令"
+  for task in "${task_names[@]}"; do
+    task_toml="$TASKS_DIR/$task/task.toml"
+    docker_image="$(awk '
+      /^\[/ { in_environment = ($0 == "[environment]") }
+      in_environment && /^[[:space:]]*docker_image[[:space:]]*=/ {
+        if (split($0, fields, "\"") >= 3) {
+          print fields[2]
+        }
+        exit
+      }
+    ' "$task_toml")"
+    [[ -n "$docker_image" ]] || \
+      die "任务缺少 [environment].docker_image：$task_toml"
+
+    if docker image inspect "$docker_image" >/dev/null 2>&1; then
+      cached_base_count=$((cached_base_count + 1))
+    else
+      missing_base_images+=("$task=$docker_image")
+    fi
+  done
+
+  if [[ "$MINI_SWE_BASE_IMAGE_MODE" == "require-local" && "${#missing_base_images[@]}" -gt 0 ]]; then
+    echo "错误：严格本地模式缺少 ${#missing_base_images[@]} 个基础镜像：" >&2
+    printf '  %s\n' "${missing_base_images[@]}" >&2
+    exit 1
+  fi
+fi
+
+runtime_image_cached=0
+if [[ "$MINI_SWE_RUNTIME_MODE" == "shared" ]]; then
+  command -v docker >/dev/null 2>&1 || die "shared runtime 需要 Docker 命令"
+  [[ -f "$MINI_SWE_RUNTIME_DOCKERFILE" ]] || \
+    die "shared runtime Dockerfile 不存在：$MINI_SWE_RUNTIME_DOCKERFILE"
+
+  if docker image inspect "$MINI_SWE_RUNTIME_IMAGE" >/dev/null 2>&1; then
+    runtime_image_cached=1
+  fi
+
+  if [[ "$runtime_image_cached" -eq 1 && "$REBUILD_RUNTIME" -eq 0 ]]; then
+    actual_runtime_platform="$(
+      docker image inspect "$MINI_SWE_RUNTIME_IMAGE" \
+        --format '{{.Os}}/{{.Architecture}}'
+    )"
+    [[ "$actual_runtime_platform" == "$MINI_SWE_RUNTIME_PLATFORM" ]] || \
+      die "shared runtime 平台不匹配：期望 $MINI_SWE_RUNTIME_PLATFORM，实际 $actual_runtime_platform；请使用 --rebuild-runtime"
+
+    runtime_version_label="$(
+      docker image inspect "$MINI_SWE_RUNTIME_IMAGE" \
+        --format '{{index .Config.Labels "io.merico.deep-swe.mini-swe-agent.version"}}'
+    )"
+    if [[ -n "$runtime_version_label" && "$runtime_version_label" != "<no value>" ]]; then
+      [[ "$runtime_version_label" == "$MINI_SWE_AGENT_VERSION" ]] || \
+        die "shared runtime 版本不匹配：期望 $MINI_SWE_AGENT_VERSION，镜像标签为 $runtime_version_label；请使用 --rebuild-runtime"
+    fi
+  fi
+
+  if [[ "$DRY_RUN" -eq 0 && ("$runtime_image_cached" -eq 0 || "$REBUILD_RUNTIME" -eq 1) ]]; then
+    echo "准备 shared mini-swe runtime（首次约需下载一次 Python 依赖）："
+    echo "  镜像：$MINI_SWE_RUNTIME_IMAGE"
+    echo "  平台：$MINI_SWE_RUNTIME_PLATFORM"
+    DOCKER_BUILDKIT=1 docker build \
+      --platform "$MINI_SWE_RUNTIME_PLATFORM" \
+      --file "$MINI_SWE_RUNTIME_DOCKERFILE" \
+      --build-arg "MINI_SWE_AGENT_VERSION=$MINI_SWE_AGENT_VERSION" \
+      --build-arg "PYPI_INDEX_URL=$MINI_SWE_PYPI_INDEX" \
+      --tag "$MINI_SWE_RUNTIME_IMAGE" \
+      "$(dirname "$MINI_SWE_RUNTIME_DOCKERFILE")"
+    docker image inspect "$MINI_SWE_RUNTIME_IMAGE" >/dev/null 2>&1 || \
+      die "shared runtime 构建结束但镜像不可用：$MINI_SWE_RUNTIME_IMAGE"
+    runtime_image_cached=1
+  fi
+fi
+
+case "$MINI_SWE_BASE_IMAGE_MODE" in
+  remote)
+    # Make the default deterministic even if the caller has disabled BuildKit.
+    export DOCKER_BUILDKIT=1
+    export COMPOSE_BAKE=true
+    ;;
+  prefer-local|require-local)
+    # BuildKit resolves registry-qualified FROM references remotely even when
+    # their layers are cached. Docker Desktop's classic builder honors the local
+    # image store when pull is disabled (the default for `docker compose build`).
+    export DOCKER_BUILDKIT=0
+    export COMPOSE_BAKE=false
+    ;;
+esac
+
 command=(
   "$PIER_BIN" run
   --path "$TASKS_DIR"
   "${include_args[@]}"
-  --agent-import-path wip.agents.mini_swe_agent:OptimizedMiniSweAgent
   --model "$MINI_SWE_MODEL"
   --agent-kwarg "cost_limit=$MINI_SWE_COST_LIMIT"
   --agent-kwarg "pypi_index_url=$MINI_SWE_PYPI_INDEX"
 )
+
+if [[ "$MINI_SWE_RUNTIME_MODE" == "shared" ]]; then
+  command+=(
+    --agent-import-path wip.agents.mini_swe_agent:SharedRuntimeMiniSweAgent
+    --agent-kwarg "runtime_path=$MINI_SWE_RUNTIME_PATH"
+    --environment-import-path wip.environments.mini_swe_runtime:SharedRuntimeDockerEnvironment
+    --environment-kwarg "runtime_image=$MINI_SWE_RUNTIME_IMAGE"
+    --environment-kwarg "runtime_target=$MINI_SWE_RUNTIME_PATH"
+  )
+else
+  command+=(--agent-import-path wip.agents.mini_swe_agent:OptimizedMiniSweAgent)
+fi
 
 if [[ -n "$MINI_SWE_AGENT_VERSION" ]]; then
   command+=(--agent-kwarg "version=$MINI_SWE_AGENT_VERSION")
@@ -346,8 +541,51 @@ echo "  Job 名称：$PIER_JOB_NAME"
 echo "  结果目录：$JOBS_DIR/$PIER_JOB_NAME"
 echo "  模型：$MINI_SWE_MODEL"
 echo "  Provider：${provider}（默认 endpoint 由 LiteLLM provider 决定）"
-echo "  mini-swe-agent：${MINI_SWE_AGENT_VERSION}（优化安装 adapter）"
-echo "  PyPI：$MINI_SWE_PYPI_INDEX"
+if [[ "$MINI_SWE_RUNTIME_MODE" == "shared" ]]; then
+  if [[ "$REBUILD_RUNTIME" -eq 1 && "$DRY_RUN" -eq 1 ]]; then
+    runtime_status="dry-run；实际运行时将重新构建"
+  elif [[ "$runtime_image_cached" -eq 1 ]]; then
+    runtime_status="本地已就绪"
+  else
+    runtime_status="dry-run；实际运行时将构建一次"
+  fi
+  echo "  mini-swe-agent：${MINI_SWE_AGENT_VERSION}（shared runtime adapter）"
+  echo "  Runtime 镜像：${MINI_SWE_RUNTIME_IMAGE}（${runtime_status}）"
+  echo "  Runtime 挂载：${MINI_SWE_RUNTIME_PATH}（只读）"
+else
+  echo "  mini-swe-agent：${MINI_SWE_AGENT_VERSION}（逐任务安装 adapter）"
+fi
+if [[ "$MINI_SWE_RUNTIME_MODE" == "shared" ]]; then
+  echo "  PyPI（仅构建 runtime 时）：$MINI_SWE_PYPI_INDEX"
+else
+  echo "  PyPI：$MINI_SWE_PYPI_INDEX"
+fi
+case "$MINI_SWE_BASE_IMAGE_MODE" in
+  prefer-local)
+    echo "  基础镜像：优先本地缓存（$cached_base_count/$task_count 已缓存；缺失时访问远端）"
+    if [[ "$MINI_SWE_RUNTIME_MODE" == "shared" ]]; then
+      echo "  任务镜像：直接运行，不构建 agent 安装层"
+    else
+      echo "  Docker builder：classic（避免 BuildKit 远端 metadata 校验）"
+    fi
+    ;;
+  require-local)
+    echo "  基础镜像：仅使用本地缓存（$cached_base_count/$task_count 已缓存）"
+    if [[ "$MINI_SWE_RUNTIME_MODE" == "shared" ]]; then
+      echo "  任务镜像：直接运行，不构建 agent 安装层"
+    else
+      echo "  Docker builder：classic（避免 BuildKit 远端 metadata 校验）"
+    fi
+    ;;
+  remote)
+    echo "  基础镜像：使用任务原始引用（允许访问远端 registry）"
+    if [[ "$MINI_SWE_RUNTIME_MODE" == "shared" ]]; then
+      echo "  任务镜像：直接运行，不构建 agent 安装层；本地缺失时由 Compose 拉取"
+    else
+      echo "  Docker builder：BuildKit"
+    fi
+    ;;
+esac
 echo "  Cost limit：$MINI_SWE_COST_LIMIT"
 if [[ -n "$MINI_SWE_REASONING_EFFORT" ]]; then
   echo "  Reasoning effort：$MINI_SWE_REASONING_EFFORT"

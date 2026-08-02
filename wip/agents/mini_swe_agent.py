@@ -1,4 +1,4 @@
-"""Optimized Pier adapter for running mini-swe-agent in DeepSWE images.
+"""Pier adapters for running mini-swe-agent in DeepSWE images.
 
 Pier's stock adapter installs build tools and downloads uv unconditionally.
 DeepSWE v1.1 images already contain those tools, so this adapter keeps the
@@ -8,6 +8,11 @@ stock runtime/trajectory behavior and only replaces the install specification:
 * install missing OS tools only as a compatibility fallback;
 * resolve Python packages through a configurable package index;
 * avoid Pier's optional GitHub model-cost-map refresh during image builds.
+
+``SharedRuntimeMiniSweAgent`` is the preferred batch-evaluation adapter.  It
+expects a self-contained runtime mounted at ``/opt/mini-swe-runtime`` and
+therefore returns no install specification.  Pier can then start each task's
+prebuilt image directly instead of building one agent image per task.
 """
 
 from __future__ import annotations
@@ -24,8 +29,10 @@ from pier.models.agent.install import AgentInstallSpec, InstallStep
 DEFAULT_PYPI_INDEX_URL = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"
 DEFAULT_DEBIAN_MIRROR_URL = "https://mirrors.ustc.edu.cn"
 DEFAULT_UV_FALLBACK_VERSION = "0.9.18"
+DEFAULT_SHARED_RUNTIME_PATH = "/opt/mini-swe-runtime"
 
 _SAFE_VERSION = re.compile(r"^[0-9A-Za-z][0-9A-Za-z._+-]*$")
+_SAFE_ABSOLUTE_CONTAINER_PATH = re.compile(r"^/[0-9A-Za-z._+/-]+$")
 
 
 def _validated_http_url(name: str, value: str) -> str:
@@ -35,6 +42,19 @@ def _validated_http_url(name: str, value: str) -> str:
         raise ValueError(f"{name} must be an absolute HTTP(S) URL: {value!r}")
     if parsed.username or parsed.password:
         raise ValueError(f"{name} must not contain credentials")
+    return normalized
+
+
+def _validated_container_path(name: str, value: str) -> str:
+    normalized = value.rstrip("/")
+    if (
+        normalized in {"", "/"}
+        or not _SAFE_ABSOLUTE_CONTAINER_PATH.fullmatch(normalized)
+        or "//" in normalized
+        or "/../" in f"{normalized}/"
+        or "/./" in f"{normalized}/"
+    ):
+        raise ValueError(f"{name} must be a safe absolute container path: {value!r}")
     return normalized
 
 
@@ -169,4 +189,59 @@ mini-swe-agent --help >/dev/null
                 "reuses_preinstalled_tools": True,
                 "refreshes_litellm_cost_map": False,
             },
+        )
+
+
+class SharedRuntimeMiniSweAgent(OptimizedMiniSweAgent):
+    """MiniSweAgent that uses a read-only, shared runtime image mount.
+
+    The matching environment adapter is
+    ``wip.environments.mini_swe_runtime:SharedRuntimeDockerEnvironment``.
+    Setup only writes the small compatibility ``env`` file expected by Pier's
+    stock MiniSweAgent runner; it never downloads or installs packages.
+    """
+
+    def __init__(
+        self,
+        *args: Any,
+        runtime_path: str = DEFAULT_SHARED_RUNTIME_PATH,
+        **kwargs: Any,
+    ) -> None:
+        self._runtime_path = _validated_container_path("runtime_path", runtime_path)
+        super().__init__(*args, **kwargs)
+
+    def install_spec(self) -> None:  # type: ignore[override]
+        """Tell Pier to use the task's prebuilt image without an agent build."""
+
+        return None
+
+    def get_version_command(self) -> str | None:
+        # The shared runtime deliberately does not expose uv's mutable tool
+        # registry. Version is pinned by the runtime image and adapter kwargs.
+        return None
+
+    async def setup(self, environment: Any) -> None:
+        if self._install_python_packages:
+            raise ValueError(
+                "Shared mini-swe runtime does not support per-trial "
+                "extra_python_packages; rebuild the runtime image with those "
+                "packages or use OptimizedMiniSweAgent"
+            )
+
+        runtime_bin = f"{self._runtime_path}/bin"
+        executable = f"{runtime_bin}/mini-swe-agent"
+        env_line = f'export PATH="{runtime_bin}:$PATH"'
+        await self.exec_as_agent(
+            environment,
+            command=(
+                "set -euo pipefail\n"
+                f"test -x {shlex.quote(executable)} || {{\n"
+                f"  echo {shlex.quote('Shared mini-swe runtime is missing: ' + executable)} >&2\n"
+                "  exit 1\n"
+                "}\n"
+                'mkdir -p "$HOME/.local/bin"\n'
+                f"printf '%s\\n' {shlex.quote(env_line)} > \"$HOME/.local/bin/env\"\n"
+                f"{shlex.quote(executable)} --help >/dev/null"
+            ),
+            env={"LITELLM_LOCAL_MODEL_COST_MAP": "true"},
         )
