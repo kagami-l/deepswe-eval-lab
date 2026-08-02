@@ -13,28 +13,49 @@ class SharedRuntimeDockerEnvironmentTests(unittest.TestCase):
     def _fake_base_init(
         environment: DockerEnvironment, *args: object, **kwargs: object
     ) -> None:
-        environment._mounts_json = [  # type: ignore[attr-defined]
-            {"type": "bind", "source": "/host/logs", "target": "/logs/agent"}
-        ]
+        supplied_mounts = kwargs.get("mounts_json")
+        environment._mounts_json = (  # type: ignore[attr-defined]
+            [
+                {
+                    "type": "bind",
+                    "source": "/host/logs",
+                    "target": "/logs/agent",
+                }
+            ]
+            if supplied_mounts is None
+            else list(supplied_mounts)  # type: ignore[arg-type]
+        )
 
-    def test_keeps_default_and_caller_mounts_then_adds_runtime(self) -> None:
-        caller_mount = {
-            "type": "bind",
-            "source": "/host/input",
-            "target": "/input",
-        }
+    def test_default_mounts_add_runtime(self) -> None:
         with patch.object(DockerEnvironment, "__init__", self._fake_base_init):
             environment = SharedRuntimeDockerEnvironment(
-                runtime_image="deep-swe/mini-swe-runtime:2.4.6",
-                mounts_json=[caller_mount],
+                runtime_image="deep-swe/mini-swe-runtime:2.4.6"
             )
 
         mounts = environment._mounts_json  # type: ignore[attr-defined]
         self.assertEqual(mounts[0]["target"], "/logs/agent")
-        self.assertEqual(mounts[1], caller_mount)
-        self.assertEqual(mounts[2]["type"], "image")
-        self.assertEqual(mounts[2]["target"], "/opt/mini-swe-runtime")
-        self.assertIs(mounts[2]["read_only"], True)
+        self.assertEqual(mounts[1]["type"], "image")
+        self.assertEqual(mounts[1]["target"], "/opt/mini-swe-runtime")
+        self.assertIs(mounts[1]["read_only"], True)
+
+    def test_caller_mounts_replace_defaults_then_add_runtime(self) -> None:
+        verifier_mount = {
+            "type": "bind",
+            "source": "/host/verifier",
+            "target": "/logs/verifier",
+        }
+        with patch.object(DockerEnvironment, "__init__", self._fake_base_init):
+            environment = SharedRuntimeDockerEnvironment(
+                runtime_image="deep-swe/mini-swe-runtime:2.4.6",
+                mounts_json=[verifier_mount],
+            )
+
+        mounts = environment._mounts_json  # type: ignore[attr-defined]
+        self.assertEqual(mounts[0], verifier_mount)
+        self.assertEqual(mounts[1]["type"], "image")
+        self.assertEqual(mounts[1]["target"], "/opt/mini-swe-runtime")
+        self.assertNotIn("/logs/agent", {mount["target"] for mount in mounts})
+        self.assertNotIn("/logs/artifacts", {mount["target"] for mount in mounts})
 
     def test_rejects_runtime_target_collision(self) -> None:
         with patch.object(DockerEnvironment, "__init__", self._fake_base_init):

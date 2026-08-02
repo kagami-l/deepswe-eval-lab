@@ -1,1 +1,1 @@
-tengo-destructuring-bindings
+anko-typed-variable-bindings

@@ -39,10 +39,14 @@ def _validate_runtime_target(value: str) -> str:
 class SharedRuntimeDockerEnvironment(DockerEnvironment):
     """Use task images directly and mount one immutable agent runtime.
 
-    Pier normally replaces its log mounts when ``mounts_json`` is supplied.
-    This adapter always retains those mounts, then adds caller mounts and the
-    runtime image mount.  The runtime image must already exist locally so an
-    evaluation cannot unexpectedly stall while pulling it from a registry.
+    Preserve Pier's mount selection exactly, then add the runtime image mount.
+    In particular, a separate verifier supplies a verifier-only ``mounts_json``
+    list. Restoring the default agent and artifact mounts in that environment
+    would let verifier setup clear the host artifact directory before
+    ``model.patch`` is consumed.
+
+    The runtime image must already exist locally so an evaluation cannot
+    unexpectedly stall while pulling it from a registry.
     """
 
     def __init__(
@@ -56,14 +60,15 @@ class SharedRuntimeDockerEnvironment(DockerEnvironment):
         self._runtime_image = _validate_runtime_image(runtime_image)
         self._runtime_target = _validate_runtime_target(runtime_target)
 
-        # Let DockerEnvironment create Pier's three standard log mounts first.
-        super().__init__(*args, mounts_json=None, **kwargs)
-        default_mounts = list(self._mounts_json or [])
-        caller_mounts = list(mounts_json or [])
+        # mounts_json=None selects Pier's normal agent/verifier/artifact mounts.
+        # A non-None value is intentional (notably the verifier-only mount used
+        # by separate verification), so it must replace those defaults.
+        super().__init__(*args, mounts_json=mounts_json, **kwargs)
+        pier_mounts = list(self._mounts_json or [])
 
         conflicting = [
             mount
-            for mount in [*default_mounts, *caller_mounts]
+            for mount in pier_mounts
             if mount.get("target") == self._runtime_target
         ]
         if conflicting:
@@ -78,7 +83,7 @@ class SharedRuntimeDockerEnvironment(DockerEnvironment):
             "target": self._runtime_target,
             "read_only": True,
         }
-        self._mounts_json = [*default_mounts, *caller_mounts, runtime_mount]
+        self._mounts_json = [*pier_mounts, runtime_mount]
 
     async def _runtime_image_is_local(self) -> bool:
         process = await asyncio.create_subprocess_exec(
