@@ -1,5 +1,8 @@
 # OpenCode terminal-event watchdog 方案
 
+偶发且暂不计划实现的低优先级问题另见
+`wip/docs/deepswe-evaluation-low-priority-known-issues.md`。
+
 ## 状态与结论
 
 方案已在仓库内实现，不修改 Pier site-packages：
