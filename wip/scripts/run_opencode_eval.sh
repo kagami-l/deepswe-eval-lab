@@ -11,7 +11,7 @@ TASK_LIST="$REPO_ROOT/wip/data/selection/05_sample_dev.txt"
 TASKS_DIR="${PIER_TASKS_DIR:-$REPO_ROOT/tasks}"
 JOBS_DIR="${PIER_JOBS_DIR:-$REPO_ROOT/jobs}"
 PIER_BIN="${PIER_BIN:-pier}"
-OPENCODE_MODEL="${OPENCODE_MODEL:-deepseek/deepseek-v4-pro}"
+OPENCODE_MODEL="${OPENCODE_MODEL:-deepseek/deepseek-v4-flash}"
 OPENCODE_VERSION="${OPENCODE_VERSION:-1.18.10}"
 OPENCODE_VARIANT="${OPENCODE_VARIANT:-}"
 OPENCODE_RUNTIME_MODE="${OPENCODE_RUNTIME_MODE:-shared}"
@@ -34,7 +34,7 @@ usage() {
 
 选项：
   -t, --task-list PATH           任务 ID 列表；默认：05_sample_dev.txt
-  -m, --model PROVIDER/MODEL     模型；默认：deepseek/deepseek-v4-pro
+  -m, --model PROVIDER/MODEL     模型；默认：deepseek/deepseek-v4-flash
       --opencode-version VERSION 容器内 opencode-ai 版本；默认：1.18.10
       --variant VARIANT          透传 opencode 的 --variant（可选）
       --runtime-mode MODE        shared（默认）或 per-task
@@ -240,7 +240,7 @@ is_positive_integer "$PIER_N_CONCURRENT" || die "PIER_N_CONCURRENT 必须是正�
 [[ "$OPENCODE_VARIANT" != *[[:space:]]* ]] || \
   die "OPENCODE_VARIANT 不能包含空白字符"
 [[ "$OPENCODE_MODEL" == */* ]] || \
-  die "模型必须是 provider/model 格式，例如 deepseek/deepseek-v4-pro：$OPENCODE_MODEL"
+  die "模型必须是 provider/model 格式，例如 deepseek/deepseek-v4-flash：$OPENCODE_MODEL"
 case "$OPENCODE_RUNTIME_MODE" in
   shared|per-task) ;;
   *) die "runtime 模式必须是 shared 或 per-task：$OPENCODE_RUNTIME_MODE" ;;
