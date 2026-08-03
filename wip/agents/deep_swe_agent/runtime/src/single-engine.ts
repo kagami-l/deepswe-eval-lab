@@ -1,0 +1,238 @@
+/** Deterministic one-turn workflow for the unified single-Agent baseline. */
+
+import { appendFileSync } from 'node:fs';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+
+import type { AgentRunner, EventSink, TurnResult } from './agent-runner.js';
+import {
+  emptyRoleUsage,
+  type CollaborationEngine,
+  type CollaborationResult,
+  type RoleUsage,
+  type SingleConfig,
+} from './collaboration-engine.js';
+import { GitWorkspace } from './git-workspace.js';
+import { buildModifierInitialPrompt } from './prompts.js';
+
+export class SingleWorkflowEngine implements CollaborationEngine {
+  private readonly ws: GitWorkspace;
+  private readonly usage: RoleUsage = emptyRoleUsage();
+  private actualModel: string | null = null;
+  private baseCommit = '';
+  private lastCheckpoint = '';
+  private deadline = 0;
+  private baseline = new Set<string>();
+  private readonly protocolViolations: string[] = [];
+
+  constructor(
+    private readonly config: SingleConfig,
+    private readonly modifier: AgentRunner,
+  ) {
+    this.ws = new GitWorkspace(config.repoDir);
+  }
+
+  private trace(event: string, data: Record<string, unknown> = {}): void {
+    try {
+      appendFileSync(
+        join(this.config.outputDir, 'orchestrator-trace.jsonl'),
+        JSON.stringify({ ts: new Date().toISOString(), event, ...data }) + '\n',
+      );
+    } catch {
+      // Observability must not change the workflow result.
+    }
+  }
+
+  private remainingSec(): number {
+    return Math.max(0, (this.deadline - Date.now()) / 1000);
+  }
+
+  private addUsage(result: TurnResult): void {
+    if (this.actualModel === null && result.actualModel !== null) {
+      this.actualModel = result.actualModel;
+    }
+    this.usage.turns += 1;
+    this.usage.wallMs += result.durationMs;
+    if (result.usage === null) return;
+    this.usage.inputTokens += result.usage.inputTokens;
+    this.usage.outputTokens += result.usage.outputTokens;
+    this.usage.toolUses += result.usage.toolUses;
+    if (result.usage.costUsd !== null) {
+      this.usage.costUsd = (this.usage.costUsd ?? 0) + result.usage.costUsd;
+    }
+  }
+
+  async run(): Promise<CollaborationResult> {
+    try {
+      return await this.execute();
+    } catch (error) {
+      return this.finalize(
+        'infrastructure_failed',
+        error instanceof Error ? (error.stack ?? error.message) : String(error),
+      );
+    }
+  }
+
+  private async execute(): Promise<CollaborationResult> {
+    const roundDir = join(this.config.outputDir, 'rounds', '00-modify');
+    await mkdir(roundDir, { recursive: true });
+    await mkdir(join(this.config.outputDir, 'final'), { recursive: true });
+    await mkdir(this.config.workDir, { recursive: true });
+    const instruction = await readFile(this.config.instructionPath, 'utf8');
+    const prompt = buildModifierInitialPrompt(instruction);
+    await writeFile(join(roundDir, 'prompt.md'), prompt);
+
+    this.baseCommit = await this.ws.head();
+    this.lastCheckpoint = this.baseCommit;
+    this.baseline = new Set(await this.ws.untrackedFiles());
+    this.deadline = Date.now() + this.config.totalTimeoutSec * 1000;
+    this.trace('start', {
+      topology: 'single',
+      baseCommit: this.baseCommit,
+      totalTimeoutSec: this.config.totalTimeoutSec,
+    });
+
+    const attempts: Record<string, unknown>[] = [];
+    let failure: 'modifier_failed' | 'timeout' | 'empty_patch' =
+      'modifier_failed';
+    let succeeded = false;
+    const sink: EventSink = (event) => {
+      const line = JSON.stringify(event) + '\n';
+      appendFileSync(join(roundDir, 'events.jsonl'), line);
+      appendFileSync(join(this.config.outputDir, 'events.jsonl'), line);
+    };
+
+    for (let attempt = 1; attempt <= this.config.maxAgentAttempts; attempt++) {
+      if (this.remainingSec() < this.config.minTurnSec) {
+        failure = 'timeout';
+        break;
+      }
+      this.trace('modifier_turn_start', { attempt });
+      const result = await this.modifier.runTurn(
+        {
+          prompt,
+          cwd: this.config.repoDir,
+          resumeSession: true,
+          timeoutMs: Math.floor(
+            Math.min(this.config.modifierTimeoutSec, this.remainingSec()) * 1000,
+          ),
+          label: `modify-a${attempt}`,
+        },
+        sink,
+      );
+      this.addUsage(result);
+      attempts.push({
+        attempt,
+        status: result.status,
+        timedOut: result.timedOut,
+        durationMs: result.durationMs,
+        usage: result.usage,
+        error: result.error,
+      });
+      if (!result.ok) {
+        failure = result.timedOut ? 'timeout' : 'modifier_failed';
+        await this.ws.resetTo(this.baseCommit, this.baseline);
+        continue;
+      }
+
+      const head = await this.ws.head();
+      if (head !== this.baseCommit) {
+        this.protocolViolations.push(
+          `modifier moved HEAD to ${head} (tolerated)`,
+        );
+      }
+      await this.ws.stageAllExcept(this.baseline);
+      const changed =
+        (await this.ws.hasStagedChanges()) || head !== this.baseCommit;
+      if (!changed) {
+        failure = 'empty_patch';
+        continue;
+      }
+      const checkpoint = await this.ws.commitCheckpoint(
+        'agent: single implementation',
+      );
+      this.lastCheckpoint = await this.ws.head();
+      this.trace('checkpoint', {
+        commit: this.lastCheckpoint,
+        harnessCommit: checkpoint !== null,
+      });
+      succeeded = true;
+      break;
+    }
+
+    await writeFile(
+      join(roundDir, 'metadata.json'),
+      JSON.stringify({ role: 'modifier', attempts }, null, 2),
+    );
+    return succeeded
+      ? this.finalize('completed', null)
+      : this.finalize(failure, `single modifier failed (${failure})`);
+  }
+
+  private async finalize(
+    outcome: CollaborationResult['outcome'],
+    error: string | null,
+  ): Promise<CollaborationResult> {
+    let finalOutcome = outcome;
+    let finalError = error;
+    let finalCommit: string | null = null;
+    let patch = '';
+    try {
+      if (this.baseCommit) {
+        finalCommit = await this.ws.head();
+        patch = await this.ws.diffBinary(this.baseCommit);
+      }
+      await mkdir(join(this.config.outputDir, 'final'), { recursive: true });
+      await writeFile(join(this.config.outputDir, 'final', 'patch.diff'), patch);
+      await writeFile(
+        join(this.config.outputDir, 'final', 'git-status.txt'),
+        this.baseCommit ? await this.ws.statusPorcelain() : '',
+      );
+      if (finalOutcome === 'completed') {
+        if (!patch.trim()) {
+          finalOutcome = 'empty_patch';
+          finalError = 'final patch is empty';
+        } else {
+          await this.ws.applyCheckAgainstBase(
+            this.baseCommit,
+            patch,
+            this.config.workDir,
+          );
+        }
+      }
+    } catch (finalizeError) {
+      finalOutcome = 'checkpoint_failed';
+      finalError =
+        finalizeError instanceof Error
+          ? finalizeError.message
+          : String(finalizeError);
+    }
+    const deliverable = finalOutcome === 'completed';
+    const result: CollaborationResult = {
+      outcome: finalOutcome,
+      degradedReason: null,
+      deliverable,
+      error: finalError,
+      baseCommit: this.baseCommit,
+      finalCommit,
+      checkpoints:
+        this.lastCheckpoint && this.lastCheckpoint !== this.baseCommit
+          ? [{ label: 'agent: single implementation', commit: this.lastCheckpoint }]
+          : [],
+      reviewCount: 0,
+      revisionCount: 0,
+      noChangeRevision: false,
+      findingsTotal: 0,
+      blockingFindingsTotal: 0,
+      protocolViolations: this.protocolViolations,
+      usage: { modifier: this.usage },
+      actualModels: { modifier: this.actualModel },
+    };
+    this.trace('finalized', {
+      outcome: result.outcome,
+      deliverable: result.deliverable,
+      error: result.error,
+    });
+    return result;
+  }
+}

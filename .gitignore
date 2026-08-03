@@ -17,6 +17,7 @@ ENV/
 build/
 dist/
 downloads/
+node_modules/
 *.egg-info/
 .eggs/
 *.egg

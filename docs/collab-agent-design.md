@@ -1,5 +1,11 @@
 # DeepSWE 多 Agent 协作评测方案
 
+> **文档定位（2026-08-03）**：本文描述现有 `deep_swe_collab` direct
+> review-loop 原型及其历史设计。后续 single/collab 统一新基线、通用 shared
+> runtime、版本化 Agent profiles 和正式实施计划见
+> [DeepSWE 统一 Agent 评测基线：正式设计与实施计划](./unified-agent-evaluation-design.md)。
+> 新基线不会在开发阶段改写本文对应的旧脚本和旧 runtime。
+
 ## 1. 目标
 
 在 DeepSWE 评测集上运行自定义的“修改 → 审查 → 修订”协作流程，比较单 Agent、自审和异构 Agent 协作的效果。协作 treatment 只包含 Modifier 和 Reviewer 两个 LLM Agent；状态流转和结构化输出判定由本地确定性控制逻辑完成，不引入 Captain/Judge 模型调用。

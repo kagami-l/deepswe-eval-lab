@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "profiles": {
+    "claude": {
+      "status": "verified",
+      "adapter": "claude",
+      "model": "claude-opus-4-8",
+      "effort": "high",
+      "auth": "claude-login-token",
+      "permissions": "bypass",
+      "benchmark_mode": true
+    },
+    "codex": {
+      "status": "verified",
+      "adapter": "codex",
+      "model": "gpt-5.6-sol",
+      "effort": "high",
+      "auth": "codex-login",
+      "permissions": "bypass",
+      "benchmark_mode": true
+    },
+    "gemini": {
+      "status": "unverified",
+      "adapter": "gemini",
+      "model": "gemini-3.1-pro-preview",
+      "effort": "high",
+      "auth": "gemini-login",
+      "permissions": "auto",
+      "benchmark_mode": true
+    },
+    "kimi": {
+      "status": "verified",
+      "adapter": "kimi",
+      "model": "k3",
+      "effort": "on",
+      "auth": "kimi-login",
+      "permissions": "auto",
+      "benchmark_mode": true
+    },
+    "opencode": {
+      "status": "verified",
+      "adapter": "opencode",
+      "model": "deepseek/deepseek-v4-pro",
+      "effort": "high",
+      "auth": "opencode-login",
+      "permissions": "auto",
+      "benchmark_mode": true
+    }
+  }
+}

@@ -1,5 +1,21 @@
 # WIP 脚本
 
+## 统一 Agent 评测新基线
+
+single 和固定 review-loop collab 的新实验统一使用：
+
+```bash
+python wip/scripts/run_agent_eval.py runtime prepare
+python wip/scripts/run_agent_eval.py eval --task <task> --agent codex --dry-run
+python wip/scripts/run_agent_eval.py eval \
+  --task <task> --agent collab --modifier kimi --reviewer codex --dry-run
+```
+
+完整契约、认证路径、预算语义和验收记录见
+[`docs/unified-agent-evaluation-design.md`](../../docs/unified-agent-evaluation-design.md)。
+下文的 `run_codex_eval.sh`、`run_opencode_eval.sh`、`run_kimi_sample_dev.sh` 和
+mini-swe 入口保留为旧基线/历史参考，不迁移到统一 runtime。
+
 ## 用共享 mini-swe-agent runtime 运行评测
 
 `wip/scripts/run_mini_swe_eval.sh` 默认使用只读共享 runtime 镜像。第一次运行

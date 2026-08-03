@@ -1,5 +1,9 @@
 # Pier 的 Kimi Code Agent 适配器
 
+> 本文描述旧的 Kimi 专用 Pier adapter。统一 Agent 评测新基线使用
+> `wip/agents/deep_swe_agent/` 和 `wip/scripts/run_agent_eval.py`；见
+> [`docs/unified-agent-evaluation-design.md`](../../docs/unified-agent-evaluation-design.md)。
+
 `KimiCodeAgent` 用于在 Pier 中运行 Moonshot AI 官方的
 [`MoonshotAI/kimi-code`](https://github.com/MoonshotAI/kimi-code)。它使用的是
 Node.js/TypeScript 版 npm 包 `@moonshot-ai/kimi-code`，不是旧版 Python
