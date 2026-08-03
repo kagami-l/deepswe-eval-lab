@@ -378,6 +378,9 @@ runtime 镜像至少包含：
 - 编译后的 orchestrator。
 - `@sublang/cligent` 及锁定的传递依赖。
 - Codex、Claude Code、Kimi Code、OpenCode、Gemini 所需 CLI/SDK。
+- OpenCode 启动时需要的 `ripgrep` 和固定的 models catalog 快照；快照作为压缩资产
+  随源码保存，构建时解压并校验 SHA-256，避免运行期访问 GitHub、npm 或
+  `models.opencode.ai`。
 - runtime manifest 和构建信息。
 - 各组件的离线启动/版本探针。
 
@@ -414,6 +417,10 @@ setup 阶段只做轻量操作：
 - 创建本 trial 的临时 Agent homes。
 - 上传或写入 execution plan、凭据和受控配置。
 - 不访问 npm/PyPI，不执行在线安装。
+
+OpenCode 使用 `OPENCODE_PURE=1`，禁用个人/项目配置和 models catalog 自动刷新；认证
+仍从 trial 专用临时目录注入。`XDG_CONFIG_HOME` 与 `OPENCODE_CONFIG_DIR` 指向同一
+OpenCode 配置目录，避免重复初始化两套目录。
 
 ## 10. Pier Agent 与认证
 
@@ -706,6 +713,18 @@ Gemini 的代码、profile 和 runtime 依赖可以进入首版，但保持 `unv
   文件在模型调用前 fail-fast；Pier job 中的 Agent env 值由 Pier 脱敏。
 - 未运行真实模型 smoke；因此 profile 中四个 `verified` 表示沿用既有本地 Agent 可用性，
   不表示新统一管线已经完成付费端到端验证。
+
+### 18.4 2026-08-03 runtime 下载项预置验收
+
+- runtime manifest 升级为 `0.2.0`，加入 OpenCode models catalog 快照和 ripgrep
+  15.1.0 的 amd64/arm64 SHA-256。
+- 构建 `deep-swe/agent-runtime:042239ec155c92f6`，完整 manifest digest 为
+  `042239ec155c92f6f53eba33c3d2bad56da841cacd3404699dba9f71aa29963e`，平台为
+  `linux/amd64`，image label 校验通过。
+- 在 `--network none` 临时容器中，`rg --version`、DeepSeek provider/model 发现和
+  OpenCode server 启动均通过。
+- OpenCode 启动后未生成 `package.json`、`node_modules`、下载版 `rg` 或缓存版
+  `models.json`；本地数据库、日志和 `.gitignore` 仍按预期写入 trial 临时目录。
 
 ## 19. 分阶段实施计划
 

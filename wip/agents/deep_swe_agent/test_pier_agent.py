@@ -115,6 +115,26 @@ class PierAgentTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(sources, {"kimi-code.json", "kimi-code", "device_id"})
             self.assertNotIn("config.toml", sources)
 
+    async def test_opencode_uses_immutable_runtime_assets_without_user_config(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            instance = agent(Path(directory), plan(modifier="opencode"))
+            environment = _Environment()
+            env: dict[str, str] = {}
+            await instance._configure_credentials(environment, env)
+            self.assertEqual(env["OPENCODE_PURE"], "1")
+            self.assertEqual(env["OPENCODE_DISABLE_PROJECT_CONFIG"], "1")
+            self.assertEqual(env["OPENCODE_DISABLE_MODELS_FETCH"], "1")
+            self.assertEqual(
+                env["OPENCODE_MODELS_PATH"],
+                "/opt/deep-swe-agent-runtime/opencode/models.json",
+            )
+            self.assertEqual(
+                env["OPENCODE_CONFIG_DIR"],
+                "/tmp/deep-swe-agent-secrets/opencode-config/opencode",
+            )
+
     def test_atif_combines_roles_in_one_valid_trajectory(self) -> None:
         events = [
             {

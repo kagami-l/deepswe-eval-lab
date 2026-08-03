@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import gzip
+import hashlib
 import json
 import tempfile
 import unittest
@@ -10,6 +12,7 @@ from unittest import mock
 from wip.agent_eval.runtime_image import (
     RuntimeImageManager,
     RuntimeSpec,
+    runtime_build_args,
     runtime_input_digest,
 )
 
@@ -34,9 +37,31 @@ class RuntimeImageTests(unittest.TestCase):
             "GEMINI_VERSION": manifest["global_packages"]["@google/gemini-cli"],
             "KIMI_VERSION": manifest["global_packages"]["@moonshot-ai/kimi-code"],
             "OPENCODE_VERSION": manifest["global_packages"]["opencode-ai"],
+            "RIPGREP_VERSION": manifest["assets"]["ripgrep"]["version"],
+            "RIPGREP_AMD64_SHA256": manifest["assets"]["ripgrep"]["sha256"][
+                "amd64"
+            ],
+            "RIPGREP_ARM64_SHA256": manifest["assets"]["ripgrep"]["sha256"][
+                "arm64"
+            ],
+            "OPENCODE_MODELS_SHA256": manifest["assets"]["opencode_models"][
+                "sha256"
+            ],
         }
         for name, version in expected_args.items():
             self.assertIn(f"ARG {name}={version}", dockerfile)
+        self.assertEqual(runtime_build_args(manifest), expected_args)
+
+        snapshot = gzip.decompress(
+            (
+                ROOT
+                / "wip/docker/agent-runtime/assets/opencode-models.json.gz"
+            ).read_bytes()
+        )
+        self.assertEqual(
+            hashlib.sha256(snapshot).hexdigest(),
+            manifest["assets"]["opencode_models"]["sha256"],
+        )
 
     def test_digest_covers_orchestrator_source(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

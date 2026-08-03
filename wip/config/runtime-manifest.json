@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "runtime_version": "0.1.0",
+  "runtime_version": "0.2.0",
   "node_image": "node:22-bookworm-slim",
   "packages": {
     "@anthropic-ai/claude-agent-sdk": "0.3.207",
@@ -13,6 +13,20 @@
     "@google/gemini-cli": "0.50.0",
     "@moonshot-ai/kimi-code": "0.30.0",
     "opencode-ai": "1.18.10"
+  },
+  "assets": {
+    "opencode_models": {
+      "source": "https://models.opencode.ai/api.json",
+      "snapshot_date": "2026-08-03",
+      "sha256": "b3a52ba98bb4b58714734f8bb98c9bc7ffeff3558f915bcc3211cfe5f276728d"
+    },
+    "ripgrep": {
+      "version": "15.1.0",
+      "sha256": {
+        "amd64": "1c9297be4a084eea7ecaedf93eb03d058d6faae29bbc57ecdaf5063921491599",
+        "arm64": "2b661c6ef508e902f388e9098d9c4c5aca72c87b55922d94abdba830b4dc885e"
+      }
+    }
   },
   "default_platform": "linux/amd64"
 }

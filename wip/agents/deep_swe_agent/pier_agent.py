@@ -31,6 +31,7 @@ REMOTE_CODEX_HOME = f"{REMOTE_SECRETS}/codex"
 REMOTE_KIMI_HOME = f"{REMOTE_SECRETS}/kimi"
 REMOTE_OPENCODE_DATA = f"{REMOTE_SECRETS}/opencode-data"
 REMOTE_OPENCODE_CONFIG = f"{REMOTE_SECRETS}/opencode-config"
+REMOTE_OPENCODE_CONFIG_APP = f"{REMOTE_OPENCODE_CONFIG}/opencode"
 
 SUPPORTED_ADAPTERS = {"claude", "codex", "gemini", "kimi", "opencode"}
 _SAFE_RUNTIME_PATH = re.compile(r"^/[0-9A-Za-z._+/-]+$")
@@ -153,7 +154,9 @@ class DeepSweAgent(BaseInstalledAgent):
             command=(
                 "set -euo pipefail; "
                 f"test -x {runtime}/bin/node; "
+                f"test -x {runtime}/bin/rg; "
                 f"test -r {runtime}/dist/main.js; "
+                f"test -r {runtime}/opencode/models.json; "
                 f"test -r {runtime}/runtime-manifest.digest; "
                 f'test "$(cat {runtime}/runtime-manifest.digest)" = {shlex.quote(digest)}'
             ),
@@ -261,19 +264,30 @@ class DeepSweAgent(BaseInstalledAgent):
                 "KIMI_CODE_HOME": REMOTE_KIMI_HOME,
                 "XDG_DATA_HOME": REMOTE_OPENCODE_DATA,
                 "XDG_CONFIG_HOME": REMOTE_OPENCODE_CONFIG,
-                "OPENCODE_CONFIG_DIR": REMOTE_OPENCODE_CONFIG,
+                "OPENCODE_CONFIG_DIR": REMOTE_OPENCODE_CONFIG_APP,
                 "KIMI_DISABLE_TELEMETRY": "1",
                 "KIMI_CODE_NO_AUTO_UPDATE": "1",
                 "KIMI_DISABLE_CRON": "1",
             }
         )
+        if "opencode" in self.adapters_in_use:
+            env.update(
+                {
+                    "OPENCODE_PURE": "1",
+                    "OPENCODE_DISABLE_PROJECT_CONFIG": "1",
+                    "OPENCODE_DISABLE_MODELS_FETCH": "1",
+                    "OPENCODE_MODELS_PATH": (
+                        f"{self.runtime_path}/opencode/models.json"
+                    ),
+                }
+            )
         await self.exec_as_agent(
             environment,
             command=(
                 "umask 077; "
                 f"mkdir -p {REMOTE_HOME}/.gemini {REMOTE_CODEX_HOME} "
                 f"{REMOTE_KIMI_HOME}/credentials {REMOTE_KIMI_HOME}/oauth "
-                f"{REMOTE_OPENCODE_DATA}/opencode {REMOTE_OPENCODE_CONFIG}"
+                f"{REMOTE_OPENCODE_DATA}/opencode {REMOTE_OPENCODE_CONFIG_APP}"
             ),
             env=env,
         )

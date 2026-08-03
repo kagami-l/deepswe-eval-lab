@@ -87,6 +87,7 @@ def runtime_input_digest(repo_root: Path, manifest: dict[str, Any]) -> str:
         repo_root / "wip/agents/deep_swe_agent/runtime/package.json",
         repo_root / "wip/agents/deep_swe_agent/runtime/package-lock.json",
         repo_root / "wip/agents/deep_swe_agent/runtime/tsconfig.json",
+        repo_root / "wip/docker/agent-runtime/assets/opencode-models.json.gz",
     ]
     source_dir = repo_root / "wip/agents/deep_swe_agent/runtime/src"
     if source_dir.is_dir():
@@ -99,6 +100,32 @@ def runtime_input_digest(repo_root: Path, manifest: dict[str, Any]) -> str:
         digest.update(path.read_bytes())
         digest.update(b"\0")
     return digest.hexdigest()
+
+
+def runtime_build_args(manifest: dict[str, Any]) -> dict[str, str]:
+    """Resolve all versioned Docker build inputs from the runtime manifest."""
+
+    try:
+        globals_ = manifest["global_packages"]
+        assets = manifest["assets"]
+        ripgrep = assets["ripgrep"]
+        ripgrep_sha = ripgrep["sha256"]
+        values = {
+            "GEMINI_VERSION": globals_["@google/gemini-cli"],
+            "KIMI_VERSION": globals_["@moonshot-ai/kimi-code"],
+            "OPENCODE_VERSION": globals_["opencode-ai"],
+            "RIPGREP_VERSION": ripgrep["version"],
+            "RIPGREP_AMD64_SHA256": ripgrep_sha["amd64"],
+            "RIPGREP_ARM64_SHA256": ripgrep_sha["arm64"],
+            "OPENCODE_MODELS_SHA256": assets["opencode_models"]["sha256"],
+        }
+    except (KeyError, TypeError) as exc:
+        raise RuntimeImageError(
+            f"runtime manifest is missing a required build input: {exc}"
+        ) from exc
+    if not all(isinstance(value, str) and value for value in values.values()):
+        raise RuntimeImageError("runtime manifest build inputs must be non-empty strings")
+    return values
 
 
 class RuntimeImageManager:
@@ -167,10 +194,10 @@ class RuntimeImageManager:
             str(self.spec.dockerfile),
             "--build-arg",
             f"RUNTIME_MANIFEST_DIGEST={self.spec.manifest_digest}",
-            "--tag",
-            self.spec.image,
-            str(self.spec.context_dir),
         ]
+        for name, value in runtime_build_args(self.spec.manifest).items():
+            build_args.extend(("--build-arg", f"{name}={value}"))
+        build_args.extend(("--tag", self.spec.image, str(self.spec.context_dir)))
         process = subprocess.run(build_args, check=False)
         if process.returncode != 0:
             raise RuntimeImageError(
