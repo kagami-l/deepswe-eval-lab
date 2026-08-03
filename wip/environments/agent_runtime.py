@@ -78,7 +78,8 @@ class SharedAgentRuntimeDockerEnvironment(DockerEnvironment):
         if not await self._runtime_image_is_local():
             raise RuntimeError(
                 f"Shared Agent runtime image {self._runtime_image!r} is not local; "
-                "run `python wip/scripts/run_agent_eval.py runtime prepare` first"
+                "run `cd wip && uv run python "
+                "scripts/run_agent_eval.py runtime prepare` first"
             )
         await super().start(force_build=force_build)
 

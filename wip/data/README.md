@@ -52,7 +52,8 @@
 运行：
 
 ```bash
-python3 wip/scripts/select_discriminative_tasks.py
+cd wip
+uv run python scripts/select_discriminative_tasks.py
 ```
 
 可以用 `--sample-size`、`--seed`、`--input-dir`、`--output-dir` 调整抽样和路径。筛选脚本只依赖 Python 标准库。脚本默认校验 `SHA256SUMS` 并拒绝对意外变化的输入运行；明确要分析更新后的官网快照时，先人工核查差异，再使用 `--allow-input-hash-mismatch`。
@@ -60,7 +61,7 @@ python3 wip/scripts/select_discriminative_tasks.py
 如果待测 agent system 使用了官网公开结果中的模型，应做 leave-target-model-out，且可重复传入多个模型：
 
 ```bash
-python3 wip/scripts/select_discriminative_tasks.py \
+uv run python scripts/select_discriminative_tasks.py \
   --exclude-model gpt-5-5 \
   --exclude-model claude-opus-5
 ```

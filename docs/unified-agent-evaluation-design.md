@@ -209,10 +209,17 @@ runtime 和 Kimi adapter 暂时不改。
 
 ## 7. CLI 设计
 
+以下命令均从仓库的 `wip` 目录执行：
+
+```bash
+cd wip
+uv sync
+```
+
 ### 7.1 Runtime 准备
 
 ```bash
-python wip/scripts/run_agent_eval.py runtime prepare
+uv run python scripts/run_agent_eval.py runtime prepare
 ```
 
 可选参数：
@@ -236,7 +243,7 @@ python wip/scripts/run_agent_eval.py runtime prepare
 ### 7.2 Single
 
 ```bash
-python wip/scripts/run_agent_eval.py eval \
+uv run python scripts/run_agent_eval.py eval \
   --task fastapi-implicit-head-options \
   --agent codex
 ```
@@ -244,8 +251,8 @@ python wip/scripts/run_agent_eval.py eval \
 ### 7.3 Collab
 
 ```bash
-python wip/scripts/run_agent_eval.py eval \
-  --task-list wip/data/selection/05_sample_dev.txt \
+uv run python scripts/run_agent_eval.py eval \
+  --task-list data/selection/05_sample_dev.txt \
   --agent collab \
   --modifier kimi \
   --reviewer codex \
@@ -307,7 +314,7 @@ CLI 默认自动发现以下宿主登录态，只把认证材料复制到 trial 
 行为配置。建议先做 dry-run，再以并发 1 启动会真实调用模型的 smoke：
 
 ```bash
-python wip/scripts/run_agent_eval.py eval \
+uv run python scripts/run_agent_eval.py eval \
   --task abs-module-cache-flags \
   --agent codex \
   --n-concurrent 1 \

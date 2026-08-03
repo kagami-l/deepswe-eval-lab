@@ -5,9 +5,11 @@
 single 和固定 review-loop collab 的新实验统一使用：
 
 ```bash
-python wip/scripts/run_agent_eval.py runtime prepare
-python wip/scripts/run_agent_eval.py eval --task <task> --agent codex --dry-run
-python wip/scripts/run_agent_eval.py eval \
+cd wip
+uv sync
+uv run python scripts/run_agent_eval.py runtime prepare
+uv run python scripts/run_agent_eval.py eval --task <task> --agent codex --dry-run
+uv run python scripts/run_agent_eval.py eval \
   --task <task> --agent collab --modifier kimi --reviewer codex --dry-run
 ```
 
