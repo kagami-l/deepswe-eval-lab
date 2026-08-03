@@ -31,7 +31,23 @@
     "kimi": {
       "status": "verified",
       "adapter": "kimi",
-      "model": "k3",
+      "model": "kimi-code/k3",
+      "model_config": {
+        "provider": "managed:kimi-code",
+        "provider_type": "kimi",
+        "base_url": "https://api.kimi.com/coding/v1",
+        "upstream_model": "k3",
+        "max_context_size": 1048576,
+        "capabilities": [
+          "thinking",
+          "always_thinking",
+          "image_in",
+          "video_in",
+          "tool_use"
+        ],
+        "support_efforts": ["low", "high", "max"],
+        "default_effort": "high"
+      },
       "effort": "on",
       "auth": "kimi-login",
       "permissions": "auto",

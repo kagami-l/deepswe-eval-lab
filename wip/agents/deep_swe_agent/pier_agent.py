@@ -34,6 +34,14 @@ REMOTE_OPENCODE_CONFIG = f"{REMOTE_SECRETS}/opencode-config"
 REMOTE_OPENCODE_CONFIG_APP = f"{REMOTE_OPENCODE_CONFIG}/opencode"
 
 SUPPORTED_ADAPTERS = {"claude", "codex", "gemini", "kimi", "opencode"}
+KIMI_K3_CAPABILITIES = (
+    "thinking",
+    "always_thinking",
+    "image_in",
+    "video_in",
+    "tool_use",
+)
+KIMI_K3_SUPPORT_EFFORTS = ("low", "high", "max")
 _SAFE_RUNTIME_PATH = re.compile(r"^/[0-9A-Za-z._+/-]+$")
 _SAFE_DIGEST = re.compile(r"^[0-9a-f]{64}$")
 
@@ -46,6 +54,90 @@ def _record(value: Any, path: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ExecutionPlanError(f"{path} must be an object")
     return value
+
+
+def _validate_kimi_model_config(
+    role_name: str, role: dict[str, Any]
+) -> dict[str, Any]:
+    path = f"execution plan roles.{role_name}.model_config"
+    config = _record(role.get("model_config"), path)
+    if config.get("provider") != "managed:kimi-code":
+        raise ExecutionPlanError(f"{path}.provider must be managed:kimi-code")
+    if config.get("provider_type") != "kimi":
+        raise ExecutionPlanError(f"{path}.provider_type must be kimi")
+    if config.get("base_url") != "https://api.kimi.com/coding/v1":
+        raise ExecutionPlanError(
+            f"{path}.base_url must use the managed Kimi Code endpoint"
+        )
+    upstream_model = config.get("upstream_model")
+    if not isinstance(upstream_model, str) or not upstream_model:
+        raise ExecutionPlanError(f"{path}.upstream_model must be non-empty")
+    max_context_size = config.get("max_context_size")
+    if (
+        isinstance(max_context_size, bool)
+        or not isinstance(max_context_size, int)
+        or max_context_size <= 0
+    ):
+        raise ExecutionPlanError(
+            f"{path}.max_context_size must be a positive integer"
+        )
+    capabilities = config.get("capabilities")
+    if not isinstance(capabilities, list) or tuple(capabilities) != KIMI_K3_CAPABILITIES:
+        raise ExecutionPlanError(
+            f"{path}.capabilities must match the versioned K3 capability set"
+        )
+    support_efforts = config.get("support_efforts")
+    if (
+        not isinstance(support_efforts, list)
+        or tuple(support_efforts) != KIMI_K3_SUPPORT_EFFORTS
+    ):
+        raise ExecutionPlanError(
+            f"{path}.support_efforts must match the versioned K3 effort set"
+        )
+    if config.get("default_effort") not in support_efforts:
+        raise ExecutionPlanError(f"{path}.default_effort must be supported")
+    return config
+
+
+def _render_kimi_config(
+    *, default_model: str, models: dict[str, dict[str, Any]]
+) -> str:
+    lines = [f"default_model = {json.dumps(default_model)}", ""]
+    providers = {config["provider"]: config for config in models.values()}
+    for provider in sorted(providers):
+        config = providers[provider]
+        lines.extend(
+            (
+                f"[providers.{json.dumps(provider)}]",
+                f"type = {json.dumps(config['provider_type'])}",
+                'api_key = ""',
+                f"base_url = {json.dumps(config['base_url'])}",
+                "",
+                f"[providers.{json.dumps(provider)}.oauth]",
+                'storage = "file"',
+                'key = "oauth/kimi-code"',
+                "",
+            )
+        )
+    for alias in sorted(models):
+        config = models[alias]
+        lines.extend(
+            (
+                f"[models.{json.dumps(alias)}]",
+                f"provider = {json.dumps(config['provider'])}",
+                f"model = {json.dumps(config['upstream_model'])}",
+                f"max_context_size = {config['max_context_size']}",
+                f"capabilities = {_toml_array(config['capabilities'])}",
+                f"support_efforts = {_toml_array(config['support_efforts'])}",
+                f"default_effort = {json.dumps(config['default_effort'])}",
+                "",
+            )
+        )
+    return "\n".join(lines)
+
+
+def _toml_array(values: list[str]) -> str:
+    return "[ " + ", ".join(json.dumps(value) for value in values) + " ]"
 
 
 def _validate_plan_json(value: str | dict[str, Any]) -> dict[str, Any]:
@@ -79,6 +171,8 @@ def _validate_plan_json(value: str | dict[str, Any]) -> dict[str, Any]:
         raise ExecutionPlanError("single topology must not define a reviewer")
     if topology == "collab":
         reviewer = _record(reviewer, "execution plan roles.reviewer")
+    kimi_models: dict[str, dict[str, Any]] = {}
+    kimi_providers: dict[str, tuple[str, str]] = {}
     for role_name, role in (("modifier", modifier), ("reviewer", reviewer)):
         if role is None:
             continue
@@ -86,6 +180,26 @@ def _validate_plan_json(value: str | dict[str, Any]) -> dict[str, Any]:
             raise ExecutionPlanError(f"unsupported {role_name} adapter")
         if not isinstance(role.get("model"), str) or not role["model"]:
             raise ExecutionPlanError(f"{role_name} model must be non-empty")
+        if role["adapter"] == "kimi":
+            config = _validate_kimi_model_config(role_name, role)
+            provider = config["provider"]
+            provider_definition = (config["provider_type"], config["base_url"])
+            previous_provider = kimi_providers.setdefault(
+                provider, provider_definition
+            )
+            if previous_provider != provider_definition:
+                raise ExecutionPlanError(
+                    f"Kimi provider {provider!r} has conflicting registrations"
+                )
+            previous = kimi_models.setdefault(role["model"], config)
+            if previous != config:
+                raise ExecutionPlanError(
+                    f"Kimi model {role['model']!r} has conflicting registrations"
+                )
+        elif role.get("model_config") is not None:
+            raise ExecutionPlanError(
+                f"{role_name} model_config is only supported for Kimi"
+            )
     budget = _record(plan.get("budget"), "execution plan budget")
     if not isinstance(budget.get("soft_deadline_seconds"), (int, float)):
         raise ExecutionPlanError("budget.soft_deadline_seconds must be numeric")
@@ -254,6 +368,33 @@ class DeepSweAgent(BaseInstalledAgent):
             environment, command=f"chmod 600 {shlex.quote(target)}"
         )
 
+    def _kimi_models(self) -> tuple[str, dict[str, dict[str, Any]]]:
+        models: dict[str, dict[str, Any]] = {}
+        default_model: str | None = None
+        roles = self.execution_plan["roles"]
+        for role_name in ("modifier", "reviewer"):
+            role = roles.get(role_name)
+            if not isinstance(role, dict) or role.get("adapter") != "kimi":
+                continue
+            alias = role["model"]
+            if default_model is None:
+                default_model = alias
+            models[alias] = role["model_config"]
+        if default_model is None:
+            raise ExecutionPlanError("execution plan does not contain a Kimi role")
+        return default_model, models
+
+    async def _configure_kimi_model(self, environment: BaseEnvironment) -> None:
+        default_model, models = self._kimi_models()
+        with tempfile.TemporaryDirectory(prefix="deep-swe-kimi-config-") as directory:
+            source = Path(directory) / "config.toml"
+            source.write_text(
+                _render_kimi_config(default_model=default_model, models=models)
+            )
+            await self._upload_owned_file(
+                environment, source, f"{REMOTE_KIMI_HOME}/config.toml"
+            )
+
     async def _configure_credentials(
         self, environment: BaseEnvironment, env: dict[str, str]
     ) -> None:
@@ -322,6 +463,7 @@ class DeepSweAgent(BaseInstalledAgent):
                         await self._upload_owned_file(
                             environment, source, f"{REMOTE_KIMI_HOME}/{relative}"
                         )
+            await self._configure_kimi_model(environment)
 
     # --- execution -------------------------------------------------------
 

@@ -58,7 +58,15 @@ class PlanningTests(unittest.TestCase):
         )
         self.assertEqual(plan.workflow, "review-loop")
         self.assertEqual(plan.modifier.adapter, "kimi")
+        self.assertEqual(plan.modifier.model, "kimi-code/k3")
+        self.assertIsNotNone(plan.modifier.model_config)
         self.assertEqual(plan.reviewer.adapter, "codex")  # type: ignore[union-attr]
+
+    def test_kimi_model_override_requires_versioned_profile(self) -> None:
+        with self.assertRaisesRegex(ValueError, "versioned profile"):
+            build_execution_plan(
+                request(agent="kimi", model="kimi-code/k3-256k"), self.registry
+            )
 
     def test_single_rejects_role_arguments(self) -> None:
         with self.assertRaisesRegex(ValueError, "does not accept"):

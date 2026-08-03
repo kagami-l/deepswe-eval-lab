@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "issueId": "CLI-003",
+  "environment": {
+    "cligent": "0.16.0",
+    "kimiCodeCli": "0.30.0",
+    "model": "kimi-code/k3"
+  },
+  "source": {
+    "file": "events.jsonl",
+    "sha256": "b8dbee59d15f881cf633fa84a2b0b926c1e241da701ff1285636c06b26e9e6bb"
+  },
+  "events": {
+    "total": 1120,
+    "byType": {
+      "init": 1,
+      "text_delta": 1003,
+      "kimi:plan": 3,
+      "tool_use": 56,
+      "tool_result": 56,
+      "done": 1
+    },
+    "textDeltaChars": 4310,
+    "uniqueToolUses": 56,
+    "uniqueToolResults": 56
+  },
+  "result": {
+    "status": "success",
+    "durationMs": 1234525,
+    "reportedInputTokens": 0,
+    "reportedOutputTokens": 0,
+    "reportedToolUses": 56,
+    "patchBytes": 22963,
+    "verifierEnabled": false
+  }
+}

@@ -12,6 +12,18 @@ Engine = Literal["direct"]
 
 
 @dataclass(frozen=True)
+class KimiModelConfig:
+    provider: str
+    provider_type: str
+    base_url: str
+    upstream_model: str
+    max_context_size: int
+    capabilities: tuple[str, ...]
+    support_efforts: tuple[str, ...]
+    default_effort: str
+
+
+@dataclass(frozen=True)
 class AgentProfile:
     name: str
     status: Literal["verified", "unverified"]
@@ -20,6 +32,7 @@ class AgentProfile:
     effort: str | None
     auth: str
     permissions: Literal["auto", "bypass"]
+    model_config: KimiModelConfig | None = None
     benchmark_mode: bool = True
 
     def with_overrides(

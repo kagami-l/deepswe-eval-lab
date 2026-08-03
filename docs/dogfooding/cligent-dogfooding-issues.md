@@ -12,6 +12,7 @@
 |---|---|---|---|---|---|
 | CLI-001 | OpenCode 工具事件丢失参数和结果，并重复计数 | OpenCode adapter | High | Open | 2026-08-03 |
 | CLI-002 | Codex 命令执行和 MCP 调用未转换成工具事件 | Codex adapter | High | Open | 2026-08-03 |
+| CLI-003 | Kimi 未提供 token usage 时被报告为真实零值 | Kimi adapter / usage schema | Medium | Open | 2026-08-03 |
 
 ## 状态约定
 
@@ -327,3 +328,87 @@ ThreadItem 类型补齐 fixture，并增加一次真实运行验收。
 - cligent Codex adapter：`packages/cligent/src/adapters/codex.ts`（以 cligent 仓库实际
   路径为准）
 - Codex SDK ThreadItem 类型：`@openai/codex-sdk/dist/index.d.ts`
+
+---
+
+## CLI-003：Kimi 未提供 token usage 时被报告为真实零值
+
+### 基本信息
+
+- 组件：`@sublang/cligent` Kimi adapter / `DonePayload.usage`
+- dogfooding 环境：
+  - cligent `0.16.0`
+  - Kimi Code CLI `0.30.0`
+  - 模型 `kimi-code/k3`
+- 严重程度：`Medium`
+- 状态：`Open`
+- 证据目录：[`CLI-003-kimi-unknown-token-usage/`](./CLI-003-kimi-unknown-token-usage/)
+
+### 现象
+
+一次真实成功运行具有明确的非零模型活动：
+
+```text
+duration                 1,234,525 ms
+text_delta               1,003 条 / 4,310 字符
+tool_use / tool_result   56 / 56
+patch                    22,963 bytes
+status                   success
+```
+
+但最终事件仍报告：
+
+```json
+{"usage":{"inputTokens":0,"outputTokens":0,"toolUses":56}}
+```
+
+下游 trajectory 因而把 prompt/completion token 同样记录为 0。对一次包含长 prompt、持续
+20 分钟并输出大量文本的成功模型运行，这里的 0 只能表示 usage 不可用，不能解释为真实
+零消耗。
+
+### 定位结论
+
+Kimi adapter 的 `mapUsage()` 在 ACP `session/prompt` response 没有 `usage` 时执行：
+
+```ts
+if (!usage) return { inputTokens: 0, outputTokens: 0, toolUses }
+```
+
+与此同时，`DonePayload.usage.inputTokens/outputTokens` 是必填 `number`，没有表达
+`unknown/unavailable` 的能力。这使上游缺失信息被静默改写成了有效数值 0。
+
+本次未保存 raw ACP response，因此不能仅凭运行产物断言 usage 是由 Kimi Code CLI 未提供
+还是在更早的协议层丢失；但 cligent 将 missing 映射为 zero 的语义问题是确定的。
+
+### 建议处理方式
+
+优先让统一 usage schema 能表达可用性，例如以下任一方案：
+
+1. `usage` 在上游未提供时省略，并保持 `DonePayload.usage` 可选。
+2. token 字段允许 `null`，例如 `inputTokens: number | null`。
+3. 保留数值字段但增加明确的 `usageAvailable: false` 或 token 级 provenance；调用方必须
+   忽略占位零值。
+
+`toolUses` 是 adapter 根据工具生命周期独立计数得到的真实值，不应因 token usage 缺失而
+丢弃。若 schema 必须保持向后兼容，建议至少增加 availability/provenance，再在下一个主
+版本移除“missing → zero”的歧义。
+
+### 建议的回归测试
+
+1. ACP prompt response 含完整 usage：准确映射 input/cache/output token。
+2. ACP prompt response 不含 usage：输出明确的 unavailable，而不是可解释为真实值的 0。
+3. usage 缺失但有工具调用：保留准确 `toolUses`。
+4. 成功、失败、取消三种 terminal 状态都保留相同的 usage 可用性语义。
+5. 下游汇总不会把 unavailable token 加入真实 token 总量。
+
+### 验收标准
+
+- 调用方可以无歧义地区分 token usage 为 0 与 token usage 不可用。
+- Kimi 成功运行不再被统计成“消耗 0 token”。
+- `toolUses` 继续等于唯一实际工具调用数。
+- schema 变更包含兼容策略和 adapter fixture 回归测试。
+
+### 相关源码
+
+- cligent Kimi adapter：`packages/cligent/src/adapters/kimi.ts`（以 cligent 仓库实际路径为准）
+- cligent usage schema：`packages/cligent/src/types.ts`

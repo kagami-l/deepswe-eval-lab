@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .models import AgentProfile
+from .models import AgentProfile, KimiModelConfig
 
 
 SUPPORTED_ADAPTERS = {"claude", "codex", "gemini", "kimi", "opencode"}
@@ -19,6 +19,14 @@ SUPPORTED_EFFORTS = {
     "kimi": {"off", "on"},
     "opencode": {"minimal", "low", "medium", "high", "xhigh", "max"},
 }
+KIMI_K3_CAPABILITIES = (
+    "thinking",
+    "always_thinking",
+    "image_in",
+    "video_in",
+    "tool_use",
+)
+KIMI_K3_SUPPORT_EFFORTS = ("low", "high", "max")
 
 
 class ProfileError(ValueError):
@@ -82,6 +90,16 @@ class ProfileRegistry:
             raise ProfileError(
                 f"Agent profile {name!r} effort override must be non-empty"
             )
+        if (
+            profile.adapter == "kimi"
+            and model is not None
+            and model != profile.model
+        ):
+            raise ProfileError(
+                f"Agent profile {name!r} has a registered Kimi model and cannot "
+                "be overridden with --model; add a versioned profile for "
+                f"{model!r}"
+            )
         resolved = profile.with_overrides(model=model, effort=effort)
         _validate_effort(resolved.adapter, resolved.effort, name)
         return resolved
@@ -112,6 +130,7 @@ def _parse_profile(name: str, value: Any) -> AgentProfile:
     benchmark_mode = value.get("benchmark_mode", True)
     if not isinstance(benchmark_mode, bool):
         raise ProfileError(f"profiles.{name}.benchmark_mode must be boolean")
+    model_config = _parse_model_config(name, adapter, value.get("model_config"))
     profile = AgentProfile(
         name=name,
         status=status,  # type: ignore[arg-type]
@@ -120,12 +139,102 @@ def _parse_profile(name: str, value: Any) -> AgentProfile:
         effort=effort.strip() if isinstance(effort, str) else None,
         auth=_required_string(value, "auth", name),
         permissions=permissions,  # type: ignore[arg-type]
+        model_config=model_config,
         benchmark_mode=benchmark_mode,
     )
     _validate_effort(profile.adapter, profile.effort, name)
     if profile.adapter == "kimi" and profile.permissions != "auto":
         raise ProfileError("Kimi ACP profile permissions must be auto")
     return profile
+
+
+def _parse_model_config(
+    profile: str, adapter: str, value: Any
+) -> KimiModelConfig | None:
+    if adapter != "kimi":
+        if value is not None:
+            raise ProfileError(
+                f"profiles.{profile}.model_config is only supported for Kimi"
+            )
+        return None
+    if not isinstance(value, dict):
+        raise ProfileError(f"profiles.{profile}.model_config must be an object")
+    provider = _required_string(value, "provider", f"{profile}.model_config")
+    if provider != "managed:kimi-code":
+        raise ProfileError(
+            f"profiles.{profile}.model_config.provider must be managed:kimi-code"
+        )
+    provider_type = _required_string(
+        value, "provider_type", f"{profile}.model_config"
+    )
+    if provider_type != "kimi":
+        raise ProfileError(
+            f"profiles.{profile}.model_config.provider_type must be kimi"
+        )
+    base_url = _required_string(value, "base_url", f"{profile}.model_config")
+    if base_url != "https://api.kimi.com/coding/v1":
+        raise ProfileError(
+            f"profiles.{profile}.model_config.base_url must use the managed "
+            "Kimi Code endpoint"
+        )
+    upstream_model = _required_string(
+        value, "upstream_model", f"{profile}.model_config"
+    )
+    max_context_size = value.get("max_context_size")
+    if (
+        isinstance(max_context_size, bool)
+        or not isinstance(max_context_size, int)
+        or max_context_size <= 0
+    ):
+        raise ProfileError(
+            f"profiles.{profile}.model_config.max_context_size must be a "
+            "positive integer"
+        )
+    capabilities = _string_tuple(
+        value.get("capabilities"), f"profiles.{profile}.model_config.capabilities"
+    )
+    if capabilities != KIMI_K3_CAPABILITIES:
+        raise ProfileError(
+            f"profiles.{profile}.model_config.capabilities must match the "
+            "versioned K3 capability set"
+        )
+    support_efforts = _string_tuple(
+        value.get("support_efforts"),
+        f"profiles.{profile}.model_config.support_efforts",
+    )
+    if support_efforts != KIMI_K3_SUPPORT_EFFORTS:
+        raise ProfileError(
+            f"profiles.{profile}.model_config.support_efforts must match the "
+            "versioned K3 effort set"
+        )
+    default_effort = _required_string(
+        value, "default_effort", f"{profile}.model_config"
+    )
+    if default_effort not in support_efforts:
+        raise ProfileError(
+            f"profiles.{profile}.model_config.default_effort must be supported"
+        )
+    return KimiModelConfig(
+        provider=provider,
+        provider_type=provider_type,
+        base_url=base_url,
+        upstream_model=upstream_model,
+        max_context_size=max_context_size,
+        capabilities=capabilities,
+        support_efforts=support_efforts,
+        default_effort=default_effort,
+    )
+
+
+def _string_tuple(value: Any, path: str) -> tuple[str, ...]:
+    if (
+        not isinstance(value, list)
+        or not value
+        or any(not isinstance(item, str) or not item for item in value)
+        or len(set(value)) != len(value)
+    ):
+        raise ProfileError(f"{path} must be a non-empty list of unique strings")
+    return tuple(value)
 
 
 def _validate_effort(adapter: str, effort: str | None, profile: str) -> None:

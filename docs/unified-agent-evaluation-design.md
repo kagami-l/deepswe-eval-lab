@@ -1,6 +1,6 @@
 # DeepSWE 统一 Agent 评测基线：正式设计与实施计划
 
-状态：核心实现完成，等待真实模型 smoke 与基线冻结
+状态：核心实现完成，Kimi single smoke 已通过，等待 Claude smoke 与基线冻结
 
 确认日期：2026-08-03
 
@@ -73,7 +73,7 @@ cligent adapter 接口和同一个 Pier 自定义 Agent 驱动；single 与 coll
 | runtime 准备 | 支持独立 prepare 命令；eval 缺失时也可自动构建 |
 | 环境 | Docker-only |
 | 认证 | 优先复用 CLI 登录态；只复制认证数据，不继承个人行为配置 |
-| Kimi | 使用 cligent 正式 Kimi ACP adapter，不实现私有 prompt adapter |
+| Kimi | 使用 cligent 正式 Kimi ACP adapter；由版本化 profile 注册模型，trial 内生成最小配置 |
 | 网络 | trial 仅开放模型和认证端点 |
 | 时间预算 | single/collab 共用相同总 wall-clock 上限 |
 | artifacts | 使用统一 schema，并生成 ATIF trajectory |
@@ -84,8 +84,10 @@ cligent adapter 接口和同一个 Pier 自定义 Agent 驱动；single 与 coll
 ### 3.1 实现状态
 
 Phase 0–6 已按本设计完成，Phase 7 的无模型自动化和 Docker mount/probe 已完成。
-真实模型 smoke 尚未自动启动，因为它会消耗登录态额度或产生 API 费用，应由实验负责人
-显式选择 task、并发和 job name 后执行。
+OpenCode、Codex 和 Kimi 已由实验负责人显式启动单任务 smoke；其中 OpenCode、Codex
+完成端到端执行，Kimi 暴露出隔离 home 缺少模型注册的问题。该问题已通过版本化 profile
+和 trial 内受控配置修复，等待重新 smoke。真实模型运行会消耗登录态额度或产生 API
+费用，仍不纳入默认自动验收。
 
 | 范围 | 状态 | 实现位置 |
 |---|---|---|
@@ -96,7 +98,10 @@ Phase 0–6 已按本设计完成，Phase 7 的无模型自动化和 Docker moun
 | 独立 SingleWorkflow | 已完成 | `runtime/src/single-engine.ts` |
 | direct ReviewLoopWorkflow | 已完成 | `runtime/src/direct-engine.ts` |
 | cligent events → ATIF | 已完成 | `wip/agents/deep_swe_agent/atif.py` |
-| Codex/Claude/Kimi/OpenCode live smoke | 待显式运行 | 不在本次无费用验收中自动执行 |
+| Codex live smoke | 已完成 | 端到端通过；事件转换问题另记 cligent dogfooding issue CLI-002 |
+| OpenCode live smoke | 已完成 | 端到端执行完成；工具事件问题另记 CLI-001 |
+| Kimi live smoke | 已通过 | verifier-disabled single smoke 完成，模型、工具、patch 与 checkpoint 正常 |
+| Claude live smoke | 待显式运行 | 不在无费用验收中自动执行 |
 | Gemini live smoke | 未验证 | profile 保持 `unverified` |
 
 ## 4. 概念模型
@@ -283,7 +288,8 @@ uv run python scripts/run_agent_eval.py eval \
 
 角色的 model/effort 如需临时覆盖，可提供 `--model`、`--modifier-model`、
 `--reviewer-model` 等参数。覆盖后生成一个新的 resolved profile/config digest，并完整
-写入 metadata；不能静默改变原 profile。
+写入 metadata；不能静默改变原 profile。Kimi 是例外：模型别名还必须对应一份受控模型
+注册，首版禁止通过这些参数切换到未注册模型，应新增版本化 profile。
 
 校验规则：
 
@@ -310,8 +316,11 @@ CLI 默认自动发现以下宿主登录态，只把认证材料复制到 trial 
 | Claude Code | `CLAUDE_CODE_OAUTH_TOKEN` | `ANTHROPIC_API_KEY` 回退 |
 | Gemini | `~/.gemini/oauth_creds.json` | `GEMINI_OAUTH_CREDS_PATH` 或 API key |
 
-不会复制 `config.toml`、`settings.json`、skills、MCP、memory、history、plugins 等个人
-行为配置。建议先做 dry-run，再以并发 1 启动会真实调用模型的 smoke：
+不会复制宿主的 `config.toml`、`settings.json`、skills、MCP、memory、history、plugins
+等个人行为配置。对于 Kimi，自定义 `DeepSweAgent` 会从 resolved profile 生成一份只包含
+模型别名、provider、upstream model 和 context size 的 trial 专用 `config.toml`；这是
+评测 treatment，不是宿主个人配置。建议先做 dry-run，再以并发 1 启动会真实调用模型的
+smoke：
 
 ```bash
 uv run python scripts/run_agent_eval.py eval \
@@ -343,12 +352,34 @@ profiles:
     permissions: bypass
     benchmark_mode: true
     turn_timeout_policy: remaining-budget
+
+  kimi:
+    status: verified
+    adapter: kimi
+    model: kimi-code/k3
+    model_config:
+      provider: managed:kimi-code
+      provider_type: kimi
+      base_url: https://api.kimi.com/coding/v1
+      upstream_model: k3
+      max_context_size: 1048576
+      capabilities: [thinking, always_thinking, image_in, video_in, tool_use]
+      support_efforts: [low, high, max]
+      default_effort: high
+    effort: "on"
+    auth: kimi-login
+    permissions: auto
+    benchmark_mode: true
 ```
 
 字段要求：
 
 - `adapter`：cligent 正式 adapter 名称。
 - `model`、`effort`：必须显式冻结；不得依赖 provider 动态默认值。
+- `model_config`：首版仅用于 Kimi，注册 `model` 别名对应的 managed provider、provider
+  type/base URL、上游模型、context size、capabilities 和 reasoning effort 元数据；属于
+  非秘密 treatment 配置。OAuth provider 通过固定的 trial 内文件引用
+  `oauth/kimi-code` 绑定登录态，profile 不包含 token。
 - `auth`：描述认证类别和发现规则，不包含秘密。
 - `permissions`：映射到各 adapter 的确定性 headless 策略。
 - `benchmark_mode`：禁用用户配置、自动更新、telemetry 和交互。
@@ -418,6 +449,14 @@ setup 阶段只做轻量操作：
 - 上传或写入 execution plan、凭据和受控配置。
 - 不访问 npm/PyPI，不执行在线安装。
 
+Kimi 的 `KIMI_CODE_HOME` 指向 trial 临时目录。Pier 本身不提供 Kimi 配置生成能力；本
+项目的 `DeepSweAgent` 根据 ExecutionPlan 中每个 Kimi role 的 `model_config` 生成最小
+`config.toml`。配置同时包含 `providers` 与 `models` 注册；managed provider 使用固定
+`oauth.storage=file`、`oauth.key=oauth/kimi-code` 引用已复制的登录文件，不内嵌凭据。如果
+modifier/reviewer 都使用 Kimi，则同一文件注册两个 role 所需的所有模型；相同别名或
+provider 存在冲突定义时在启动前失败。cligent 仍只接收 profile 的模型别名，Kimi ACP
+从该 trial 配置解析别名。此过程不需要修改或重建通用 runtime 镜像。
+
 OpenCode 使用 `OPENCODE_PURE=1`，禁用个人/项目配置和 models catalog 自动刷新；认证
 仍从 trial 专用临时目录注入。`XDG_CONFIG_HOME` 与 `OPENCODE_CONFIG_DIR` 指向同一
 OpenCode 配置目录，避免重复初始化两套目录。
@@ -431,7 +470,7 @@ OpenCode 配置目录，避免重复初始化两套目录。
 1. 校验 execution plan 和 runtime digest。
 2. 根据使用到的 roles 合并 network allowlist。
 3. 只注入实际使用 adapter 的凭据。
-4. 在 `/tmp` 创建隔离、可写的 Agent home。
+4. 在 `/tmp` 创建隔离、可写的 Agent home，并生成 profile 声明的受控配置。
 5. 启动容器内 orchestrator。
 6. 读取 summary/trajectory 并回填 `AgentContext`。
 7. 在成功、失败和超时路径上 best-effort 清理凭据。
@@ -440,6 +479,8 @@ OpenCode 配置目录，避免重复初始化两套目录。
 
 - 只复制认证所需的最小文件或显式 token。
 - 不复制宿主用户的模型默认值、prompt、skills、MCP、memory、plugins 或 instructions。
+- Kimi 的 trial `config.toml` 只允许包含 resolved profile 声明的模型注册，不得合并宿主
+  `config.toml`。
 - 保留任务仓库内已提交的 `AGENTS.md`、`CLAUDE.md`、项目 skills 等，因为它们属于
   benchmark 输入。
 - 秘密不得出现在命令行文本、Docker layers、runtime labels、events、trajectory 或 job
@@ -725,6 +766,36 @@ Gemini 的代码、profile 和 runtime 依赖可以进入首版，但保持 `unv
   OpenCode server 启动均通过。
 - OpenCode 启动后未生成 `package.json`、`node_modules`、下载版 `rg` 或缓存版
   `models.json`；本地数据库、日志和 `.gitignore` 仍按预期写入 trial 临时目录。
+
+### 18.5 2026-08-03 single live smoke 与 Kimi 配置修复
+
+- OpenCode 单任务 smoke 完成统一 CLI、Pier、shared runtime、Agent 和 verifier 的端到端
+  流程；发现的 cligent 工具事件转换问题记录为 dogfooding issue CLI-001。
+- Codex 单任务 smoke 完成任务并取得 verifier reward 1；命令执行和 MCP 调用未转换为
+  工具事件的问题记录为 CLI-002。
+- Kimi 首次 smoke 在读取 prompt 前失败：profile 传入 `k3`，但只含登录态的隔离
+  `KIMI_CODE_HOME` 没有对应的 `config.toml` 模型注册。这是评测 harness 配置缺口，不是
+  模型能力结果，也不是 cligent adapter 缺陷。
+- 第一轮修复只生成了 model 表；第二次 smoke 已能识别 `kimi-code/k3`，随后明确报错
+  `Provider "managed:kimi-code" ... is not configured`，证明还需要对应的 provider 表。
+- 完整修复后 Kimi profile 使用别名 `kimi-code/k3`，冻结 managed provider、provider
+  type/base URL、upstream model 与 `max_context_size=1048576`。`DeepSweAgent` 在每个
+  trial 内生成 provider、OAuth 文件引用和 model 注册，仍只从宿主复制
+  OAuth/credential/device 登录材料，不复制个人 `config.toml` 或 token 值。
+- 第三次 smoke 已通过 provider/OAuth 解析，但 Kimi 将缺少 capability 元数据的 K3 视为
+  只支持 `effort=off`，因此拒绝 cligent 的兼容值 `effort=on`。profile 随后补齐 K3 的
+  `thinking`/`always_thinking`/`tool_use` 等 capabilities，以及受支持和默认 effort；这些
+  字段与模型注册一起进入 trial 配置。
+- 第四次 verifier-disabled smoke 成功完成：实际模型为 `kimi-code/k3`，Agent 运行
+  1,234,529 ms，产生 56 对可关联的 `tool_use/tool_result`、22,963-byte patch 和最终
+  checkpoint，workflow outcome 为 `completed`，无 exception。该结果验证了统一 CLI、
+  Pier、shared runtime、登录态、cligent Kimi ACP、工具执行和 artifact 链路；由于关闭了
+  verifier，reward 按预期为空。
+- 本次 Kimi 运行的 cligent 事件没有提供可用 token usage，并将 missing 映射为 0；这些
+  字段应解释为 unknown，而不是实际零消耗。问题已记录为 dogfooding issue CLI-003。
+- Kimi 未注册的临时 `--model` override 会在 launcher 阶段失败；其他 Kimi treatment
+  应通过新增版本化 profile 表达。
+- profile、planning 和 Pier 配置注入定向测试共 21 个通过；Kimi 真实模型 smoke 已通过。
 
 ## 19. 分阶段实施计划
 

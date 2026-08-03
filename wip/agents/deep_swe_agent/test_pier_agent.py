@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -12,13 +13,36 @@ from wip.agents.deep_swe_agent.pier_agent import DeepSweAgent, ExecutionPlanErro
 
 def plan(*, modifier: str = "codex", reviewer: str | None = None) -> dict:
     def role(name: str) -> dict:
-        return {
+        value = {
             "name": name,
             "adapter": name,
             "model": f"{name}-model",
             "effort": "high",
             "permissions": ("auto" if name in {"kimi", "opencode"} else "bypass"),
         }
+        if name == "kimi":
+            value.update(
+                {
+                    "model": "kimi-code/k3",
+                    "model_config": {
+                        "provider": "managed:kimi-code",
+                        "provider_type": "kimi",
+                        "base_url": "https://api.kimi.com/coding/v1",
+                        "upstream_model": "k3",
+                        "max_context_size": 1048576,
+                        "capabilities": [
+                            "thinking",
+                            "always_thinking",
+                            "image_in",
+                            "video_in",
+                            "tool_use",
+                        ],
+                        "support_efforts": ["low", "high", "max"],
+                        "default_effort": "high",
+                    },
+                }
+            )
+        return value
 
     topology = "collab" if reviewer else "single"
     return {
@@ -57,6 +81,7 @@ class _Environment:
 
     def __init__(self) -> None:
         self.uploads: list[tuple[Path, str]] = []
+        self.uploaded_contents: dict[str, str] = {}
 
     def agent_process_env(self, env):
         return env
@@ -66,6 +91,7 @@ class _Environment:
 
     async def upload_file(self, source: Path, target: str) -> None:
         self.uploads.append((source, target))
+        self.uploaded_contents[target] = source.read_text()
 
 
 class PierAgentTests(unittest.IsolatedAsyncioTestCase):
@@ -92,7 +118,7 @@ class PierAgentTests(unittest.IsolatedAsyncioTestCase):
             domains = agent(Path(directory), value).network_allowlist().domains
         self.assertEqual(domains, ["api.deepseek.com"])
 
-    async def test_kimi_injection_copies_credentials_but_not_behavior_config(
+    async def test_kimi_injection_copies_credentials_and_generates_model_config(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -112,8 +138,87 @@ class PierAgentTests(unittest.IsolatedAsyncioTestCase):
             environment = _Environment()
             await instance._configure_credentials(environment, {})
             sources = {source.name for source, _ in environment.uploads}
-            self.assertEqual(sources, {"kimi-code.json", "kimi-code", "device_id"})
-            self.assertNotIn("config.toml", sources)
+            self.assertEqual(
+                sources, {"kimi-code.json", "kimi-code", "device_id", "config.toml"}
+            )
+            self.assertNotIn(
+                home / "config.toml", [source for source, _ in environment.uploads]
+            )
+            generated = environment.uploaded_contents[
+                "/tmp/deep-swe-agent-secrets/kimi/config.toml"
+            ]
+            self.assertEqual(
+                generated,
+                'default_model = "kimi-code/k3"\n\n'
+                '[providers."managed:kimi-code"]\n'
+                'type = "kimi"\n'
+                'api_key = ""\n'
+                'base_url = "https://api.kimi.com/coding/v1"\n\n'
+                '[providers."managed:kimi-code".oauth]\n'
+                'storage = "file"\n'
+                'key = "oauth/kimi-code"\n\n'
+                '[models."kimi-code/k3"]\n'
+                'provider = "managed:kimi-code"\n'
+                'model = "k3"\n'
+                "max_context_size = 1048576\n"
+                'capabilities = [ "thinking", "always_thinking", "image_in", '
+                '"video_in", "tool_use" ]\n'
+                'support_efforts = [ "low", "high", "max" ]\n'
+                'default_effort = "high"\n',
+            )
+            self.assertNotIn("personal", generated)
+            parsed = tomllib.loads(generated)
+            self.assertEqual(parsed["default_model"], "kimi-code/k3")
+            self.assertEqual(
+                parsed["providers"]["managed:kimi-code"]["oauth"],
+                {"storage": "file", "key": "oauth/kimi-code"},
+            )
+            self.assertEqual(
+                parsed["models"]["kimi-code/k3"]["max_context_size"], 1048576
+            )
+
+    def test_kimi_plan_requires_model_registration(self) -> None:
+        value = plan(modifier="kimi")
+        del value["roles"]["modifier"]["model_config"]
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ExecutionPlanError, "model_config"):
+                agent(Path(directory), value)
+
+    async def test_kimi_config_registers_models_for_both_roles(self) -> None:
+        value = plan(modifier="kimi", reviewer="kimi")
+        value["roles"]["reviewer"]["model"] = "kimi-code/k3-256k"
+        value["roles"]["reviewer"]["model_config"] = {
+            "provider": "managed:kimi-code",
+            "provider_type": "kimi",
+            "base_url": "https://api.kimi.com/coding/v1",
+            "upstream_model": "k3",
+            "max_context_size": 262144,
+            "capabilities": [
+                "thinking",
+                "always_thinking",
+                "image_in",
+                "video_in",
+                "tool_use",
+            ],
+            "support_efforts": ["low", "high", "max"],
+            "default_effort": "high",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            instance = agent(Path(directory), value)
+            environment = _Environment()
+            await instance._configure_kimi_model(environment)
+        generated = environment.uploaded_contents[
+            "/tmp/deep-swe-agent-secrets/kimi/config.toml"
+        ]
+        self.assertIn('[models."kimi-code/k3"]', generated)
+        self.assertIn('[models."kimi-code/k3-256k"]', generated)
+
+    def test_kimi_plan_rejects_conflicting_model_registrations(self) -> None:
+        value = plan(modifier="kimi", reviewer="kimi")
+        value["roles"]["reviewer"]["model_config"]["max_context_size"] = 262144
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ExecutionPlanError, "conflicting"):
+                agent(Path(directory), value)
 
     async def test_opencode_uses_immutable_runtime_assets_without_user_config(
         self,

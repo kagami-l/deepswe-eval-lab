@@ -43,6 +43,40 @@ class ProfileRegistryTests(unittest.TestCase):
         with self.assertRaisesRegex(ProfileError, "unsupported for kimi"):
             self.registry.resolve("kimi", effort="high")
 
+    def test_kimi_profile_resolves_registered_model(self) -> None:
+        profile = self.registry.resolve("kimi")
+        self.assertEqual(profile.model, "kimi-code/k3")
+        self.assertIsNotNone(profile.model_config)
+        assert profile.model_config is not None
+        self.assertEqual(profile.model_config.provider, "managed:kimi-code")
+        self.assertEqual(profile.model_config.provider_type, "kimi")
+        self.assertEqual(
+            profile.model_config.base_url, "https://api.kimi.com/coding/v1"
+        )
+        self.assertEqual(profile.model_config.upstream_model, "k3")
+        self.assertEqual(profile.model_config.max_context_size, 1048576)
+        self.assertIn("always_thinking", profile.model_config.capabilities)
+        self.assertEqual(
+            profile.model_config.support_efforts, ("low", "high", "max")
+        )
+        self.assertEqual(profile.model_config.default_effort, "high")
+
+    def test_kimi_rejects_unregistered_model_override(self) -> None:
+        with self.assertRaisesRegex(ProfileError, "versioned profile"):
+            self.registry.resolve("kimi", model="kimi-code/k3-256k")
+
+    def test_kimi_requires_model_registration(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "profiles.json"
+            path.write_text(
+                '{"schema_version":1,"profiles":{"kimi":{'
+                '"status":"verified","adapter":"kimi",'
+                '"model":"kimi-code/k3","effort":"on","auth":"x",'
+                '"permissions":"auto"}}}'
+            )
+            with self.assertRaisesRegex(ProfileError, "model_config"):
+                ProfileRegistry.load(path)
+
 
 if __name__ == "__main__":
     unittest.main()

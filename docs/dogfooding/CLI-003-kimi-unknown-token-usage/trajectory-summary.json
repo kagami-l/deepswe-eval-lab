@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "issueId": "CLI-003",
+  "source": {
+    "file": "trajectory.json",
+    "sha256": "d270fdbfbe61442601dc1882d3224c245bdec37af2d8ecb19e10a2a7b979c4c8"
+  },
+  "trajectorySchema": "ATIF-v1.7",
+  "steps": 2,
+  "agentSteps": 1,
+  "toolCalls": 56,
+  "observations": 1,
+  "reportedPromptTokens": 0,
+  "reportedCompletionTokens": 0
+}
