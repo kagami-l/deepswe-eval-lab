@@ -1,6 +1,6 @@
 # DeepSWE 统一 Agent 评测基线：正式设计与实施计划
 
-状态：核心实现完成，Kimi single smoke 已通过，等待 Claude smoke 与基线冻结
+状态：核心实现完成，Kimi single smoke 已通过，Claude smoke 暂缓，等待 collab smoke 与基线冻结
 
 确认日期：2026-08-03
 
@@ -101,7 +101,7 @@ profile 和 trial 内受控配置修复；后续 verifier-enabled smoke 也已�
 | Codex live smoke | 已完成 | 端到端通过；事件转换问题另记 cligent dogfooding issue CLI-002 |
 | OpenCode live smoke | 已完成 | 端到端执行完成；工具事件问题另记 CLI-001 |
 | Kimi live smoke | 已通过 | verifier-enabled single smoke 完成；Agent、工具、patch、checkpoint 与计分链路正常 |
-| Claude live smoke | 待显式运行 | 不在无费用验收中自动执行 |
+| Claude live smoke | 暂缓 | 当前阶段显式跳过；认证创建和注入见 `docs/claude-code-oauth-token.md` |
 | Gemini live smoke | 未验证 | profile 保持 `unverified` |
 
 ## 4. 概念模型
@@ -315,6 +315,9 @@ CLI 默认自动发现以下宿主登录态，只把认证材料复制到 trial 
 | OpenCode | `~/.local/share/opencode/auth.json` | `OPENCODE_AUTH_JSON_PATH` |
 | Claude Code | `CLAUDE_CODE_OAUTH_TOKEN` | `ANTHROPIC_API_KEY` 回退 |
 | Gemini | `~/.gemini/oauth_creds.json` | `GEMINI_OAUTH_CREDS_PATH` 或 API key |
+
+Claude 长期 OAuth token 的创建、当前 shell 注入、`.env` 使用和安全约束见
+[`claude-code-oauth-token.md`](./claude-code-oauth-token.md)。
 
 Kimi 的非 dry-run 启动会在准备 runtime 和调用 Pier 前校验登录态结构：OAuth 文件必须
 包含非空材料，或 `credentials/kimi-code.json` 必须包含非空 `access_token` 或
