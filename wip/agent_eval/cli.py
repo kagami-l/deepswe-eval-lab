@@ -12,6 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .credentials import require_kimi_auth_home
 from .pier_command import build_pier_command
 from .planning import (
     DEFAULT_CLEANUP_RESERVE_SECONDS,
@@ -179,6 +180,15 @@ def _network_policy(plan: dict[str, Any]) -> dict[str, Any]:
     return {"mode": "provider-only", "domains": sorted(domains)}
 
 
+def _require_plan_credentials(plan: dict[str, Any]) -> None:
+    roles = plan.get("roles") or {}
+    if any(
+        isinstance(role, dict) and role.get("adapter") == "kimi"
+        for role in (roles.get("modifier"), roles.get("reviewer"))
+    ):
+        require_kimi_auth_home(os.environ.get("KIMI_AUTH_HOME_PATH"))
+
+
 def _git_metadata() -> dict[str, Any]:
     def run(*args: str) -> str | None:
         result = subprocess.run(
@@ -301,6 +311,8 @@ def _evaluate(args: argparse.Namespace, argv: list[str]) -> int:
     )
     if args.n_attempts < 1 or args.n_concurrent < 1:
         raise ValueError("--n-attempts and --n-concurrent must be positive")
+    if not args.dry_run:
+        _require_plan_credentials(plan.to_dict())
     manager = RuntimeImageManager(spec)
     runtime_status = (
         manager.inspect()

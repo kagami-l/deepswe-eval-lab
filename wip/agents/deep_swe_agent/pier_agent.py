@@ -19,6 +19,11 @@ from pier.models.agent.network import NetworkAllowlist
 from pier.utils.trajectory_metrics import populate_context_from_final_metrics
 from pier.utils.trajectory_utils import format_trajectory_json
 
+from wip.agent_eval.credentials import (
+    has_kimi_login_material,
+    resolve_kimi_auth_home,
+)
+
 from .atif import events_to_trajectory, load_events
 
 
@@ -303,20 +308,12 @@ class DeepSweAgent(BaseInstalledAgent):
             "GEMINI_OAUTH_CREDS_PATH", Path.home() / ".gemini" / "oauth_creds.json"
         )
 
+    @staticmethod
+    def _has_kimi_login_material(home: Path) -> bool:
+        return has_kimi_login_material(home)
+
     def _resolve_kimi_home(self) -> Path | None:
-        explicit = self._get_env("KIMI_AUTH_HOME_PATH")
-        home = Path(explicit).expanduser() if explicit else Path.home() / ".kimi-code"
-        if explicit and not home.is_dir():
-            raise ValueError(
-                f"KIMI_AUTH_HOME_PATH points to a missing directory: {explicit}"
-            )
-        if not home.is_dir():
-            return None
-        credential_candidates = (
-            home / "credentials" / "kimi-code.json",
-            home / "oauth" / "kimi-code",
-        )
-        return home if any(path.is_file() for path in credential_candidates) else None
+        return resolve_kimi_auth_home(self._get_env("KIMI_AUTH_HOME_PATH"))
 
     def _has_any_env(self, names: tuple[str, ...]) -> bool:
         return any(bool(self._get_env(name)) for name in names)
@@ -331,7 +328,9 @@ class DeepSweAgent(BaseInstalledAgent):
             if not self._has_any_env(("OPENAI_API_KEY", "CODEX_API_KEY")):
                 missing.append("~/.codex/auth.json or an OpenAI API key")
         if "kimi" in self.adapters_in_use and self._resolve_kimi_home() is None:
-            missing.append("~/.kimi-code login credential")
+            missing.append(
+                "~/.kimi-code login credential with a non-empty access or refresh token"
+            )
         if "opencode" in self.adapters_in_use and self._resolve_opencode_auth() is None:
             if not self._has_any_env(
                 (

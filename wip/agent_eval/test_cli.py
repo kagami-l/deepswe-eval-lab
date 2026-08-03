@@ -89,6 +89,27 @@ class CliTests(unittest.TestCase):
                     ]
                 )
 
+    def test_live_kimi_eval_checks_login_before_preparing_runtime(self) -> None:
+        with mock.patch.object(
+            cli,
+            "require_kimi_auth_home",
+            side_effect=ValueError("empty Kimi login"),
+        ) as require_auth:
+            with mock.patch.object(cli.RuntimeImageManager, "prepare") as prepare:
+                with redirect_stderr(io.StringIO()):
+                    with self.assertRaisesRegex(SystemExit, "2"):
+                        cli.main(
+                            [
+                                "eval",
+                                "--task",
+                                TASK,
+                                "--agent",
+                                "kimi",
+                            ]
+                        )
+        require_auth.assert_called_once()
+        prepare.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

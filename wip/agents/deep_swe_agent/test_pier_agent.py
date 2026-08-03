@@ -177,6 +177,58 @@ class PierAgentTests(unittest.IsolatedAsyncioTestCase):
                 parsed["models"]["kimi-code/k3"]["max_context_size"], 1048576
             )
 
+    def test_kimi_login_material_accepts_non_empty_credential_tokens(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            (home / "credentials").mkdir()
+            credentials = home / "credentials" / "kimi-code.json"
+
+            credentials.write_text(json.dumps({"access_token": "access"}))
+            self.assertTrue(DeepSweAgent._has_kimi_login_material(home))
+
+            credentials.write_text(json.dumps({"refresh_token": "refresh"}))
+            self.assertTrue(DeepSweAgent._has_kimi_login_material(home))
+
+    def test_kimi_login_material_accepts_non_empty_oauth_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            (home / "oauth").mkdir()
+            (home / "oauth" / "kimi-code").write_text("oauth-token")
+            self.assertTrue(DeepSweAgent._has_kimi_login_material(home))
+
+    def test_kimi_login_material_rejects_empty_or_malformed_credentials(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            (home / "credentials").mkdir()
+            (home / "oauth").mkdir()
+            credentials = home / "credentials" / "kimi-code.json"
+            oauth = home / "oauth" / "kimi-code"
+
+            credentials.write_text(
+                json.dumps({"access_token": "", "refresh_token": "   "})
+            )
+            oauth.write_text("\n")
+            self.assertFalse(DeepSweAgent._has_kimi_login_material(home))
+
+            credentials.write_text("not-json")
+            self.assertFalse(DeepSweAgent._has_kimi_login_material(home))
+
+    def test_explicit_kimi_home_rejects_empty_login_state(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            home = root / "kimi"
+            (home / "credentials").mkdir(parents=True)
+            (home / "credentials" / "kimi-code.json").write_text(
+                json.dumps({"access_token": "", "refresh_token": ""})
+            )
+            instance = agent(
+                root,
+                plan(modifier="kimi"),
+                extra_env={"KIMI_AUTH_HOME_PATH": str(home)},
+            )
+            with self.assertRaisesRegex(ValueError, "non-empty Kimi login"):
+                instance._require_credentials()
+
     def test_kimi_plan_requires_model_registration(self) -> None:
         value = plan(modifier="kimi")
         del value["roles"]["modifier"]["model_config"]

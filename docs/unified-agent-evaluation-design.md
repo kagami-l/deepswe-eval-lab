@@ -84,10 +84,10 @@ cligent adapter 接口和同一个 Pier 自定义 Agent 驱动；single 与 coll
 ### 3.1 实现状态
 
 Phase 0–6 已按本设计完成，Phase 7 的无模型自动化和 Docker mount/probe 已完成。
-OpenCode、Codex 和 Kimi 已由实验负责人显式启动单任务 smoke；其中 OpenCode、Codex
-完成端到端执行，Kimi 暴露出隔离 home 缺少模型注册的问题。该问题已通过版本化 profile
-和 trial 内受控配置修复，等待重新 smoke。真实模型运行会消耗登录态额度或产生 API
-费用，仍不纳入默认自动验收。
+OpenCode、Codex 和 Kimi 已由实验负责人显式启动单任务 smoke，并完成各自规定的端到端
+链路验收。Kimi 过程中暴露出的隔离 home 模型/provider/capability 注册问题已通过版本化
+profile 和 trial 内受控配置修复；后续 verifier-enabled smoke 也已确认 patch 应用、测试
+执行和计分正常。真实模型运行会消耗登录态额度或产生 API 费用，仍不纳入默认自动验收。
 
 | 范围 | 状态 | 实现位置 |
 |---|---|---|
@@ -100,7 +100,7 @@ OpenCode、Codex 和 Kimi 已由实验负责人显式启动单任务 smoke；其
 | cligent events → ATIF | 已完成 | `wip/agents/deep_swe_agent/atif.py` |
 | Codex live smoke | 已完成 | 端到端通过；事件转换问题另记 cligent dogfooding issue CLI-002 |
 | OpenCode live smoke | 已完成 | 端到端执行完成；工具事件问题另记 CLI-001 |
-| Kimi live smoke | 已通过 | verifier-disabled single smoke 完成，模型、工具、patch 与 checkpoint 正常 |
+| Kimi live smoke | 已通过 | verifier-enabled single smoke 完成；Agent、工具、patch、checkpoint 与计分链路正常 |
 | Claude live smoke | 待显式运行 | 不在无费用验收中自动执行 |
 | Gemini live smoke | 未验证 | profile 保持 `unverified` |
 
@@ -315,6 +315,11 @@ CLI 默认自动发现以下宿主登录态，只把认证材料复制到 trial 
 | OpenCode | `~/.local/share/opencode/auth.json` | `OPENCODE_AUTH_JSON_PATH` |
 | Claude Code | `CLAUDE_CODE_OAUTH_TOKEN` | `ANTHROPIC_API_KEY` 回退 |
 | Gemini | `~/.gemini/oauth_creds.json` | `GEMINI_OAUTH_CREDS_PATH` 或 API key |
+
+Kimi 的非 dry-run 启动会在准备 runtime 和调用 Pier 前校验登录态结构：OAuth 文件必须
+包含非空材料，或 `credentials/kimi-code.json` 必须包含非空 `access_token` 或
+`refresh_token`。空 token、空文件和损坏的 JSON 均直接提示重新执行 `kimi login`；每个
+trial 在注入前还会再次执行相同校验，以覆盖 CLI 预检后的状态变化。
 
 不会复制宿主的 `config.toml`、`settings.json`、skills、MCP、memory、history、plugins
 等个人行为配置。对于 Kimi，自定义 `DeepSweAgent` 会从 resolved profile 生成一份只包含
@@ -791,6 +796,12 @@ Gemini 的代码、profile 和 runtime 依赖可以进入首版，但保持 `unv
   checkpoint，workflow outcome 为 `completed`，无 exception。该结果验证了统一 CLI、
   Pier、shared runtime、登录态、cligent Kimi ACP、工具执行和 artifact 链路；由于关闭了
   verifier，reward 按预期为空。
+- 随后的 verifier-enabled smoke 完整通过流程验收：Agent 运行 1,195,164 ms，产生 46 对
+  `tool_use/tool_result`、24,679-byte patch 和最终 checkpoint；Pier 成功应用该 patch 并
+  执行 23 个计分测试。结果为 P2P `3/3`、F2P `17/20`、partial `0.869565`、binary reward
+  `0`。三个失败测试均指向 Agent 实现遗漏绝对路径的 `resolve` debug trace，属于真实的
+  部分解题失败，不是认证、artifact 或 verifier 故障。因此 Kimi smoke 的评测链路验收
+  判定为通过，且 smoke 通过不要求被测 Agent 必须取得 reward 1。
 - 本次 Kimi 运行的 cligent 事件没有提供可用 token usage，并将 missing 映射为 0；这些
   字段应解释为 unknown，而不是实际零消耗。问题已记录为 dogfooding issue CLI-003。
 - Kimi 未注册的临时 `--model` override 会在 launcher 阶段失败；其他 Kimi treatment
