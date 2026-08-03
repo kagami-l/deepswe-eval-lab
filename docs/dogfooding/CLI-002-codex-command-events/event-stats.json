@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "issueId": "CLI-002",
+  "environment": {
+    "cligent": "0.16.0",
+    "codexCli": "0.144.5",
+    "codexSdk": "0.144.5"
+  },
+  "source": {
+    "file": "events.jsonl",
+    "sha256": "24689dc30680101f8a2e583ec7303d2fb8fb0e5ec6f0334bf7cfe94d92497bd2"
+  },
+  "events": {
+    "total": 20,
+    "byType": {
+      "init": 1,
+      "text": 7,
+      "codex:file_change": 11,
+      "tool_use": 0,
+      "tool_result": 0,
+      "done": 1
+    }
+  },
+  "result": {
+    "status": "success",
+    "reportedToolUses": 0,
+    "patchBytes": 23143,
+    "verifierReward": 1
+  }
+}
+

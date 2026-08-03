@@ -11,6 +11,7 @@
 | ID | 标题 | 组件 | 严重程度 | 状态 | 首次发现 |
 |---|---|---|---|---|---|
 | CLI-001 | OpenCode 工具事件丢失参数和结果，并重复计数 | OpenCode adapter | High | Open | 2026-08-03 |
+| CLI-002 | Codex 命令执行和 MCP 调用未转换成工具事件 | Codex adapter | High | Open | 2026-08-03 |
 
 ## 状态约定
 
@@ -203,3 +204,126 @@ event fixtures，并断言完整的 normalized event 序列。
   仓库实际路径为准）
 - OpenCode SDK ToolPart 类型：`@opencode-ai/sdk/dist/gen/types.gen.d.ts`
 
+---
+
+## CLI-002：Codex 命令执行和 MCP 调用未转换成工具事件
+
+### 基本信息
+
+- 组件：`@sublang/cligent` Codex adapter
+- dogfooding 环境：
+  - cligent `0.16.0`
+  - Codex CLI `0.144.5`
+  - `@openai/codex-sdk` `0.144.5`
+- 严重程度：`High`
+- 状态：`Open`
+- 证据目录：[`CLI-002-codex-command-events/`](./CLI-002-codex-command-events/)
+
+### 现象
+
+一次成功完成并通过 verifier 的真实运行只产生了以下 cligent 事件：
+
+```text
+init                 1
+text                 7
+codex:file_change   11
+done                 1
+tool_use             0
+tool_result          0
+```
+
+最终 `done.payload.usage.toolUses` 为 0，下游 trajectory 也没有任何 tool call 或
+observation。运行期间实际完成了代码修改和命令验证，因此统一事件流无法表达 Codex 的
+shell/MCP 工具执行过程。
+
+统计和最小样本见：
+
+- [`event-stats.json`](./CLI-002-codex-command-events/event-stats.json)
+- [`representative-events.jsonl`](./CLI-002-codex-command-events/representative-events.jsonl)
+- [`trajectory-summary.json`](./CLI-002-codex-command-events/trajectory-summary.json)
+
+### 定位结论
+
+Codex SDK `0.144.5` 的 ThreadItem 使用以下实际类型：
+
+```ts
+type CommandExecutionItem = {
+  id: string
+  type: "command_execution"
+  command: string
+  aggregated_output: string
+  exit_code?: number
+  status: "in_progress" | "completed" | "failed"
+}
+
+type McpToolCallItem = {
+  id: string
+  type: "mcp_tool_call"
+  server: string
+  tool: string
+  arguments: unknown
+  result?: unknown
+  error?: { message: string }
+  status: "in_progress" | "completed" | "failed"
+}
+```
+
+cligent `0.16.0` 的 `parseItemCompleted()` 只把 `tool_call`、`function_call`、
+`tool_use` 识别为调用，并把 `tool_result`、`function_call_result`、`tool_output`
+识别为结果。它没有处理 SDK 实际输出的 `command_execution` 和 `mcp_tool_call`。
+
+同时，adapter 只重点处理 `item.completed`，没有利用 `item.started` 和 `item.updated`
+维护工具生命周期。Codex SDK usage 本身不提供 cligent 的 `toolUses` 字段，adapter 又没有
+独立计数，因此最终固定退化为 0。
+
+### 建议处理方式
+
+#### 1. 映射 command_execution 生命周期
+
+按 `item.id` 维护状态：
+
+- 首次 `item.started` 或 `in_progress`：生成一次 `tool_use`。
+- `toolName` 使用稳定名称，例如 `shell` 或 `command_execution`。
+- `input` 至少保留 `{ "command": item.command }`。
+- `completed/failed`：生成一次对应的 `tool_result`。
+- result 建议保留 `aggregated_output` 和 `exit_code`，避免丢失退出状态。
+
+#### 2. 映射 mcp_tool_call 生命周期
+
+- `toolUseId` 使用 `item.id`。
+- `toolName` 应稳定表达 server/tool，例如 `${server}:${tool}`，或将 server 放入扩展字段。
+- `input` 使用 `item.arguments`。
+- completed 使用 `item.result`，failed 使用 `item.error`。
+- 同一 ID 最多一个 `tool_use` 和一个 terminal `tool_result`。
+
+#### 3. 由 adapter 统计唯一工具调用
+
+维护已见 item ID 集合，在首次生成 `tool_use` 时增加计数，并将该值写入
+`done.payload.usage.toolUses`。不能依赖 Codex SDK token usage 提供工具计数。
+
+### 建议的回归测试
+
+1. `command_execution` 的 started → updated → completed 只生成一对事件。
+2. command failed 保留非零 exit code 和输出。
+3. `mcp_tool_call` completed/failed 分别映射正确结果。
+4. 重复的 updated/completed 不重复生成 terminal result。
+5. 并行 command/MCP item 按各自 ID 正确关联。
+6. `toolUses` 等于唯一 command/MCP 调用数。
+7. 现有 `codex:file_change` 事件保持兼容。
+
+本次 dogfooding 没有保存转换前的 Codex SDK raw event stream。修复时应根据 SDK
+ThreadItem 类型补齐 fixture，并增加一次真实运行验收。
+
+### 验收标准
+
+- shell 和 MCP 调用均形成可关联的 `tool_use/tool_result`。
+- command、arguments、output/error、exit code 不丢失。
+- 每个 item ID 最多一个调用事件和一个 terminal result。
+- `done.usage.toolUses` 等于唯一工具调用数。
+- 成功执行命令的真实运行不再出现 `toolUses=0`。
+
+### 相关源码
+
+- cligent Codex adapter：`packages/cligent/src/adapters/codex.ts`（以 cligent 仓库实际
+  路径为准）
+- Codex SDK ThreadItem 类型：`@openai/codex-sdk/dist/index.d.ts`
