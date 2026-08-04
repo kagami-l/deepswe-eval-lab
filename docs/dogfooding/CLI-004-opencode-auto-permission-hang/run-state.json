@@ -1,0 +1,43 @@
+{
+  "capturedAt": "2026-08-04T12:26:40+08:00",
+  "job": "unified-collab-05_sample_dev-12-tasks-20260804-115601",
+  "jobState": {
+    "completedTrials": 0,
+    "erroredTrials": 0,
+    "pendingTrials": 10,
+    "runningTrials": 2,
+    "totalTrials": 12
+  },
+  "trials": [
+    {
+      "containerStatus": "Up 30 minutes",
+      "eventBytes": 2963119,
+      "eventLines": 16293,
+      "eventSha256": "8ddb082480696063bc0156d5920b671f0fa6cdb0a335ebaeb52c061dcee3904c",
+      "lastEventAt": "2026-08-04T12:02:26.804+08:00",
+      "lastEventType": "permission_request",
+      "lastPermission": "external_directory",
+      "processesAlive": [
+        "node dist/main.js",
+        "opencode serve"
+      ],
+      "silentForSeconds": 1453,
+      "trial": "anko-typed-variable-bindings__gXSKdea"
+    },
+    {
+      "containerStatus": "Up 30 minutes",
+      "eventBytes": 2073146,
+      "eventLines": 11380,
+      "eventSha256": "7a44cd333d1e68043538d2029520a1ce4d843410cfd4aa24d9855038c814e151",
+      "lastEventAt": "2026-08-04T12:08:31.179+08:00",
+      "lastEventType": "permission_request",
+      "lastPermission": "external_directory",
+      "processesAlive": [
+        "node dist/main.js",
+        "opencode serve"
+      ],
+      "silentForSeconds": 1089,
+      "trial": "skrub-duration-encoding__U7ZTSLX"
+    }
+  ]
+}

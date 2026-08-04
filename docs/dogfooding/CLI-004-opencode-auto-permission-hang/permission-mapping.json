@@ -1,0 +1,36 @@
+{
+  "cligent": {
+    "autoModeDocumentedAs": "OpenCode global permission allow",
+    "autoModeMappedPermissions": {
+      "bash": "allow",
+      "edit": "allow",
+      "webfetch": "allow"
+    },
+    "version": "0.16.0"
+  },
+  "gap": {
+    "headlessBehavior": "permission_request emitted, no reply sent, run remains pending",
+    "missingPermission": "external_directory"
+  },
+  "opencode": {
+    "cliVersion": "1.18.10",
+    "permissionConfigIncludes": [
+      "read",
+      "edit",
+      "glob",
+      "grep",
+      "list",
+      "bash",
+      "task",
+      "external_directory",
+      "todowrite",
+      "question",
+      "webfetch",
+      "websearch",
+      "lsp",
+      "doom_loop",
+      "skill"
+    ],
+    "sdkVersion": "1.18.10"
+  }
+}

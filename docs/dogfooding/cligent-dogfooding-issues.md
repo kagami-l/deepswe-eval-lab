@@ -13,6 +13,7 @@
 | CLI-001 | OpenCode 工具事件丢失参数和结果，并重复计数 | OpenCode adapter | High | Open | 2026-08-03 |
 | CLI-002 | Codex 命令执行和 MCP 调用未转换成工具事件 | Codex adapter | High | Open | 2026-08-03 |
 | CLI-003 | Kimi 未提供 token usage 时被报告为真实零值 | Kimi adapter / usage schema | Medium | Open | 2026-08-03 |
+| CLI-004 | OpenCode auto 权限遗漏 external_directory，导致 headless run 无限等待 | OpenCode adapter / permissions | Critical | Open | 2026-08-04 |
 
 ## 状态约定
 
@@ -412,3 +413,148 @@ if (!usage) return { inputTokens: 0, outputTokens: 0, toolUses }
 
 - cligent Kimi adapter：`packages/cligent/src/adapters/kimi.ts`（以 cligent 仓库实际路径为准）
 - cligent usage schema：`packages/cligent/src/types.ts`
+
+---
+
+## CLI-004：OpenCode auto 权限遗漏 external_directory，导致 headless run 无限等待
+
+### 基本信息
+
+- 组件：`@sublang/cligent` OpenCode adapter / permission policy mapping
+- dogfooding 环境：
+  - cligent `0.16.0`
+  - OpenCode CLI `1.18.10`
+  - `@opencode-ai/sdk` `1.18.10`
+- 严重程度：`Critical`
+- 状态：`Open`
+- 证据目录：[`CLI-004-opencode-auto-permission-hang/`](./CLI-004-opencode-auto-permission-hang/)
+
+### 背景与期望
+
+cligent 文档将 `permissions: { mode: "auto" }` 定义为 OpenCode 的无人值守自动执行
+模式，并描述为 SDK 侧等价于全局 `permission: "allow"`。在 headless run 中，这一模式
+应覆盖完成正常工具调用所需的权限；即使上游仍意外发出权限请求，adapter 也不能在没有
+交互方的情况下无限等待。
+
+OpenCode SDK `1.18.10` 的 `PermissionConfig` 除了 `edit`、`bash`、`webfetch`，还包含：
+
+```text
+read, glob, grep, list, task, external_directory, todowrite, question,
+websearch, lsp, doom_loop, skill, ...
+```
+
+其中，shell 命令读写工作目录之外的路径时可能触发 `external_directory`。真实运行中，
+Agent 使用 `/tmp` 保存临时测试文件或测试输出即触发了该权限。
+
+### 现象
+
+同一批任务中的两个并发、相互独立的 OpenCode run 都出现了相同阻塞：
+
+| Trial | 最后事件 | 最后更新时间 | 取证时静默时间 | 进程状态 |
+|---|---|---|---:|---|
+| `anko-typed-variable-bindings` | `permission_request(external_directory)` | 12:02:26 | 约 24 分钟 | Node/OpenCode server 存活 |
+| `skrub-duration-encoding` | `permission_request(external_directory)` | 12:08:31 | 约 18 分钟 | Node/OpenCode server 存活 |
+
+两个事件请求的目录和 pattern 都是 `/tmp`：
+
+```json
+{"type":"permission_request","agent":"opencode","payload":{"toolName":"external_directory","input":{"directories":["/tmp"],"patterns":["/tmp/*"]}}}
+```
+
+权限请求后没有 `permission.replied`、`tool_result`、后续模型事件或 terminal `done`。
+容器、cligent runtime 和 `opencode serve` 均继续存活，所以调用方只能看到 run 长时间保持
+running，直至外层 turn/job timeout。
+
+两条投影后的终止事件和取证快照见：
+
+- [`permission-requests.jsonl`](./CLI-004-opencode-auto-permission-hang/permission-requests.jsonl)
+- [`run-state.json`](./CLI-004-opencode-auto-permission-hang/run-state.json)
+- [`permission-mapping.json`](./CLI-004-opencode-auto-permission-hang/permission-mapping.json)
+
+### 定位结论
+
+cligent `0.16.0` 的 `mapPermissionsToOpenCodeOptions()` 在 `mode === "auto"` 时生成：
+
+```ts
+permission: { edit: "allow", bash: "allow", webfetch: "allow" }
+```
+
+这不是 OpenCode 的全局 allow，只允许了三个权限名。`external_directory` 未包含其中，
+因此 OpenCode 按默认规则发出请求。
+
+OpenCode adapter 观察到 `permission.updated` / `permission.asked` 后只将其转换为统一的
+`permission_request` 事件。该路径没有调用 SDK 的 permission reply/respond API；统一
+Cligent run 接口也没有提供一个正在等待本次请求的交互回调。因此 OpenCode session 等待
+授权，adapter 等待后续 SSE，形成稳定的 headless deadlock。
+
+这是权限映射和无人值守请求处理问题，不是 CLI-001 的工具事件转换问题。CLI-001 会造成
+日志与计数失真；CLI-004 会直接阻塞 Agent 执行并消耗完整 timeout。
+
+严重程度定为 `Critical`：该问题不是可观测性降级，而是会稳定阻塞真实 Agent 执行；批量
+并发时，每个命中的 trial 都可能占用一个并发槽直到外层 timeout，使整批评测失去进展。
+
+### 建议处理方式
+
+#### 1. 让 OpenCode auto 真正表达全局 allow
+
+根据使用的 OpenCode API 版本传递真正的全局规则，而不是枚举三个工具权限：
+
+- v1 配置优先使用 SDK 支持的全局 `permission: "allow"`；
+- v2 `PermissionRuleset` 使用 OpenCode 支持的 wildcard allow rule；
+- 若当前 API 不支持 wildcard，则完整覆盖 SDK 声明的权限名，至少包括
+  `external_directory`，并用 SDK 类型/fixture 防止新权限默认回退为 ask。
+
+具体 wire shape 应以对应 OpenCode SDK 版本的类型和真实 server 行为验证，避免仅更新注释
+或只修 v1/v2 其中一条路径。
+
+#### 2. 为意外权限请求提供确定性终止语义
+
+即使 auto policy 配置正确，headless adapter 也应防御上游新增权限类型：
+
+- `mode=auto` 下收到未预期请求时，使用 SDK reply/respond API 自动批准，并继续保留
+  `permission_request` / reply 事件用于审计；或
+- 将未覆盖权限立即报告为 terminal adapter error，指出 permission 名和 request ID。
+
+不能只 emit 事件后无限等待。若未来支持 `ask`，应要求调用方显式提供 approval callback；
+没有 callback 时必须快速失败或采用文档明确的默认拒绝语义。
+
+#### 3. 保留 abort 和 timeout 可取消性
+
+等待 permission reply 的路径必须响应 `AbortSignal`，关闭 SSE/session/server，并产出可诊断
+的 terminal 状态，避免只能依赖更外层的进程超时清理。
+
+### 建议的回归测试
+
+1. OpenCode `mode=auto` 下执行写入 workspace 外临时目录的命令，不产生悬而未决的
+   `external_directory` 请求。
+2. 分别覆盖 adapter 的 v1 prompt permission 和 v2 session `PermissionRuleset`。
+3. OpenCode 新增或返回未知 permission 名时，run 自动处理或快速失败，不无限等待。
+4. `permission.asked → reply → tool completed` 形成完整、可关联的事件序列。
+5. 明确的 `ask` policy 在无 callback 时快速失败，在有 callback 时按决定回复。
+6. permission pending 期间触发 AbortSignal，run 在限定时间内退出并清理 server。
+7. 两个并发 session 的 request/reply 使用各自 ID，不相互串扰。
+
+### 验收标准
+
+- `permissions: { mode: "auto" }` 的 OpenCode run 可无人值守访问任务容器内的 `/tmp`。
+- auto 模式覆盖 `external_directory`，并与 cligent 文档中的“permission allow”语义一致。
+- 任意未处理的权限请求都不会让 run 无限保持 running。
+- 权限 request/reply 可观测且与正确 session/request ID 关联。
+- 真实并发运行不再停在 `permission_request` 直到外层 timeout。
+
+### 调用方临时缓解
+
+在 cligent 发布正式修复前，dogfooding 调用方可以对 `0.16.0` 使用严格版本限定的 runtime
+兼容补丁：为 OpenCode auto policy 和 v2 ruleset 增加 `external_directory=allow`。同时，
+OpenCode headless runner 收到任何残留 `permission_request` 时应中止当前 turn 并快速失败，
+不能继续等待交互；其他 adapter 保留各自原生的 request/reply 或自动拒绝语义。
+
+该措施只用于恢复评测可运行性，不改变本 issue 的 `Open` 状态，也不能替代 cligent 对
+全局 auto 权限语义、未知权限和 request/reply 生命周期的正式修复。升级 cligent 后应先
+移除兼容补丁，再按本节验收标准回归。
+
+### 相关源码
+
+- cligent OpenCode adapter：`packages/cligent/src/adapters/opencode.ts`（以 cligent 仓库实际路径为准）
+- cligent permission policy：`packages/cligent/src/permissions.ts`
+- OpenCode SDK permission 类型：`@opencode-ai/sdk/dist/v2/gen/types.gen.d.ts`
