@@ -15,6 +15,50 @@ TASK = "abs-module-cache-flags"
 
 
 class CliTests(unittest.TestCase):
+    def test_default_job_name_includes_task_list_filename_and_single_task(self) -> None:
+        job_name = cli._default_job_name(
+            "codex", [TASK], [Path("data/selection/one_task.txt")]
+        )
+        self.assertRegex(
+            job_name,
+            rf"^unified-codex-one_task-{TASK}-\d{{8}}-\d{{6}}$",
+        )
+
+    def test_default_job_name_includes_task_list_filename_and_task_count(self) -> None:
+        job_name = cli._default_job_name(
+            "collab",
+            ["task-a", "task-b"],
+            [Path("data/selection/05 sample confirm.txt")],
+        )
+        self.assertRegex(
+            job_name,
+            r"^unified-collab-05-sample-confirm-2-tasks-\d{8}-\d{6}$",
+        )
+
+    def test_default_job_name_includes_multiple_task_list_labels(self) -> None:
+        job_name = cli._default_job_name(
+            "opencode",
+            ["task-a", "task-b"],
+            [Path("first.txt"), Path("second.tasks.txt")],
+        )
+        self.assertRegex(
+            job_name,
+            r"^unified-opencode-first-and-second.tasks-2-tasks-\d{8}-\d{6}$",
+        )
+
+    def test_generated_job_name_is_bounded_and_keeps_timestamp(self) -> None:
+        job_name = cli._default_job_name(
+            "codex", [TASK], [Path(f"{'a' * 300}.txt")]
+        )
+        self.assertLessEqual(len(job_name), cli.MAX_JOB_NAME_LENGTH)
+        self.assertRegex(job_name, r"-[0-9a-f]{8}-\d{8}-\d{6}$")
+
+    def test_explicit_job_name_rejects_path_like_or_overlong_values(self) -> None:
+        with self.assertRaisesRegex(ValueError, "may not be"):
+            cli._validate_explicit_job_name("..")
+        with self.assertRaisesRegex(ValueError, "200 characters"):
+            cli._validate_explicit_job_name("a" * 201)
+
     def test_redacts_forwarded_secrets_from_rendered_command(self) -> None:
         values = [
             "pier",

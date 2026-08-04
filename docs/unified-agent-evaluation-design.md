@@ -289,6 +289,20 @@ uv run python scripts/run_agent_eval.py eval \
 --dry-run
 ```
 
+未显式提供 `--job-name` 时，CLI 使用
+`unified-{agent}-{scope}-{YYYYMMDD-HHMMSS}`。直接通过 `--task` 选任务时，scope 为
+单个 task name 或 `{N}-tasks`；通过 `--task-list` 选择时，scope 还会在前面加入清单
+文件名（去掉最后一个扩展名），例如：
+
+```text
+unified-codex-one_task-abs-module-cache-flags-20260804-120000
+unified-collab-05_sample_dev-12-tasks-20260804-120000
+```
+
+多个 task-list 的标签按传入顺序用 `-and-` 连接。自动名称会清理不安全字符，并限制在
+200 个字符内；超长名称使用稳定摘要缩短。显式 `--job-name` 始终优先，但同样只能使用
+字母、数字、点、下划线和连字符，且不能是 `.`、`..` 或超过 200 个字符。
+
 角色的 model/effort 如需临时覆盖，可提供 `--model`、`--modifier-model`、
 `--reviewer-model` 等参数。覆盖后生成一个新的 resolved profile/config digest，并完整
 写入 metadata；不能静默改变原 profile。Kimi 是例外：模型别名还必须对应一份受控模型

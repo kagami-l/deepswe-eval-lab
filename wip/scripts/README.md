@@ -13,6 +13,11 @@ uv run python scripts/run_agent_eval.py eval \
   --task <task> --agent collab --modifier kimi --reviewer codex --dry-run
 ```
 
+未传 `--job-name` 时，自动名称会包含 task-list 的文件名。例如
+`--task-list data/selection/05_sample_dev.txt` 会生成形如
+`unified-codex-05_sample_dev-12-tasks-20260804-120000` 的名称；显式
+`--job-name` 仍会完整覆盖该默认值。
+
 完整契约、认证路径、预算语义和验收记录见
 [`docs/unified-agent-evaluation-design.md`](../../docs/unified-agent-evaluation-design.md)。
 下文的 `run_codex_eval.sh`、`run_opencode_eval.sh`、`run_kimi_sample_dev.sh` 和

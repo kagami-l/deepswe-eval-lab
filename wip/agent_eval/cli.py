@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shlex
@@ -29,6 +30,7 @@ DEFAULT_PROFILES = REPO_ROOT / "wip/config/agent-profiles.json"
 DEFAULT_TASKS_DIR = REPO_ROOT / "tasks"
 DEFAULT_JOBS_DIR = REPO_ROOT / "jobs"
 DEFAULT_RUNTIME_TARGET = "/opt/deep-swe-agent-runtime"
+MAX_JOB_NAME_LENGTH = 200
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -101,10 +103,55 @@ def _safe_job_component(value: str) -> str:
     )
 
 
-def _default_job_name(agent: str, tasks: list[str]) -> str:
-    scope = tasks[0] if len(tasks) == 1 else f"{len(tasks)}-tasks"
+def _task_list_label(path: Path) -> str:
+    """Return a readable, path-safe label for a task-list filename."""
+    filename = path.name
+    stem = filename[: -len(path.suffix)] if path.suffix else filename
+    label = _safe_job_component(stem).strip("._-")
+    while "--" in label:
+        label = label.replace("--", "-")
+    return label or "task-list"
+
+
+def _shorten_generated_job_name(base: str, timestamp: str) -> str:
+    """Bound generated names while retaining a stable disambiguating suffix."""
+    available = MAX_JOB_NAME_LENGTH - len(timestamp) - 1
+    if len(base) <= available:
+        return f"{base}-{timestamp}"
+    digest = hashlib.sha256(base.encode()).hexdigest()[:8]
+    prefix_length = available - len(digest) - 1
+    shortened = base[:prefix_length].rstrip("._-")
+    return f"{shortened}-{digest}-{timestamp}"
+
+
+def _default_job_name(
+    agent: str, tasks: list[str], task_lists: list[Path] | None = None
+) -> str:
+    task_scope = tasks[0] if len(tasks) == 1 else f"{len(tasks)}-tasks"
+    list_labels = list(
+        dict.fromkeys(_task_list_label(path) for path in (task_lists or []))
+    )
+    scope = (
+        f"{'-and-'.join(list_labels)}-{task_scope}"
+        if list_labels
+        else task_scope
+    )
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    return _safe_job_component(f"unified-{agent}-{scope}-{timestamp}")
+    base = _safe_job_component(f"unified-{agent}-{scope}").strip("._-")
+    return _shorten_generated_job_name(base, timestamp)
+
+
+def _validate_explicit_job_name(job_name: str) -> None:
+    if not job_name or _safe_job_component(job_name) != job_name:
+        raise ValueError(
+            "--job-name may contain only letters, numbers, '.', '_' and '-'"
+        )
+    if job_name in {".", ".."}:
+        raise ValueError("--job-name may not be '.' or '..'")
+    if len(job_name) > MAX_JOB_NAME_LENGTH:
+        raise ValueError(
+            f"--job-name may not exceed {MAX_JOB_NAME_LENGTH} characters"
+        )
 
 
 _SECRET_ENV_FLAGS = {"--ae", "--agent-env", "--ve", "--verifier-env"}
@@ -267,10 +314,11 @@ def _runtime_prepare(args: argparse.Namespace) -> int:
 
 def _evaluate(args: argparse.Namespace, argv: list[str]) -> int:
     tasks_dir = args.tasks_dir.expanduser().resolve()
+    task_lists = [path.expanduser().resolve() for path in args.task_list]
     tasks = resolve_tasks(
         tasks_dir,
         args.task,
-        [path.expanduser().resolve() for path in args.task_list],
+        task_lists,
     )
     task_timeout = common_agent_timeout(tasks_dir, tasks)
     registry = ProfileRegistry.load(args.profiles.expanduser().resolve())
@@ -319,13 +367,9 @@ def _evaluate(args: argparse.Namespace, argv: list[str]) -> int:
         if args.dry_run
         else manager.prepare(rebuild=args.rebuild_runtime or args.rebuild)
     )
-    if args.job_name is not None and (
-        not args.job_name or _safe_job_component(args.job_name) != args.job_name
-    ):
-        raise ValueError(
-            "--job-name may contain only letters, numbers, '.', '_' and '-'"
-        )
-    job_name = args.job_name or _default_job_name(args.agent, tasks)
+    if args.job_name is not None:
+        _validate_explicit_job_name(args.job_name)
+    job_name = args.job_name or _default_job_name(args.agent, tasks, task_lists)
     jobs_dir = args.jobs_dir.expanduser().resolve()
     manifest_path = jobs_dir / ".agent-eval-manifests" / f"{job_name}.json"
     pier_args = list(args.pier_args)
