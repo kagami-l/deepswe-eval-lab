@@ -1,6 +1,6 @@
 # DeepSWE 统一 Agent 评测基线：正式设计与实施计划
 
-状态：核心实现完成，Kimi single smoke 已通过，Claude smoke 暂缓，等待 collab smoke 与基线冻结
+状态：核心实现与 Kimi→Codex collab 单任务 smoke 已通过，Claude smoke 暂缓，等待稳定性验证与基线冻结
 
 确认日期：2026-08-03
 
@@ -78,7 +78,7 @@ cligent adapter 接口和同一个 Pier 自定义 Agent 驱动；single 与 coll
 | 时间预算 | single/collab 共用相同总 wall-clock 上限 |
 | artifacts | 使用统一 schema，并生成 ATIF trajectory |
 | 降级 | 已有可信 checkpoint 后，review/revision 故障可降级交付 |
-| 首版验证 | 实测 Codex、Claude、Kimi、OpenCode；Gemini 暂标 unverified |
+| 首版验证 | 已实测 Codex、Kimi、OpenCode 和 Kimi→Codex collab；Claude 暂缓，Gemini 暂标 unverified |
 | 旧实现 | 保持不变，作为历史参考，不承担迁移兼容 |
 
 ### 3.1 实现状态
@@ -87,7 +87,9 @@ Phase 0–6 已按本设计完成，Phase 7 的无模型自动化和 Docker moun
 OpenCode、Codex 和 Kimi 已由实验负责人显式启动单任务 smoke，并完成各自规定的端到端
 链路验收。Kimi 过程中暴露出的隔离 home 模型/provider/capability 注册问题已通过版本化
 profile 和 trial 内受控配置修复；后续 verifier-enabled smoke 也已确认 patch 应用、测试
-执行和计分正常。真实模型运行会消耗登录态额度或产生 API 费用，仍不纳入默认自动验收。
+执行和计分正常。Kimi modifier + Codex reviewer 的单任务 review-loop smoke 也已完成一次
+修改、审查、最终修订、artifact 和 verifier 全链路，并取得 reward 1。真实模型运行会消耗
+登录态额度或产生 API 费用，仍不纳入默认自动验收。
 
 | 范围 | 状态 | 实现位置 |
 |---|---|---|
@@ -101,6 +103,7 @@ profile 和 trial 内受控配置修复；后续 verifier-enabled smoke 也已�
 | Codex live smoke | 已完成 | 端到端通过；事件转换问题另记 cligent dogfooding issue CLI-002 |
 | OpenCode live smoke | 已完成 | 端到端执行完成；工具事件问题另记 CLI-001 |
 | Kimi live smoke | 已通过 | verifier-enabled single smoke 完成；Agent、工具、patch、checkpoint 与计分链路正常 |
+| Kimi→Codex collab live smoke | 已通过 | 1 轮 review + final revision 完成，23/23 计分测试通过，reward 1 |
 | Claude live smoke | 暂缓 | 当前阶段显式跳过；认证创建和注入见 `docs/claude-code-oauth-token.md` |
 | Gemini live smoke | 未验证 | profile 保持 `unverified` |
 
@@ -810,6 +813,30 @@ Gemini 的代码、profile 和 runtime 依赖可以进入首版，但保持 `unv
 - Kimi 未注册的临时 `--model` override 会在 launcher 阶段失败；其他 Kimi treatment
   应通过新增版本化 profile 表达。
 - profile、planning 和 Pier 配置注入定向测试共 21 个通过；Kimi 真实模型 smoke 已通过。
+
+### 18.6 2026-08-03 Kimi→Codex collab live smoke
+
+- 运行 `collab/review-loop/direct` 单任务 smoke：modifier 为 `kimi-code/k3`，reviewer 为
+  `gpt-5.6-sol`，`maxReviews=1`、`maxAgentAttempts=1`，总 wall-clock 仍使用任务的 5400 秒
+  hard limit 和 5100 秒 runtime soft deadline。
+- Kimi 初始修改成功并创建 checkpoint `a005ad248d5383674a29744d1bc3f7b5bc701179`；Codex
+  reviewer 随后返回合法 `revise` JSON，包含 4 个 major/blocking findings，且
+  `verdictMismatch=false`。
+- Kimi 使用原 session 完成 final revision，创建最终 checkpoint
+  `60dbd28f476a44b57d57a562d2d0633434df1d8c`。最终 patch 为 15,109 bytes，revision 非空，
+  无 exception、timeout、protocol violation 或 degraded reason。
+- workflow outcome 为 `max_reviews_reached`：这表示唯一允许的 review 已要求修订，final
+  revision 完成后按配置不再启动第二轮 review；配合 `deliverable=true`、`error=null`，属于
+  正常可交付结果，不是失败或降级。
+- Pier verifier 成功应用最终 patch，P2P `3/3`、F2P `20/20`，23 个计分测试全部通过，
+  partial 和 binary reward 均为 `1`。该结果验证了共享总预算、Reviewer 隔离 workspace、
+  严格 review JSON、本地 transition、双 checkpoint、session resume、artifact 和 verifier
+  的完整协作链路。
+- Kimi 两轮共记录 70 对 `tool_use/tool_result`；Kimi token usage 仍为 unknown→0（CLI-003），
+  Codex 命令未转换为工具事件、`toolUses=0`（CLI-002）。二者属于已记录的 cligent
+  可观测性问题，不影响本次 review、revision、patch 或计分结论。
+- 可追溯 job 为 `unified-collab-abs-module-cache-flags-20260803-230319`，trial 为
+  `abs-module-cache-flags__UKihaYc`，总运行时间 36 分 40 秒。
 
 ## 19. 分阶段实施计划
 
