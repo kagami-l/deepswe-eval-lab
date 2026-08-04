@@ -20,6 +20,11 @@ class ProfileRegistryTests(unittest.TestCase):
         self.assertEqual(profile.model, "override")
         self.assertEqual(profile.effort, "high")
 
+    def test_opencode_profile_uses_frozen_v4_flash_default(self) -> None:
+        profile = self.registry.resolve("opencode")
+        self.assertEqual(profile.model, "deepseek/deepseek-v4-flash")
+        self.assertEqual(profile.effort, "high")
+
     def test_unverified_profile_requires_opt_in(self) -> None:
         with self.assertRaisesRegex(ProfileError, "unverified"):
             self.registry.resolve("gemini")

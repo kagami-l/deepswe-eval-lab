@@ -56,7 +56,7 @@
     "opencode": {
       "status": "verified",
       "adapter": "opencode",
-      "model": "deepseek/deepseek-v4-pro",
+      "model": "deepseek/deepseek-v4-flash",
       "effort": "high",
       "auth": "opencode-login",
       "permissions": "auto",
