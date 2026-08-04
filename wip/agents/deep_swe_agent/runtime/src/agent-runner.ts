@@ -174,6 +174,24 @@ export class CligentRunner implements AgentRunner {
         } else if (type === 'text') {
           const payload = event.payload as { content?: string } | undefined;
           if (payload?.content) textParts.push(payload.content);
+        } else if (
+          type === 'permission_request' &&
+          this.config.adapter === 'opencode'
+        ) {
+          const payload = event.payload as
+            | {
+                toolName?: string;
+                toolUseId?: string;
+              }
+            | undefined;
+          const permission = payload?.toolName ?? 'unknown';
+          const requestId = payload?.toolUseId ?? 'unknown';
+          errorMessage =
+            `Headless ${this.config.adapter} run cannot answer permission ` +
+            `request ${permission} (${requestId}); aborting instead of waiting`;
+          doneStatus = 'error';
+          controller.abort();
+          break;
         } else if (type === 'error') {
           const payload = event.payload as { message?: string } | undefined;
           errorMessage = payload?.message ?? 'unknown adapter error';

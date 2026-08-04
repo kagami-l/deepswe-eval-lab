@@ -61,6 +61,7 @@ RUN set -eux; \
 
 COPY wip/agents/deep_swe_agent/runtime/package.json ./package.json
 COPY wip/agents/deep_swe_agent/runtime/package-lock.json ./package-lock.json
+COPY wip/agents/deep_swe_agent/runtime/scripts ./scripts
 
 RUN --mount=type=cache,target=/root/.npm,sharing=locked \
     npm ci --no-audit --no-fund --loglevel=verbose

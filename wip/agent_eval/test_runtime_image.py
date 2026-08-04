@@ -74,6 +74,20 @@ class RuntimeImageTests(unittest.TestCase):
             second = runtime_input_digest(root, {"schema_version": 1})
             self.assertNotEqual(first, second)
 
+    def test_digest_covers_runtime_compatibility_scripts(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            script = (
+                root
+                / "wip/agents/deep_swe_agent/runtime/scripts/compatibility.mjs"
+            )
+            script.parent.mkdir(parents=True)
+            script.write_text("one")
+            first = runtime_input_digest(root, {"schema_version": 1})
+            script.write_text("two")
+            second = runtime_input_digest(root, {"schema_version": 1})
+            self.assertNotEqual(first, second)
+
     def test_inspect_requires_matching_label_and_platform(self) -> None:
         spec = RuntimeSpec(
             manifest={},

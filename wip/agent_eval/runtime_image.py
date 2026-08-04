@@ -92,6 +92,9 @@ def runtime_input_digest(repo_root: Path, manifest: dict[str, Any]) -> str:
     source_dir = repo_root / "wip/agents/deep_swe_agent/runtime/src"
     if source_dir.is_dir():
         candidates.extend(sorted(source_dir.glob("**/*")))
+    scripts_dir = repo_root / "wip/agents/deep_swe_agent/runtime/scripts"
+    if scripts_dir.is_dir():
+        candidates.extend(sorted(scripts_dir.glob("**/*")))
     for path in candidates:
         if not path.is_file():
             continue
