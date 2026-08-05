@@ -18,6 +18,19 @@ uv run python scripts/run_agent_eval.py eval \
 `unified-codex-05_sample_dev-12-tasks-20260804-120000` 的名称；显式
 `--job-name` 仍会完整覆盖该默认值。
 
+每个 Agent turn 默认在连续 600 秒没有任何事件时保存诊断快照并提前终止，避免静默 session
+占用完整 task timeout。可按实验需要调整：
+
+```bash
+uv run python scripts/run_agent_eval.py eval \
+  --task-list data/selection/05_sample_dev.txt \
+  --agent collab --modifier opencode --reviewer codex \
+  --event-silence-timeout-seconds 900
+```
+
+触发后，结构化快照和终止前 tracked patch 位于对应 trial 的
+`agent/system/rounds/<round>/diagnostics/`。
+
 完整契约、认证路径、预算语义和验收记录见
 [`docs/unified-agent-evaluation-design.md`](../../docs/unified-agent-evaluation-design.md)。
 下文的 `run_codex_eval.sh`、`run_opencode_eval.sh`、`run_kimi_sample_dev.sh` 和

@@ -31,6 +31,7 @@ def request(**overrides: object) -> PlanRequest:
         "max_agent_attempts": 2,
         "reviewer_timeout_seconds": 600.0,
         "revision_timeout_seconds": 900.0,
+        "event_silence_timeout_seconds": 600.0,
         "min_turn_seconds": 120.0,
         "strict": False,
         "keep_workspaces": False,
@@ -50,6 +51,7 @@ class PlanningTests(unittest.TestCase):
         self.assertIsNone(plan.reviewer)
         self.assertEqual(plan.budget.hard_timeout_seconds, 10800.0)
         self.assertEqual(plan.budget.soft_deadline_seconds, 10500.0)
+        self.assertEqual(plan.event_silence_timeout_seconds, 600.0)
 
     def test_collab_resolves_roles(self) -> None:
         plan = build_execution_plan(
@@ -82,6 +84,12 @@ class PlanningTests(unittest.TestCase):
                     max_reviews=0,
                 ),
                 self.registry,
+            )
+
+    def test_rejects_non_positive_event_silence_timeout(self) -> None:
+        with self.assertRaisesRegex(ValueError, "event-silence-timeout-seconds"):
+            build_execution_plan(
+                request(event_silence_timeout_seconds=0), self.registry
             )
 
 

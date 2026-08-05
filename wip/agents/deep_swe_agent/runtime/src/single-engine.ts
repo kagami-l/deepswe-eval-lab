@@ -116,6 +116,11 @@ export class SingleWorkflowEngine implements CollaborationEngine {
           timeoutMs: Math.floor(
             Math.min(this.config.modifierTimeoutSec, this.remainingSec()) * 1000,
           ),
+          inactivityTimeoutMs: Math.floor(
+            this.config.eventSilenceTimeoutSec * 1000,
+          ),
+          diagnosticDir: join(roundDir, 'diagnostics'),
+          diagnosticBaseCommit: this.baseCommit,
           label: `modify-a${attempt}`,
         },
         sink,

@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "environment": {
+    "cligent": "0.16.0",
+    "opencodeCli": "1.18.10",
+    "opencodeSdk": "1.18.10"
+  },
+  "cases": [
+    {
+      "name": "anko-typed-variable-bindings",
+      "sessionId": "ses_034da305bffeAjdxXtnk9yu6oF",
+      "startedAt": "2026-08-04T05:01:17.464Z",
+      "lastEventAt": "2026-08-04T05:08:50.693Z",
+      "lastEvent": {
+        "type": "tool_use",
+        "toolName": "edit",
+        "toolUseId": "prt_fcb2ca9a3001sIk2Lxv5GrGeRH"
+      },
+      "endedAt": "2026-08-04T06:26:17.479Z",
+      "silenceSeconds": 4646.786,
+      "eventCounts": {
+        "total": 20690,
+        "uniqueToolCalls": 60,
+        "toolResults": 0,
+        "permissionRequests": 0,
+        "errors": 0,
+        "done": 1
+      },
+      "terminal": {
+        "source": "outer_deadline_abort",
+        "status": "interrupted",
+        "durationMs": 5099727
+      },
+      "processObservation": {
+        "toolChildPresent": false,
+        "callerNodePresent": true,
+        "opencodeServerPresent": true
+      }
+    },
+    {
+      "name": "adaptix-name-mapping-aliases",
+      "sessionId": "ses_0348aea4affe2G1Hf4LtVigOOr",
+      "startedAt": "2026-08-04T06:27:53.466Z",
+      "lastEventAt": "2026-08-04T06:28:02.354Z",
+      "lastEvent": {
+        "type": "tool_use",
+        "toolName": "bash",
+        "toolUseId": "prt_fcb752d4f0010zVIDza4v0NguF"
+      },
+      "endedAt": "2026-08-04T07:15:42.347Z",
+      "silenceSeconds": 2860.0,
+      "eventCounts": {
+        "total": 31,
+        "uniqueToolCalls": 2,
+        "toolResults": 0,
+        "permissionRequests": 0,
+        "errors": 0,
+        "done": 0
+      },
+      "terminal": {
+        "source": "manual_sigterm",
+        "processExitCode": 143
+      },
+      "processObservation": {
+        "toolChildPresent": false,
+        "callerNodePresent": true,
+        "opencodeServerPresent": true,
+        "containerCpuPercent": 0.04
+      }
+    }
+  ]
+}

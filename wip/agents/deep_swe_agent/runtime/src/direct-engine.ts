@@ -192,6 +192,11 @@ export class DirectCollaborationEngine implements CollaborationEngine {
           cwd: this.config.repoDir,
           resumeSession: true,
           timeoutMs: this.turnTimeoutMs(options.timeoutSec),
+          inactivityTimeoutMs: Math.floor(
+            this.config.eventSilenceTimeoutSec * 1000,
+          ),
+          diagnosticDir: join(roundDir, 'diagnostics'),
+          diagnosticBaseCommit: options.resetCommit,
           label: `${options.kind}-a${attempt}`,
         },
         sink,
@@ -285,6 +290,11 @@ export class DirectCollaborationEngine implements CollaborationEngine {
           cwd: copyDir,
           resumeSession: false,
           timeoutMs: this.turnTimeoutMs(this.config.reviewerTimeoutSec),
+          inactivityTimeoutMs: Math.floor(
+            this.config.eventSilenceTimeoutSec * 1000,
+          ),
+          diagnosticDir: join(roundDir, 'diagnostics'),
+          diagnosticBaseCommit: this.baseCommit,
           label: `review-${options.round}-a${attempt}`,
         },
         sink,

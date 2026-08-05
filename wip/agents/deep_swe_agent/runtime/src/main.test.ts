@@ -39,6 +39,7 @@ function basePlan(
         maxAgentAttempts: 2,
         reviewerTimeoutSeconds: 600,
         revisionTimeoutSeconds: 900,
+        eventSilenceTimeoutSeconds: 600,
         minTurnSeconds: 120,
       },
       ...overrides,
@@ -51,6 +52,7 @@ test('parses a single plan without a reviewer', () => {
   assert.equal(parsed.topology, 'single');
   assert.equal(parsed.single?.modifier.adapter, 'codex');
   assert.equal(parsed.single?.modifierTimeoutSec, 5100);
+  assert.equal(parsed.single?.eventSilenceTimeoutSec, 600);
   assert.equal(parsed.collab, undefined);
 });
 

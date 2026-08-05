@@ -9,6 +9,7 @@ from .profiles import ProfileRegistry
 
 
 DEFAULT_CLEANUP_RESERVE_SECONDS = 300.0
+DEFAULT_EVENT_SILENCE_TIMEOUT_SECONDS = 600.0
 
 
 @dataclass(frozen=True)
@@ -32,6 +33,7 @@ class PlanRequest:
     max_agent_attempts: int
     reviewer_timeout_seconds: float
     revision_timeout_seconds: float
+    event_silence_timeout_seconds: float
     min_turn_seconds: float
     strict: bool
     keep_workspaces: bool
@@ -96,6 +98,8 @@ def build_execution_plan(
         raise ValueError("collab --max-reviews must be at least 1")
     if request.max_agent_attempts < 1:
         raise ValueError("--max-agent-attempts must be at least 1")
+    if request.event_silence_timeout_seconds <= 0:
+        raise ValueError("--event-silence-timeout-seconds must be positive")
 
     return ExecutionPlan(
         schema_version=1,
@@ -117,6 +121,7 @@ def build_execution_plan(
         max_agent_attempts=request.max_agent_attempts,
         reviewer_timeout_seconds=request.reviewer_timeout_seconds,
         revision_timeout_seconds=request.revision_timeout_seconds,
+        event_silence_timeout_seconds=request.event_silence_timeout_seconds,
         min_turn_seconds=request.min_turn_seconds,
         strict=request.strict,
         keep_workspaces=request.keep_workspaces,

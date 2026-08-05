@@ -101,6 +101,7 @@ class CliTests(unittest.TestCase):
         self.assertIn("DeepSweAgent", rendered)
         self.assertIn("SharedAgentRuntimeDockerEnvironment", rendered)
         self.assertIn('"topology": "single"', rendered)
+        self.assertIn('"eventSilenceTimeoutSeconds": 600.0', rendered)
 
     def test_runtime_dry_run_does_not_build(self) -> None:
         status = RuntimeStatus(

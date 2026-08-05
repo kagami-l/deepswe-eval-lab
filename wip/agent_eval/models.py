@@ -75,6 +75,7 @@ class ExecutionPlan:
     max_agent_attempts: int
     reviewer_timeout_seconds: float
     revision_timeout_seconds: float
+    event_silence_timeout_seconds: float
     min_turn_seconds: float
     strict: bool
     keep_workspaces: bool
@@ -111,6 +112,7 @@ class ExecutionPlan:
                 "maxAgentAttempts": self.max_agent_attempts,
                 "reviewerTimeoutSeconds": self.reviewer_timeout_seconds,
                 "revisionTimeoutSeconds": self.revision_timeout_seconds,
+                "eventSilenceTimeoutSeconds": self.event_silence_timeout_seconds,
                 "minTurnSeconds": self.min_turn_seconds,
                 "strict": self.strict,
                 "keepWorkspaces": self.keep_workspaces,

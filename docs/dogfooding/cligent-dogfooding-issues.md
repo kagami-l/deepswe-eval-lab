@@ -14,6 +14,7 @@
 | CLI-002 | Codex 命令执行和 MCP 调用未转换成工具事件 | Codex adapter | High | Open | 2026-08-03 |
 | CLI-003 | Kimi 未提供 token usage 时被报告为真实零值 | Kimi adapter / usage schema | Medium | Open | 2026-08-03 |
 | CLI-004 | OpenCode auto 权限遗漏 external_directory，导致 headless run 无限等待 | OpenCode adapter / permissions | Critical | Open | 2026-08-04 |
+| CLI-005 | OpenCode 工具事件后不再产生 terminal event，adapter 无限等待 SSE | OpenCode adapter / lifecycle | Critical | Open | 2026-08-04 |
 
 ## 状态约定
 
@@ -558,3 +559,96 @@ OpenCode headless runner 收到任何残留 `permission_request` 时应中止当
 - cligent OpenCode adapter：`packages/cligent/src/adapters/opencode.ts`（以 cligent 仓库实际路径为准）
 - cligent permission policy：`packages/cligent/src/permissions.ts`
 - OpenCode SDK permission 类型：`@opencode-ai/sdk/dist/v2/gen/types.gen.d.ts`
+
+---
+
+## CLI-005：OpenCode 工具事件后不再产生 terminal event，adapter 无限等待 SSE
+
+### 基本信息
+
+- 组件：`@sublang/cligent` OpenCode adapter / session lifecycle
+- dogfooding 环境：
+  - cligent `0.16.0`
+  - OpenCode CLI `1.18.10`
+  - `@opencode-ai/sdk` `1.18.10`
+- 严重程度：`Critical`
+- 状态：`Open`
+- 证据目录：[`CLI-005-opencode-session-silence/`](./CLI-005-opencode-session-silence/)
+
+### 背景与期望
+
+OpenCode adapter 在 managed 模式启动 `opencode serve`，订阅 SDK/SSE，并以
+`session.idle` 或 `session.status(type=idle)` 作为正常 terminal event。工具执行结束、
+session 出错、SSE 中断或 server 异常时，headless run 都应产生 terminal `done/error`，
+或在可配置的 inactivity deadline 后返回可诊断错误，不能无限等待下一条 SSE。
+
+### 现象
+
+两个独立 session 均在正常输出模型内容和工具事件后进入永久静默：
+
+| Case | 最后事件 | 唯一工具调用 | 静默时间 | 终止方式 |
+|---|---|---:|---:|---|
+| `anko-typed-variable-bindings` | `tool_use(edit)` | 60 | 约 77 分钟 | 外层 5100 秒 deadline abort |
+| `adaptix-name-mapping-aliases` | `tool_use(bash)` | 2 | 约 48 分钟 | 人工 SIGTERM |
+
+两个 session 均满足：
+
+- 没有 `permission_request`，因此不是 CLI-004；
+- 没有 `tool_result`、`error` 或自然产生的 terminal `done`；
+- 静默期间只剩调用方 Node 进程和 `opencode serve`，没有仍在执行的 shell/test 子进程；
+- OpenCode server 继续存活且 CPU 接近空闲；
+- adapter 只能依赖外层 abort 才退出。
+
+其中第一个 case 在 abort 后由 adapter 产生 `done(status=interrupted)`；第二个 case 因整个
+Agent 进程组被 SIGTERM，未产生 adapter terminal event。精简时间线和计数见证据目录。
+
+### 定位结论
+
+cligent OpenCode adapter 在取得 event stream 后循环等待 `iterator.next()`。当前只有以下路径
+可以结束 run：
+
+1. 收到 `session.idle` / idle `session.status`；
+2. stream 结束或抛错；
+3. managed server 退出；
+4. 调用方触发 `AbortSignal`。
+
+当 SSE 连接保持打开、server 仍存活、但 session 不再产生事件时，adapter 没有 inactivity
+deadline，也不会主动查询 session 状态，因此会永久等待。现有统一事件又受 CLI-001 影响，
+缺少 tool input/result 和 raw SSE，暂时无法进一步区分以下底层原因：
+
+- OpenCode session 没有从 tool phase 推进到 idle；
+- provider 后续请求挂起；
+- SDK/SSE 漏掉 terminal event；
+- terminal event 被 session 关联逻辑过滤。
+
+严重程度定为 `Critical`：每个命中的 headless run 都会占用并发槽直到最外层 timeout，且
+调用方无法通过现有统一事件判断 session 是否仍有有效工作。
+
+### 建议处理方式
+
+1. adapter 提供可配置的 event inactivity timeout；每个有效事件重置计时。
+2. timeout 前记录最后 raw event 类型、session ID、server/process 状态和当前 session 状态。
+3. timeout 时优先调用 OpenCode session status API：
+   - session 已 idle：补发/合成 terminal done，并报告缺失的 idle event；
+   - session busy 但无活动：abort session 并返回明确的 inactivity error；
+   - 查询失败：关闭 SSE/server 并返回 adapter error。
+4. 修复 CLI-001，完整记录去重后的 tool use/result，使调用方能够区分工具仍在执行与
+   session lifecycle 卡住。
+5. 保证 inactivity abort 可取消 `iterator.next()`、关闭 SSE 和 managed server，且不会留下
+   orphan process。
+
+### 建议的回归测试
+
+1. 模拟工具事件后永不结束的 SSE，adapter 在 inactivity deadline 内退出。
+2. timeout 诊断包含最后事件、session ID 和 server 状态。
+3. 正常的长工具调用持续产生 heartbeat/progress 时不会误终止。
+4. session 已 idle 但 idle event 丢失时能够恢复或返回明确协议错误。
+5. inactivity abort 后 SSE、server 和工具子进程全部清理。
+6. inactivity timeout 与调用方总 timeout 竞争时只产生一次 terminal event。
+
+### 调用方临时缓解
+
+在 cligent 发布正式修复前，调用方可在统一事件流外增加 watchdog：连续 600 秒没有任何
+Agent event 时，先保存进程、Git working tree 和最后事件快照，再触发 `AbortSignal`。该措施
+能限制并发槽损失并保留诊断材料，但不能确定或修复 OpenCode 内部 session 停滞的根因，
+因此本 issue 保持 `Open`。

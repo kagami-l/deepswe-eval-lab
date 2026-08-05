@@ -118,6 +118,11 @@ export function parseConfig(raw: Record<string, unknown>): ParsedRuntimeConfig {
     modifier: parseRole(roles.modifier, 'config.executionPlan.roles.modifier'),
     maxAgentAttempts: positiveInteger(workflow, 'maxAgentAttempts', 2),
     totalTimeoutSec: positiveNumber(budget, 'soft_deadline_seconds'),
+    eventSilenceTimeoutSec: positiveNumber(
+      workflow,
+      'eventSilenceTimeoutSeconds',
+      600,
+    ),
     minTurnSec: positiveNumber(workflow, 'minTurnSeconds', 120),
   };
   if (topology === 'single') {

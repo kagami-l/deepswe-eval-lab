@@ -17,6 +17,7 @@ from .credentials import require_kimi_auth_home
 from .pier_command import build_pier_command
 from .planning import (
     DEFAULT_CLEANUP_RESERVE_SECONDS,
+    DEFAULT_EVENT_SILENCE_TIMEOUT_SECONDS,
     PlanRequest,
     build_execution_plan,
 )
@@ -66,6 +67,12 @@ def build_parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--max-agent-attempts", type=int, default=2)
     evaluate.add_argument("--reviewer-timeout-seconds", type=float, default=600.0)
     evaluate.add_argument("--revision-timeout-seconds", type=float, default=900.0)
+    evaluate.add_argument(
+        "--event-silence-timeout-seconds",
+        type=float,
+        default=DEFAULT_EVENT_SILENCE_TIMEOUT_SECONDS,
+        help="Abort a turn after this many seconds without any Agent event",
+    )
     evaluate.add_argument("--min-turn-seconds", type=float, default=120.0)
     evaluate.add_argument("--strict", action="store_true")
     evaluate.add_argument("--keep-workspaces", action="store_true")
@@ -351,6 +358,7 @@ def _evaluate(args: argparse.Namespace, argv: list[str]) -> int:
             max_agent_attempts=args.max_agent_attempts,
             reviewer_timeout_seconds=args.reviewer_timeout_seconds,
             revision_timeout_seconds=args.revision_timeout_seconds,
+            event_silence_timeout_seconds=args.event_silence_timeout_seconds,
             min_turn_seconds=args.min_turn_seconds,
             strict=args.strict,
             keep_workspaces=args.keep_workspaces,

@@ -10,6 +10,7 @@
  */
 
 import type { AdapterName, RoleConfig } from './collaboration-engine.js';
+import { captureTurnDiagnostics } from './turn-diagnostics.js';
 
 export interface TurnRequest {
   prompt: string;
@@ -17,6 +18,12 @@ export interface TurnRequest {
   /** false forces a fresh session (Reviewer rounds); true continues. */
   resumeSession: boolean;
   timeoutMs: number;
+  /** Abort after this long without any adapter event. */
+  inactivityTimeoutMs: number;
+  /** Directory for pre-abort process/Git diagnostics. */
+  diagnosticDir: string;
+  /** Git base used to preserve a tracked pre-abort patch. */
+  diagnosticBaseCommit?: string;
   label: string;
 }
 
@@ -151,12 +158,80 @@ export class CligentRunner implements AgentRunner {
     }, request.timeoutMs);
 
     const started = Date.now();
+    let lastEventAt = started;
+    let lastEventType: string | null = null;
+    let lastEventAgent: string | null = null;
+    let lastEventSessionId: string | null = null;
+    let inactivityTimer: NodeJS.Timeout | null = null;
+    let inactivityTriggered = false;
+    let diagnosticPromise: Promise<void> | null = null;
     const textParts: string[] = [];
     let doneStatus: string | null = null;
     let doneResult: string | undefined;
     let usage: TurnUsage | null = null;
     let errorMessage: string | null = null;
     let actualModel: string | null = null;
+
+    const armInactivityTimer = (): void => {
+      if (inactivityTimer !== null) clearTimeout(inactivityTimer);
+      inactivityTimer = setTimeout(() => {
+        inactivityTriggered = true;
+        diagnosticPromise = (async () => {
+          let snapshotPath: string | null = null;
+          let patchPath: string | null = null;
+          let captureError: string | null = null;
+          try {
+            const diagnostic = await captureTurnDiagnostics({
+              adapter: this.config.adapter,
+              role: this.role,
+              model: this.config.model ?? null,
+              label: request.label,
+              cwd: request.cwd,
+              diagnosticDir: request.diagnosticDir,
+              baseCommit: request.diagnosticBaseCommit,
+              turnStartedAtMs: started,
+              lastEventAtMs: lastEventAt,
+              lastEventType,
+              lastEventAgent,
+              lastEventSessionId,
+              silenceTimeoutMs: request.inactivityTimeoutMs,
+            });
+            snapshotPath = diagnostic.snapshotPath;
+            patchPath = diagnostic.patchPath;
+          } catch (error) {
+            captureError = error instanceof Error ? error.message : String(error);
+          }
+          const silenceMs = Date.now() - lastEventAt;
+          errorMessage =
+            `No ${this.config.adapter} event for ${silenceMs}ms; ` +
+            'aborting the headless turn';
+          try {
+            eventSink({
+              label: request.label,
+              type: 'runtime:event_silence_timeout',
+              agent: this.config.adapter,
+              timestamp: Date.now(),
+              role: this.role,
+              payload: {
+                silenceMs,
+                timeoutMs: request.inactivityTimeoutMs,
+                lastEventAt,
+                lastEventType,
+                lastEventAgent,
+                lastEventSessionId,
+                snapshotPath,
+                patchPath,
+                captureError,
+              },
+            });
+          } catch {
+            // A failed diagnostic sink must not prevent the watchdog abort.
+          }
+          controller.abort();
+        })();
+      }, request.inactivityTimeoutMs);
+    };
+    armInactivityTimer();
 
     try {
       const overrides: Record<string, unknown> = {
@@ -166,6 +241,12 @@ export class CligentRunner implements AgentRunner {
       if (!request.resumeSession) overrides.resume = false;
 
       for await (const event of agent.run(request.prompt, overrides)) {
+        lastEventAt = Date.now();
+        lastEventType = typeof event.type === 'string' ? event.type : null;
+        lastEventAgent = typeof event.agent === 'string' ? event.agent : null;
+        lastEventSessionId =
+          typeof event.sessionId === 'string' ? event.sessionId : null;
+        armInactivityTimer();
         eventSink({ label: request.label, ...event });
         const type = event.type as string;
         if (type === 'init') {
@@ -222,11 +303,14 @@ export class CligentRunner implements AgentRunner {
       errorMessage = err instanceof Error ? err.message : String(err);
     } finally {
       clearTimeout(timer);
+      if (inactivityTimer !== null) clearTimeout(inactivityTimer);
+      if (diagnosticPromise !== null) await diagnosticPromise;
     }
 
     const durationMs = Date.now() - started;
     const status = doneStatus ?? 'error';
-    const timedOut = timerFired && status === 'interrupted';
+    const timedOut =
+      inactivityTriggered || (timerFired && status === 'interrupted');
     return {
       ok: status === 'success',
       status,

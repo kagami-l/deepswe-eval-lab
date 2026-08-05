@@ -29,6 +29,7 @@ export interface CollabConfig {
   modifierTimeoutSec: number;
   reviewerTimeoutSec: number;
   revisionTimeoutSec: number;
+  eventSilenceTimeoutSec: number;
   totalTimeoutSec: number;
   /** Do not start a turn with less than this much wall clock remaining. */
   minTurnSec: number;
@@ -44,6 +45,7 @@ export interface SingleConfig {
   modifier: RoleConfig;
   maxAgentAttempts: number;
   modifierTimeoutSec: number;
+  eventSilenceTimeoutSec: number;
   totalTimeoutSec: number;
   minTurnSec: number;
 }

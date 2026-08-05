@@ -615,6 +615,25 @@ Modifier；collab 的初始修改、审查和修订共同竞争同一个软 dead
 CLI 将 multiplier 同时传给 Pier 和 runtime config，用户不需要分别配置两层 timeout。
 不得让 runtime deadline 超过 Pier hard timeout。
 
+### 13.1 事件静默 watchdog
+
+总 wall-clock timeout 之外，runtime 对每个 Agent turn 维护 event inactivity deadline。
+默认连续 600 秒没有任何 adapter event 时触发，可通过统一 CLI 的
+`--event-silence-timeout-seconds` 调整。任意事件都会重置计时，因此它检测的是“事件流完全
+静默”，不是限制 turn 总时长。
+
+watchdog 终止 turn 前必须在当前 round 的 `diagnostics/` 中保存：
+
+- 最后事件类型、时间、adapter、role、model 和静默时长；
+- 容器内进程快照；
+- Git HEAD、status 和 diff stat；
+- 相对本轮基准 commit 的 tracked binary patch。
+
+随后写入 `runtime:event_silence_timeout` 事件并触发同一个 `AbortSignal`，由 adapter 清理
+session/SSE/server。该 timeout 计入原有 modifier/reviewer timeout 失败语义，不扩张总预算。
+诊断失败采用 best-effort 记录，但不能阻止 abort。此机制是 CLI-005 的调用方保护，不替代
+cligent 对 session lifecycle、raw SSE 和 terminal event 的正式修复。
+
 ## 14. Git、checkpoint 与交付
 
 DeepSWE `pre_artifacts.sh` 提取 base commit 到最终 HEAD 的 diff，因此 workflow 必须机械
@@ -712,6 +731,7 @@ infrastructure_failed
 - 原始 profile 名和 resolved profiles。
 - runtime tag、image ID/digest、manifest digest。
 - timeout 与 multiplier 的解析结果。
+- event silence timeout 与 watchdog 诊断策略。
 - network policy。
 - auth type，不含秘密。
 - Pier 版本和最终命令的脱敏表示。

@@ -117,6 +117,7 @@ async function makeFixture(
     modifierTimeoutSec: 60,
     reviewerTimeoutSec: 60,
     revisionTimeoutSec: 60,
+    eventSilenceTimeoutSec: 60,
     totalTimeoutSec: 300,
     minTurnSec: 0,
     strict: false,
