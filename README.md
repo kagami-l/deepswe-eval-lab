@@ -1,3 +1,12 @@
+> **This is a modified copy of [datacurve-ai/deep-swe](https://github.com/datacurve-ai/deep-swe)**, used for personal coding-agent evaluation work. It is not affiliated with or endorsed by the upstream project.
+>
+> No upstream file is modified. Everything added lives in two directories:
+>
+> - [`wip/`](wip/) — evaluation scaffolding: agent runners, container runtimes, task selection, and result data
+> - [`docs/`](docs/) — design notes, evaluation records, and dogfooding reports
+>
+> Upstream licensing and provenance are unchanged — see [LICENSE](LICENSE) and [PROVENANCE.md](PROVENANCE.md). The original README follows.
+
 # [DeepSWE](https://deepswe.datacurve.ai/)
 
 DeepSWE is a benchmark for measuring frontier coding agents on original, long-horizon software engineering tasks drawn from active open-source repositories. The benchmark includes 113 tasks across TypeScript, Go, Python, JavaScript, and Rust, with isolated environments and program-based verifiers.
