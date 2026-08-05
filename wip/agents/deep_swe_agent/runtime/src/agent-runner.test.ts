@@ -54,7 +54,10 @@ test('headless runner aborts instead of waiting on a permission request', async 
   assert.match(result.error ?? '', /external_directory/);
   assert.match(result.error ?? '', /permission-1/);
   assert.equal(abortSignal?.aborted, true);
-  assert.equal(events.at(-1)?.type, 'permission_request');
+  assert.ok(events.some((event) => event.type === 'permission_request'));
+  assert.ok(
+    events.some((event) => event.type === 'runtime:turn_process_cleanup'),
+  );
 });
 
 test('permission observability events from other adapters keep their native flow', async () => {
@@ -161,6 +164,17 @@ test('event silence captures diagnostics before aborting the turn', async (t) =>
   assert.ok(watchdog);
   const watchdogPayload = watchdog.payload as Record<string, unknown>;
   assert.equal(watchdogPayload.captureError, null);
+  assert.equal(
+    Number(watchdogPayload.triggeredAt) - Number(watchdogPayload.lastEventAt),
+    watchdogPayload.silenceMs,
+  );
+  assert.match(
+    result.error ?? '',
+    new RegExp(`for ${String(watchdogPayload.silenceMs)}ms`),
+  );
+  assert.ok(
+    events.some((event) => event.type === 'runtime:turn_process_cleanup'),
+  );
   const files = await readdir(diagnosticDir);
   const snapshotName = files.find((name) => name.endsWith('.json'));
   const patchName = files.find((name) => name.endsWith('.patch'));

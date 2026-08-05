@@ -11,6 +11,12 @@
 
 import type { AdapterName, RoleConfig } from './collaboration-engine.js';
 import { captureTurnDiagnostics } from './turn-diagnostics.js';
+import {
+  captureTurnProcessScope,
+  cleanupTurnProcessScope,
+  mergeTurnProcessScopes,
+  type TurnProcessScope,
+} from './turn-process-cleanup.js';
 
 export interface TurnRequest {
   prompt: string;
@@ -151,11 +157,11 @@ export class CligentRunner implements AgentRunner {
   async runTurn(request: TurnRequest, eventSink: EventSink): Promise<TurnResult> {
     const agent = await this.instance();
     const controller = new AbortController();
+    const processBaseline = captureTurnProcessScope();
+    const baselinePids = new Set(
+      processBaseline.processes.map(({ pid }) => pid),
+    );
     let timerFired = false;
-    const timer = setTimeout(() => {
-      timerFired = true;
-      controller.abort();
-    }, request.timeoutMs);
 
     const started = Date.now();
     let lastEventAt = started;
@@ -165,6 +171,7 @@ export class CligentRunner implements AgentRunner {
     let inactivityTimer: NodeJS.Timeout | null = null;
     let inactivityTriggered = false;
     let diagnosticPromise: Promise<void> | null = null;
+    let processCleanupPromise: Promise<void> | null = null;
     const textParts: string[] = [];
     let doneStatus: string | null = null;
     let doneResult: string | undefined;
@@ -172,10 +179,55 @@ export class CligentRunner implements AgentRunner {
     let errorMessage: string | null = null;
     let actualModel: string | null = null;
 
+    const startAbortCleanup = (
+      reason: string,
+      earlierScope?: TurnProcessScope,
+    ): void => {
+      if (processCleanupPromise !== null) {
+        controller.abort();
+        return;
+      }
+      const latestScope = captureTurnProcessScope(process.pid, baselinePids);
+      const scope = earlierScope
+        ? mergeTurnProcessScopes(earlierScope, latestScope)
+        : latestScope;
+      controller.abort();
+      processCleanupPromise = cleanupTurnProcessScope(scope, reason).then(
+        (cleanup) => {
+          try {
+            eventSink({
+              label: request.label,
+              type: 'runtime:turn_process_cleanup',
+              agent: this.config.adapter,
+              timestamp: Date.now(),
+              role: this.role,
+              payload: cleanup,
+            });
+          } catch {
+            // Cleanup must remain independent of the event sink.
+          }
+        },
+      );
+    };
+
+    const timer = setTimeout(() => {
+      timerFired = true;
+      startAbortCleanup('turn_timeout');
+    }, request.timeoutMs);
+
     const armInactivityTimer = (): void => {
       if (inactivityTimer !== null) clearTimeout(inactivityTimer);
       inactivityTimer = setTimeout(() => {
         inactivityTriggered = true;
+        const triggeredAt = Date.now();
+        const frozenLastEventAt = lastEventAt;
+        const frozenLastEventType = lastEventType;
+        const frozenLastEventAgent = lastEventAgent;
+        const frozenLastEventSessionId = lastEventSessionId;
+        const processScope = captureTurnProcessScope(
+          process.pid,
+          baselinePids,
+        );
         diagnosticPromise = (async () => {
           let snapshotPath: string | null = null;
           let patchPath: string | null = null;
@@ -190,10 +242,11 @@ export class CligentRunner implements AgentRunner {
               diagnosticDir: request.diagnosticDir,
               baseCommit: request.diagnosticBaseCommit,
               turnStartedAtMs: started,
-              lastEventAtMs: lastEventAt,
-              lastEventType,
-              lastEventAgent,
-              lastEventSessionId,
+              triggeredAtMs: triggeredAt,
+              lastEventAtMs: frozenLastEventAt,
+              lastEventType: frozenLastEventType,
+              lastEventAgent: frozenLastEventAgent,
+              lastEventSessionId: frozenLastEventSessionId,
               silenceTimeoutMs: request.inactivityTimeoutMs,
             });
             snapshotPath = diagnostic.snapshotPath;
@@ -201,7 +254,7 @@ export class CligentRunner implements AgentRunner {
           } catch (error) {
             captureError = error instanceof Error ? error.message : String(error);
           }
-          const silenceMs = Date.now() - lastEventAt;
+          const silenceMs = triggeredAt - frozenLastEventAt;
           errorMessage =
             `No ${this.config.adapter} event for ${silenceMs}ms; ` +
             'aborting the headless turn';
@@ -210,15 +263,16 @@ export class CligentRunner implements AgentRunner {
               label: request.label,
               type: 'runtime:event_silence_timeout',
               agent: this.config.adapter,
-              timestamp: Date.now(),
+              timestamp: triggeredAt,
               role: this.role,
               payload: {
                 silenceMs,
                 timeoutMs: request.inactivityTimeoutMs,
-                lastEventAt,
-                lastEventType,
-                lastEventAgent,
-                lastEventSessionId,
+                triggeredAt,
+                lastEventAt: frozenLastEventAt,
+                lastEventType: frozenLastEventType,
+                lastEventAgent: frozenLastEventAgent,
+                lastEventSessionId: frozenLastEventSessionId,
                 snapshotPath,
                 patchPath,
                 captureError,
@@ -227,7 +281,7 @@ export class CligentRunner implements AgentRunner {
           } catch {
             // A failed diagnostic sink must not prevent the watchdog abort.
           }
-          controller.abort();
+          startAbortCleanup('event_silence_timeout', processScope);
         })();
       }, request.inactivityTimeoutMs);
     };
@@ -271,7 +325,7 @@ export class CligentRunner implements AgentRunner {
             `Headless ${this.config.adapter} run cannot answer permission ` +
             `request ${permission} (${requestId}); aborting instead of waiting`;
           doneStatus = 'error';
-          controller.abort();
+          startAbortCleanup('permission_request');
           break;
         } else if (type === 'error') {
           const payload = event.payload as { message?: string } | undefined;
@@ -305,6 +359,7 @@ export class CligentRunner implements AgentRunner {
       clearTimeout(timer);
       if (inactivityTimer !== null) clearTimeout(inactivityTimer);
       if (diagnosticPromise !== null) await diagnosticPromise;
+      if (processCleanupPromise !== null) await processCleanupPromise;
     }
 
     const durationMs = Date.now() - started;

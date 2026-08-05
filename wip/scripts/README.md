@@ -29,7 +29,9 @@ uv run python scripts/run_agent_eval.py eval \
 ```
 
 触发后，结构化快照和终止前 tracked patch 位于对应 trial 的
-`agent/system/rounds/<round>/diagnostics/`。
+`agent/system/rounds/<round>/diagnostics/`。runtime 会在 adapter abort 的短暂 grace period
+后定向清理该 turn 新建且仍存活的进程树，结果记录为
+`runtime:turn_process_cleanup` 事件。
 
 完整契约、认证路径、预算语义和验收记录见
 [`docs/unified-agent-evaluation-design.md`](../../docs/unified-agent-evaluation-design.md)。

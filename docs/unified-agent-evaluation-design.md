@@ -629,10 +629,18 @@ watchdog 终止 turn 前必须在当前 round 的 `diagnostics/` 中保存：
 - Git HEAD、status 和 diff stat；
 - 相对本轮基准 commit 的 tracked binary patch。
 
-随后写入 `runtime:event_silence_timeout` 事件并触发同一个 `AbortSignal`，由 adapter 清理
-session/SSE/server。该 timeout 计入原有 modifier/reviewer timeout 失败语义，不扩张总预算。
-诊断失败采用 best-effort 记录，但不能阻止 abort。此机制是 CLI-005 的调用方保护，不替代
-cligent 对 session lifecycle、raw SSE 和 terminal event 的正式修复。
+随后写入 `runtime:event_silence_timeout` 事件并触发同一个 `AbortSignal`，由 adapter 优先清理
+session/SSE/server。runtime 在 turn 开始时记录已有后代进程，异常触发时冻结新增进程树，
+诊断结束、真正 abort 前再次采集并合并；给予 adapter 短暂 grace period 后，从叶到根定向
+发送 SIGTERM，仍未退出者再发送 SIGKILL。清理结果写入
+`runtime:turn_process_cleanup`。实现不使用全局进程匹配，也不直接杀死可能与 runtime 共享的
+PGID；已停止执行但尚未被 PID 1 回收的 zombie 与仍在运行的 survivor 分开记录。
+
+watchdog 的触发时间、`lastEventAt` 和最后事件字段必须在 timer callback 中一次性冻结；诊断
+期间到达的 terminal event 不得改变错误消息和 timeout 事件中的静默时长。该 timeout 计入
+原有 modifier/reviewer timeout 失败语义，不扩张总预算。诊断与清理失败采用 best-effort
+记录，但不能阻止 abort。此机制是 CLI-005 的调用方保护，不替代 cligent 对 session
+lifecycle、raw SSE 和 terminal event 的正式修复。
 
 ## 14. Git、checkpoint 与交付
 

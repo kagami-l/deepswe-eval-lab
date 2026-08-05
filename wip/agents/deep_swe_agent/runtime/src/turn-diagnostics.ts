@@ -20,6 +20,7 @@ export interface TurnDiagnosticRequest {
   diagnosticDir: string;
   baseCommit?: string;
   turnStartedAtMs: number;
+  triggeredAtMs: number;
   lastEventAtMs: number;
   lastEventType: string | null;
   lastEventAgent: string | null;
@@ -104,6 +105,8 @@ export async function captureTurnDiagnostics(
     schemaVersion: 1,
     reason: 'event_silence_timeout',
     capturedAt: new Date(capturedAtMs).toISOString(),
+    triggeredAt: new Date(request.triggeredAtMs).toISOString(),
+    captureDelayMs: capturedAtMs - request.triggeredAtMs,
     turn: {
       label: request.label,
       role: request.role,
@@ -114,7 +117,7 @@ export async function captureTurnDiagnostics(
     },
     inactivity: {
       timeoutMs: request.silenceTimeoutMs,
-      silenceMs: capturedAtMs - request.lastEventAtMs,
+      silenceMs: request.triggeredAtMs - request.lastEventAtMs,
       lastEventAt: new Date(request.lastEventAtMs).toISOString(),
       lastEventType: request.lastEventType,
       lastEventAgent: request.lastEventAgent,
