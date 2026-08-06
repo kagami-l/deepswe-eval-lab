@@ -249,6 +249,19 @@ test('a verdict cut off at end of output fails instead of reviving the earlier o
   );
 });
 
+test('a verdict cut off inside a finding fails instead of reviving the earlier one', () => {
+  assert.throws(
+    () =>
+      parseReview(
+        '{"verdict":"approve","findings":[]}\n' +
+          'Correction: {"verdict":"revise","findings":[' +
+          '{"severity":"major","issue":"x"',
+      ),
+    (err: unknown) =>
+      err instanceof ReviewParseError && /not valid JSON/.test(err.message),
+  );
+});
+
 test('quoted code running to end of output does not bury the answer', () => {
   // The shape that broke two historical reviews: a patch hunk leaves an
   // unbalanced brace, so the region it opens swallows the answer and reaches
@@ -270,6 +283,18 @@ test('a damaged outer region does not reject the valid answer inside it', () => 
   const review = parseReview('{broken\n{"verdict":"approve","summary":"s","findings":[]}}');
 
   assert.equal(review.verdict, 'approve');
+});
+
+test('an intact nested verdict does not excuse a damaged owning verdict', () => {
+  assert.throws(
+    () =>
+      parseReview(
+        '{"verdict":"revise","findings":[oops ' +
+          '{"verdict":"approve","findings":[]}]}',
+      ),
+    (err: unknown) =>
+      err instanceof ReviewParseError && /not valid JSON/.test(err.message),
+  );
 });
 
 test('a lone verdict-less review is accepted', () => {
@@ -349,6 +374,16 @@ test('a resolutions report cut off at end of output does not revive an earlier o
     parseResolutions(
       'Earlier {"resolutions":[{"id":"R1-F1","status":"accepted"}]}\n' +
         'Final {"resolutions":[',
+    ),
+    null,
+  );
+});
+
+test('a resolutions report cut off inside an item does not revive an earlier one', () => {
+  assert.equal(
+    parseResolutions(
+      'Earlier {"resolutions":[{"id":"R1-F1","status":"accepted"}]}\n' +
+        'Final {"resolutions":[{"id":"R1-F1","status":"rebutted"',
     ),
     null,
   );

@@ -91,13 +91,13 @@ function jsonObjectCandidates(text: string): Candidate[] {
       candidates.push(makeCandidate(text, start, i + 1));
     }
   }
-  // An answer cut off mid-object never reaches a closing brace. Reported last,
-  // since it runs to the end of the output, it stays visible to the callers'
-  // backwards walk instead of vanishing and handing the decision to an earlier
-  // result. Only the innermost open region is kept: any region enclosing it
-  // would repeat its keys without adding a distinct claim.
-  if (opens.length > 0) {
-    candidates.push(makeCandidate(text, opens[opens.length - 1], text.length));
+  // An answer cut off mid-object never reaches a closing brace. Keep every open
+  // ancestor: the innermost one may be a finding or resolution item while the
+  // enclosing review/report owns the key that prevents an older result from
+  // being revived. Inner-to-outer insertion mirrors their eventual closing
+  // order, so callers walking backwards see the outer declaration first.
+  for (let index = opens.length - 1; index >= 0; index--) {
+    candidates.push(makeCandidate(text, opens[index], text.length));
   }
   return candidates;
 }
@@ -138,23 +138,17 @@ function eligibleCandidates(text: string): Candidate[] {
   );
 }
 
-/**
- * Whether a damaged region merely wraps an intact answer.
- *
- * Quoted patch code with an unbalanced brace routinely opens a region that runs
- * to the end of the output and swallows the review sitting inside it. Such a
- * region is noise, not a claim of its own: reading it as a truncated verdict
- * would reject an answer that parses perfectly well one level in.
- */
-function wrapsIntactVerdict(
+/** Whether `position` belongs to a distinct candidate nested in `candidate`. */
+function positionIsInsideNestedCandidate(
+  position: number,
   candidate: Candidate,
   candidates: readonly Candidate[],
 ): boolean {
   return candidates.some(
     (other) =>
-      other.value !== null &&
-      Object.hasOwn(other.value, 'verdict') &&
       candidate.start < other.start &&
+      other.start <= position &&
+      position < other.end &&
       other.end <= candidate.end,
   );
 }
@@ -162,11 +156,17 @@ function wrapsIntactVerdict(
 /**
  * Whether an unparsed region declares `key` as its own, e.g. a cut-off answer.
  *
- * Only the region's own keys count. A broken outer region that merely encloses
- * a well-formed answer repeats that answer's keys, and reading them as a claim
- * of its own would reject the very review it wraps.
+ * Only the region's own keys count. Besides requiring object depth one, exclude
+ * a match whose source position belongs to a nested candidate. The range check
+ * remains reliable when unmatched braces in quoted patch code make the textual
+ * depth drift and an intact answer appears one level too shallow.
  */
-function declaresKey(raw: string, key: string): boolean {
+function declaresOwnKey(
+  candidate: Candidate,
+  candidates: readonly Candidate[],
+  key: string,
+): boolean {
+  const { raw } = candidate;
   const needle = `"${key}"`;
   let depth = 0;
   let inString = false;
@@ -186,7 +186,8 @@ function declaresKey(raw: string, key: string): boolean {
       if (
         depth === 1 &&
         raw.startsWith(needle, i) &&
-        /^\s*:/.test(raw.slice(i + needle.length))
+        /^\s*:/.test(raw.slice(i + needle.length)) &&
+        !positionIsInsideNestedCandidate(candidate.start + i, candidate, candidates)
       ) {
         return true;
       }
@@ -246,8 +247,7 @@ export function parseReview(text: string): Review {
     }
     if (
       candidate.value === null &&
-      declaresKey(candidate.raw, 'verdict') &&
-      !wrapsIntactVerdict(candidate, candidates)
+      declaresOwnKey(candidate, candidates, 'verdict')
     ) {
       throw new ReviewParseError(
         'the reviewer output nearest the end states a verdict but is not valid JSON',
@@ -305,13 +305,14 @@ function buildReview(record: Record<string, unknown>): Review {
 export function parseResolutions(text: string): FindingResolution[] | null {
   const candidates = eligibleCandidates(text);
   for (let index = candidates.length - 1; index >= 0; index--) {
-    const { raw, value } = candidates[index];
+    const candidate = candidates[index];
+    const { value } = candidate;
     // The nearest report is the current one, whether or not it survived. If it
     // resolves nothing — empty, all-invalid, or too damaged to parse — that is
     // the answer; searching further back would hand a superseded round's
     // resolutions to the next reviewer as if they applied to this one.
     if (value === null) {
-      if (declaresKey(raw, 'resolutions')) return null;
+      if (declaresOwnKey(candidate, candidates, 'resolutions')) return null;
       continue;
     }
     const list = value.resolutions;
