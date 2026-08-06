@@ -141,3 +141,45 @@ The token "{" is special; answer: {"verdict":"approve","findings":[]}
 3. 对最近的 raw resolutions candidate 使用相同的停止规则。
 4. 增加三个 schema 回归测试和至少一个 direct-engine 错误批准集成测试。
 5. 修复后重新运行历史 reviewer raw output 对比，并更新前次 Review 文档的处理状态。
+
+## 处理情况（2026-08-06）
+
+修复随本文档同一提交落地。3 条 finding 全部处理，四个复现场景已逐一复验，前次 Review
+的四个场景同时回归确认未被破坏。
+
+- **P1（语法损坏的最新 verdict）已处理**：候选不再在预处理阶段被丢弃。扫描结果改为保留
+  raw 文本、位置和解析状态；倒序寻找权威候选时，解析失败但顶层声明了 `"verdict"` 的区域
+  同样视为“最新意图”，直接抛 `ReviewParseError`，不再向前寻找旧 verdict。
+- **P1（verdict-less 与嵌套日志对象）已处理**，分两部分：
+  - 嵌套对象：新增候选资格过滤——被另一个**解析成功**的候选包含的区域一律排除，因为它
+    只可能是那个对象的组成部分（finding、`payload`）。特意不排除“被解析失败的区域包含”
+    的候选：引用代码里的散乱花括号经常把真正的答案包住，排除它们会让答案不可达（Cliffy
+    形态即属此类）。
+  - verdict-less 兼容：收紧为“仅当只有一个顶层候选时接受”。多候选且无人声明 verdict 时
+    fail closed。核对了 81 份历史 reviewer raw，**全部带显式 verdict**，因此该收紧不影响
+    真实输出。
+- **P2（语法损坏的最新 resolutions）已处理**：与 verdict 使用同一套候选策略。最近的候选
+  若声明了 `"resolutions"` 但解析失败，直接返回 `null`，不再回退更早报告。
+
+### 复验结果
+
+| 场景 | 修复前 | 修复后 |
+| --- | --- | --- |
+| 旧 approval + 语法损坏的新 verdict | 返回旧 `approve` | 抛 `ReviewParseError` |
+| verdict-less blocking + 尾部空 findings | `verdict=null`，无 blocking | 抛 `ReviewParseError`（多候选无 verdict） |
+| blocking review + 尾部嵌套 approval 日志 | 被覆盖为 `approve` | `verdict=revise`，保留 blocking |
+| 旧 resolutions + 最新语法损坏报告 | 返回旧 `accepted` | 返回 `null` |
+
+前次 Review 的四个场景保持正确：非法 verdict 抛错、尾部无 verdict 日志不覆盖、同行引号内
+花括号可解析、最新合法空 resolutions 返回 `null`。单个 verdict-less review 仍可接受。
+
+### 回归验证
+
+| 检查项 | 结果 |
+| --- | --- |
+| runtime `npm test`（含 TypeScript build） | 72/72 通过 |
+| opencode reviewer 原始 finalText（含 prompt echo） | 23/23 解析成功 |
+| opencode reviewer 剥离 prompt echo 后 | 23/23 解析成功 |
+| codex reviewer 全部历史 raw | 58/58 解析成功 |
+| 与已记录 `review.json` 的 verdict / findings 逐条比对 | 62/62 一致 |
+| 历史 raw 中 verdict 缺失的数量 | 0 / 81 |

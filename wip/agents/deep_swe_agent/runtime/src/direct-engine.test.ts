@@ -368,6 +368,27 @@ test('a trailing log object never approves past blocking findings', async (t) =>
   assert.match(modifier.requests[1].prompt, /R1-F1/);
 });
 
+test('a truncated verdict retries instead of delivering the corrected approval', async (t) => {
+  const { repo, config } = await makeFixture(t);
+  const modifier = new FakeRunner('modifier', [
+    editFile(repo, 'src.txt', 'fixed\n'),
+  ]);
+  const reviewer = new FakeRunner('reviewer', [
+    () =>
+      ok(
+        '{"verdict":"approve","summary":"s","findings":[]}\n' +
+          'Correction: {"verdict":"revise","findings":[}',
+      ),
+    () => ok('still not a verdict'),
+  ]);
+  const engine = new DirectCollaborationEngine(config, modifier, reviewer);
+  const result = await engine.run();
+
+  assert.notEqual(result.outcome, 'approved');
+  assert.equal(result.degradedReason, 'invalid_review_output');
+  assert.equal(reviewer.requests.length, 2);
+});
+
 test('strict mode turns degraded into non-deliverable', async (t) => {
   const { repo, config } = await makeFixture(t, { strict: true });
   const modifier = new FakeRunner('modifier', [

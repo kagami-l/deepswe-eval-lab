@@ -164,3 +164,10 @@ finding 全部处理，四个复现场景已逐一复验。
 | opencode reviewer 剥离 prompt echo 后 | 23/23 解析成功 |
 | codex reviewer 全部历史 raw | 58/58 解析成功 |
 | 与已记录 `review.json` 的 verdict / findings 逐条比对 | 62/62 一致 |
+
+### 后续复审补充（2026-08-06）
+
+复审 `717dd9d` 时发现本次「fail closed」只覆盖了已成功 `JSON.parse` 的候选，语法损坏的
+最新 verdict / resolutions 仍会回退旧结果，verdict-less 与嵌套对象也各留有一条错误批准
+路径。这三条已在后续提交中处理，详见
+[`20260806-201408-review-schema-fail-closed-followup-review-717dd9d.md`](./20260806-201408-review-schema-fail-closed-followup-review-717dd9d.md)。

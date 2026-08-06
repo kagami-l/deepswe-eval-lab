@@ -60,8 +60,16 @@ export interface FindingResolution {
  * disturb its own line. Regions are reported on each closing brace, so an
  * object nested under an unterminated `{` is still found.
  */
-function jsonObjectCandidates(text: string): string[] {
-  const candidates: string[] = [];
+interface Candidate {
+  raw: string;
+  start: number;
+  end: number;
+  /** Null when the region is not a JSON object — quoted code, a type sketch. */
+  value: Record<string, unknown> | null;
+}
+
+function jsonObjectCandidates(text: string): Candidate[] {
+  const candidates: Candidate[] = [];
   const opens: number[] = [];
   let inString = false;
   let escaped = false;
@@ -79,28 +87,48 @@ function jsonObjectCandidates(text: string): string[] {
     if (char === '"') inString = true;
     else if (char === '{') opens.push(i);
     else if (char === '}' && opens.length > 0) {
-      candidates.push(text.slice(opens.pop() as number, i + 1));
+      const start = opens.pop() as number;
+      const raw = text.slice(start, i + 1);
+      let value: Record<string, unknown> | null = null;
+      try {
+        const parsed: unknown = JSON.parse(raw);
+        if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+          value = parsed as Record<string, unknown>;
+        }
+      } catch {
+        // Left unparsed; callers decide whether the region still means something.
+      }
+      candidates.push({ raw, start, end: i + 1, value });
     }
   }
   return candidates;
 }
 
-/** Parsed JSON objects among the balanced regions, ordered by closing position. */
-function jsonObjects(text: string): Record<string, unknown>[] {
-  const objects: Record<string, unknown>[] = [];
-  for (const candidate of jsonObjectCandidates(text)) {
-    let value: unknown;
-    try {
-      value = JSON.parse(candidate);
-    } catch {
-      // A brace region that is not JSON — quoted code, a type sketch, a log line.
-      continue;
-    }
-    if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-      objects.push(value as Record<string, unknown>);
-    }
-  }
-  return objects;
+/**
+ * Candidates that can stand on their own, ordered by closing position.
+ *
+ * A region enclosed by another region that parsed is part of that object — a
+ * finding, or a `payload` inside a log line — and must never be mistaken for
+ * the reviewer's own answer. Enclosure by an *unparsed* region carries no such
+ * meaning: quoted code with stray braces routinely swallows the real answer,
+ * so those inner regions stay eligible.
+ */
+function eligibleCandidates(text: string): Candidate[] {
+  const candidates = jsonObjectCandidates(text);
+  return candidates.filter(
+    (candidate) =>
+      !candidates.some(
+        (other) =>
+          other.value !== null &&
+          other.start < candidate.start &&
+          candidate.end <= other.end,
+      ),
+  );
+}
+
+/** Whether an unparsed region still declares `key`, e.g. a truncated answer. */
+function declaresKey(raw: string, key: string): boolean {
+  return new RegExp(`"${key}"\\s*:`).test(raw);
 }
 
 function asString(value: unknown): string | null {
@@ -137,33 +165,38 @@ function parseFinding(value: unknown, index: number): ReviewFinding {
 
 export function parseReview(text: string): Review {
   if (!text.trim()) throw new ReviewParseError('reviewer output is empty');
-  const objects = jsonObjects(text);
+  const candidates = eligibleCandidates(text);
 
-  // Stating a verdict is how a reviewer signs its decision, so the last object
-  // that states one is authoritative and must validate. Falling further back
-  // would resurrect a verdict the reviewer already superseded; failing here
-  // instead surfaces `invalid_review_output` and retries the turn.
-  for (let index = objects.length - 1; index >= 0; index--) {
-    if (Object.hasOwn(objects[index], 'verdict')) {
-      return buildReview(objects[index]);
+  // Stating a verdict is how a reviewer signs its decision, so the last
+  // candidate that states one is authoritative. It must validate: falling
+  // further back would resurrect a verdict the reviewer already superseded,
+  // while failing here surfaces `invalid_review_output` and retries the turn.
+  // A truncated answer counts too — losing its closing brace must not hand the
+  // decision back to an earlier one.
+  for (let index = candidates.length - 1; index >= 0; index--) {
+    const { raw, value } = candidates[index];
+    if (value !== null && Object.hasOwn(value, 'verdict')) {
+      return buildReview(value);
+    }
+    if (value === null && declaresKey(raw, 'verdict')) {
+      throw new ReviewParseError(
+        'the reviewer output nearest the end states a verdict but is not valid JSON',
+      );
     }
   }
 
-  // No verdict anywhere. The schema still accepts a verdict-less review because
-  // findings alone decide the outcome, so fall back to the last object that
-  // validates — but an unrelated trailing object (a log line carrying an empty
-  // `findings`) can now only be chosen when the reviewer never stated a verdict
-  // at all.
-  let nearestError: ReviewParseError | null = null;
-  for (let index = objects.length - 1; index >= 0; index--) {
-    try {
-      return buildReview(objects[index]);
-    } catch (err) {
-      if (!(err instanceof ReviewParseError)) throw err;
-      nearestError ??= err;
-    }
+  // No verdict anywhere. The schema accepts a verdict-less review because
+  // findings alone decide the outcome, but only an unambiguous one: with more
+  // than one candidate there is no way to tell the answer from a trailing log
+  // line, and guessing wrong would approve past blocking findings.
+  const objects = candidates.map((candidate) => candidate.value).filter((value) => value !== null);
+  if (objects.length === 1) return buildReview(objects[0]);
+  if (objects.length === 0) {
+    throw new ReviewParseError('no JSON object found in reviewer output');
   }
-  throw nearestError ?? new ReviewParseError('no JSON object found in reviewer output');
+  throw new ReviewParseError(
+    `reviewer output has ${objects.length} candidate objects and none states a verdict`,
+  );
 }
 
 function buildReview(record: Record<string, unknown>): Review {
@@ -200,13 +233,19 @@ function buildReview(record: Record<string, unknown>): Review {
  * recorded but never fails the round.
  */
 export function parseResolutions(text: string): FindingResolution[] | null {
-  const objects = jsonObjects(text);
-  for (let index = objects.length - 1; index >= 0; index--) {
-    const list = objects[index].resolutions;
+  const candidates = eligibleCandidates(text);
+  for (let index = candidates.length - 1; index >= 0; index--) {
+    const { raw, value } = candidates[index];
+    // The nearest report is the current one, whether or not it survived. If it
+    // resolves nothing — empty, all-invalid, or too damaged to parse — that is
+    // the answer; searching further back would hand a superseded round's
+    // resolutions to the next reviewer as if they applied to this one.
+    if (value === null) {
+      if (declaresKey(raw, 'resolutions')) return null;
+      continue;
+    }
+    const list = value.resolutions;
     if (!Array.isArray(list)) continue;
-    // The nearest report is the current one. If it resolves nothing, that is
-    // the answer — searching further back would report a superseded round's
-    // resolutions as if they applied to this one.
     const resolutions: FindingResolution[] = [];
     for (const item of list) {
       if (typeof item !== 'object' || item === null) continue;

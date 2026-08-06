@@ -223,13 +223,51 @@ test('a trailing object without a verdict cannot erase blocking findings', () =>
   assert.equal(review.hasBlockingFindings, true);
 });
 
-test('a verdict-less review is still accepted when no verdict is stated', () => {
+test('a truncated latest verdict fails instead of reviving the earlier one', () => {
+  // Losing the closing brace must not hand the decision back to the approval
+  // the reviewer was in the middle of correcting.
+  assert.throws(
+    () =>
+      parseReview(
+        '{"verdict":"approve","findings":[]}\n' +
+          'Correction: {"verdict":"revise","findings":[}',
+      ),
+    (err: unknown) =>
+      err instanceof ReviewParseError && /not valid JSON/.test(err.message),
+  );
+});
+
+test('a lone verdict-less review is accepted', () => {
   const review = parseReview(
     'Nothing blocking here.\n{"summary":"s","findings":[]}',
   );
 
   assert.equal(review.verdict, null);
   assert.equal(review.hasBlockingFindings, false);
+});
+
+test('ambiguous verdict-less candidates fail closed', () => {
+  // Neither object states a verdict, so there is no way to tell the review
+  // from the log line — and picking the log line would drop a major finding.
+  assert.throws(
+    () =>
+      parseReview(
+        '{"findings":[{"severity":"major","issue":"x"}]}\nLog: {"findings":[]}',
+      ),
+    (err: unknown) =>
+      err instanceof ReviewParseError && /none states a verdict/.test(err.message),
+  );
+});
+
+test('a verdict nested inside a trailing log cannot override the review', () => {
+  const review = parseReview(
+    '{"verdict":"revise","summary":"s","findings":[' +
+      '{"severity":"major","issue":"x"}]}\n' +
+      'Log: {"payload":{"verdict":"approve","findings":[]}}',
+  );
+
+  assert.equal(review.verdict, 'revise');
+  assert.equal(review.hasBlockingFindings, true);
 });
 
 test('a quoted brace on the answer line does not mask the answer', () => {
@@ -256,6 +294,16 @@ test('an empty latest resolutions report does not revive an earlier one', () => 
     parseResolutions(
       'Earlier {"resolutions":[{"id":"R1-F1","status":"accepted"}]}\n' +
         'Final {"resolutions":[]}',
+    ),
+    null,
+  );
+});
+
+test('a damaged latest resolutions report does not revive an earlier one', () => {
+  assert.equal(
+    parseResolutions(
+      'Earlier {"resolutions":[{"id":"R1-F1","status":"accepted"}]}\n' +
+        'Final {"resolutions":[}',
     ),
     null,
   );
