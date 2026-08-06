@@ -16,6 +16,7 @@
 - 排除唯一无 verifier 结果的基础设施异常 trial：`11 / 23 = 47.83%`。
 - 12 个任务中有 9 个至少一次通过，手工计算 task-level pass@2：`9 / 12 = 75.00%`。
 - 两次均未通过的任务是 `anko-default-function-arguments`、`textual-richlog-follow-state` 和 `go-critic-doc-link-checker`。
+- 24 个 trial 共启动/完成 modify `24/21` 轮、review `45/39` 轮、revision `33/29` 轮；这里的轮数不把同一轮内的 `a1/a2` 重试重复计数。
 
 Pier 的 eval 条目记录 `n_trials=23`，但 metrics 中的 `reward=0.458333...` 等于 `11/24`，表明无 verifier 的 Prometheus trial 仍实际进入了 reward 分母。正式比较时不应只引用这个聚合值，应同时报告基础设施异常及有效分母。按 [DeepSWE 计分口径核查](../deepswe-pass-rate-and-leaderboard-scoring.md)，provider、verifier、network 类错误应排除，而 Agent timeout 应作为计分失败。
 
@@ -65,6 +66,44 @@ Run manifest 记录的 token/cost 汇总为 84,758,953 input tokens、1,701,535 
 | `clack-async-autocomplete-options` | `AmR2FGf`: 0 | `uDLDjVf`: 1 | 1 |
 
 共有 11 个通过 trial、12 个有效失败 trial、1 个无评分 trial。两个 Mobly 和两个 Cliffy trial 均通过；其余通过任务各有一次通过。
+
+## Modify、Review 与 Revision 轮数
+
+下表按 `启动轮数/完成轮数` 统计工作流阶段：
+
+- “启动”依据 `agent/system/rounds` 中的阶段目录；同一阶段内的 `a1/a2` 是 Agent attempt 重试，不另算新一轮。
+- Modify 只指初始实现阶段；Revision 同时包含普通 `revise` 和达到 review 上限后的 `final-revision`。
+- “完成”依据 runtime summary：初始 modify 成功并产生 checkpoint、review 成功解析并被编排接受、revision turn 成功结束；无改动的成功 revision 也计入完成，但不会新增 checkpoint。因 timeout、进程失败或无有效 review 输出而中止的已启动轮只计入启动数。
+
+| Task | Trial | Reward | Outcome | Modify | Review | Revision |
+|---|---|---:|---|---:|---:|---:|
+| `arcane-drift-detection-baselines` | `ZSavgNL` | 0 | `degraded` | 1/1 | 2/2 | 2/1 |
+| `arcane-drift-detection-baselines` | `Lv3VNFm` | 1 | `degraded` | 1/1 | 1/1 | 1/0 |
+| `tengo-callable-instance-isolation` | `KWcfETr` | 0 | `approved` | 1/1 | 3/3 | 2/2 |
+| `tengo-callable-instance-isolation` | `jnWHYJW` | 1 | `max_reviews_reached` | 1/1 | 3/3 | 3/3 |
+| `mobly-grouped-test-barriers` | `HPG7hyj` | 1 | `max_reviews_reached` | 1/1 | 3/3 | 3/3 |
+| `mobly-grouped-test-barriers` | `VMXYg93` | 1 | `max_reviews_reached` | 1/1 | 3/3 | 3/3 |
+| `fastapi-deprecation-response-headers` | `hJCjTdp` | 1 | `max_reviews_reached` | 1/1 | 3/3 | 3/3 |
+| `fastapi-deprecation-response-headers` | `wTj24wc` | 0 | `approved` | 1/1 | 2/2 | 1/1 |
+| `anko-default-function-arguments` | `XSViwH5` | 0 | `degraded` | 1/1 | 3/3 | 3/2 |
+| `anko-default-function-arguments` | `SvgJuDM` | 0 | `approved` | 1/1 | 1/1 | 0/0 |
+| `prometheus-typed-label-sorting` | `tUjP82r` | 无 verifier | `timeout` | 1/0 | 0/0 | 0/0 |
+| `prometheus-typed-label-sorting` | `kM7gVSE` | 1 | `max_reviews_reached` | 1/1 | 1/1 | 1/1 |
+| `kombu-single-active-consumer-priority` | `UK5tiWd` | 1 | `degraded` | 1/1 | 2/1 | 1/1 |
+| `kombu-single-active-consumer-priority` | `8jetM78` | 0 | `approved` | 1/1 | 2/2 | 1/1 |
+| `textual-richlog-follow-state` | `TYuW6wM` | 0 | `timeout` | 1/0 | 0/0 | 0/0 |
+| `textual-richlog-follow-state` | `TaRaiuc` | 0 | `degraded` | 1/1 | 2/1 | 1/1 |
+| `tomlkit-toml-table-converters` | `b8DBQ5j` | 0 | `timeout` | 1/0 | 0/0 | 0/0 |
+| `tomlkit-toml-table-converters` | `Kz4G7NU` | 1 | `degraded` | 1/1 | 2/1 | 1/1 |
+| `cliffy-config-file-parsing` | `kVWVMGR` | 1 | `approved` | 1/1 | 2/2 | 1/1 |
+| `cliffy-config-file-parsing` | `Yjd9BFS` | 1 | `degraded` | 1/1 | 3/3 | 3/2 |
+| `go-critic-doc-link-checker` | `i8JM6tz` | 0 | `degraded` | 1/1 | 2/1 | 1/1 |
+| `go-critic-doc-link-checker` | `yqCiTFe` | 0 | `degraded` | 1/1 | 1/0 | 0/0 |
+| `clack-async-autocomplete-options` | `AmR2FGf` | 0 | `degraded` | 1/1 | 2/1 | 1/1 |
+| `clack-async-autocomplete-options` | `uDLDjVf` | 1 | `approved` | 1/1 | 2/2 | 1/1 |
+| **合计** | **24 trials** | **11 / 24** | — | **24/21** | **45/39** | **33/29** |
+
+阶段内部实际发生 67 次 modifier attempt 和 57 次 reviewer attempt：前者分布在 24 个初始 modify 轮与 33 个 revision 轮中，后者分布在 45 个 review 轮中。轮数与 attempt 数的差异来自配置允许每轮最多两次 Agent 尝试。
 
 ## 三个异常 trial
 
