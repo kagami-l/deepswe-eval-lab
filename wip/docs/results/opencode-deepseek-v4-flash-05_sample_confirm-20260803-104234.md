@@ -136,7 +136,7 @@ Token 和 cost 来自 OpenCode/Pier 转换后的 usage 记录。输入 token 中
 
 ## 与同确认集协作 job 的对照
 
-同一 12 题、每题 2 次的 [unified-collab job](unified-collab-05_sample_confirm-12-tasks-20260804-200817.md) 得到 11/24 raw reward、9/12 task-level pass@2，其中一个 Prometheus trial 无 verifier，排除后为 11/23。
+同一 12 题、每题 2 次的 [unified-collab job](unified-collab-opencode-codex-05_sample_confirm-12-tasks-20260804-200817.md) 得到 11/24 raw reward、9/12 task-level pass@2，其中一个 Prometheus trial 无 verifier，排除后为 11/23。
 
 | 口径 | 本 job：单 OpenCode + DeepSeek V4 Flash | unified-collab |
 |---|---:|---:|

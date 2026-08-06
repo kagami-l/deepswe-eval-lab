@@ -143,7 +143,7 @@ Unified Codex wrapper 将每个 trial 记录为一个 modifier turn，因此 `n_
 另两个 job 使用同一 12 题、每题 2 次：
 
 - [单 OpenCode + DeepSeek V4 Flash](opencode-deepseek-v4-flash-05_sample_confirm-20260803-104234.md)：24/24 有效，10/24 通过，7/12 task-level pass@2。
-- [OpenCode + DeepSeek modifier、Codex reviewer 的协作 job](unified-collab-05_sample_confirm-12-tasks-20260804-200817.md)：11/24 raw reward，其中 1 个 Prometheus trial 无 verifier；有效口径 11/23，9/12 task-level pass@2。
+- [OpenCode + DeepSeek modifier、Codex reviewer 的协作 job](unified-collab-opencode-codex-05_sample_confirm-12-tasks-20260804-200817.md)：11/24 raw reward，其中 1 个 Prometheus trial 无 verifier；有效口径 11/23，9/12 task-level pass@2。
 
 | 口径 | 单 OpenCode | unified-collab | 本 job：unified Codex |
 |---|---:|---:|---:|

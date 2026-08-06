@@ -1,4 +1,4 @@
-# unified-collab-05_sample_confirm-12-tasks-20260805-224241 结果分析
+# unified-collab-codex-opencode-05_sample_confirm-12-tasks-20260805-224241 结果分析
 
 分析日期：2026-08-06。
 
@@ -127,7 +127,7 @@ JSON 提取器优先选择第一个无语言/JSON fenced object，否则选择�
 
 ## 与 Codex reviewer job 的对比
 
-对照 job 为 [unified-collab-05_sample_confirm-12-tasks-20260804-200817](unified-collab-05_sample_confirm-12-tasks-20260804-200817.md)：OpenCode `deepseek/deepseek-v4-flash` 做 modifier，Codex `gpt-5.6-luna` 做 reviewer。两个 job 使用相同的 12 个 confirm task、每题两次 trial、`maxAgentAttempts=2`、`maxReviews=3`、600 秒 reviewer turn timeout、900 秒 revision timeout和 5100/5400 秒 workflow soft/hard budget。
+对照 job 为 [unified-collab-opencode-codex-05_sample_confirm-12-tasks-20260804-200817](unified-collab-opencode-codex-05_sample_confirm-12-tasks-20260804-200817.md)：OpenCode `deepseek/deepseek-v4-flash` 做 modifier，Codex `gpt-5.6-luna` 做 reviewer。两个 job 使用相同的 12 个 confirm task、每题两次 trial、`maxAgentAttempts=2`、`maxReviews=3`、600 秒 reviewer turn timeout、900 秒 revision timeout和 5100/5400 秒 workflow soft/hard budget。
 
 两次运行不是纯 reviewer A/B：modifier 与 reviewer 同时互换，生成的 patch 也不同；runtime image 从 `e87ec83987608685` 更新到 `12129eb84c44eb9d`。因此只能比较两个完整协作系统在这两次运行中的行为，不能把所有差异单独归因给模型。
 
