@@ -21,7 +21,7 @@ class CliTests(unittest.TestCase):
         )
         self.assertRegex(
             job_name,
-            rf"^unified-codex-one_task-{TASK}-\d{{8}}-\d{{6}}$",
+            rf"^codex-one_task-{TASK}-\d{{8}}-\d{{6}}$",
         )
 
     def test_default_job_name_includes_task_list_filename_and_task_count(self) -> None:
@@ -29,10 +29,12 @@ class CliTests(unittest.TestCase):
             "collab",
             ["task-a", "task-b"],
             [Path("data/selection/05 sample confirm.txt")],
+            modifier="opencode",
+            reviewer="codex",
         )
         self.assertRegex(
             job_name,
-            r"^unified-collab-05-sample-confirm-2-tasks-\d{8}-\d{6}$",
+            r"^collab-opencode-codex-05-sample-confirm-2-tasks-\d{8}-\d{6}$",
         )
 
     def test_default_job_name_includes_multiple_task_list_labels(self) -> None:
@@ -43,7 +45,7 @@ class CliTests(unittest.TestCase):
         )
         self.assertRegex(
             job_name,
-            r"^unified-opencode-first-and-second.tasks-2-tasks-\d{8}-\d{6}$",
+            r"^opencode-first-and-second.tasks-2-tasks-\d{8}-\d{6}$",
         )
 
     def test_generated_job_name_is_bounded_and_keeps_timestamp(self) -> None:

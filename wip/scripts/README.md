@@ -13,9 +13,11 @@ uv run python scripts/run_agent_eval.py eval \
   --task <task> --agent collab --modifier kimi --reviewer codex --dry-run
 ```
 
-未传 `--job-name` 时，自动名称会包含 task-list 的文件名。例如
-`--task-list data/selection/05_sample_dev.txt` 会生成形如
-`unified-codex-05_sample_dev-12-tasks-20260804-120000` 的名称；显式
+未传 `--job-name` 时，自动名称以 Agent 开头并包含 task-list 的文件名。例如
+`--agent codex --task-list data/selection/05_sample_dev.txt` 会生成形如
+`codex-05_sample_dev-12-tasks-20260804-120000` 的名称；`--agent collab`
+会在 `collab-` 后插入 `{modifier}-{reviewer}`，例如
+`collab-opencode-codex-05_sample_dev-12-tasks-20260804-120000`。显式
 `--job-name` 仍会完整覆盖该默认值。
 
 每个 Agent turn 默认在连续 600 秒没有任何事件时保存诊断快照并提前终止，避免静默 session

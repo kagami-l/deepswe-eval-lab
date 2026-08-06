@@ -132,7 +132,12 @@ def _shorten_generated_job_name(base: str, timestamp: str) -> str:
 
 
 def _default_job_name(
-    agent: str, tasks: list[str], task_lists: list[Path] | None = None
+    agent: str,
+    tasks: list[str],
+    task_lists: list[Path] | None = None,
+    *,
+    modifier: str | None = None,
+    reviewer: str | None = None,
 ) -> str:
     task_scope = tasks[0] if len(tasks) == 1 else f"{len(tasks)}-tasks"
     list_labels = list(
@@ -144,7 +149,12 @@ def _default_job_name(
         else task_scope
     )
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    base = _safe_job_component(f"unified-{agent}-{scope}").strip("._-")
+    agent_label = (
+        f"{agent}-{modifier}-{reviewer}"
+        if agent == "collab" and modifier and reviewer
+        else agent
+    )
+    base = _safe_job_component(f"{agent_label}-{scope}").strip("._-")
     return _shorten_generated_job_name(base, timestamp)
 
 
@@ -377,7 +387,13 @@ def _evaluate(args: argparse.Namespace, argv: list[str]) -> int:
     )
     if args.job_name is not None:
         _validate_explicit_job_name(args.job_name)
-    job_name = args.job_name or _default_job_name(args.agent, tasks, task_lists)
+    job_name = args.job_name or _default_job_name(
+        args.agent,
+        tasks,
+        task_lists,
+        modifier=plan.modifier.name,
+        reviewer=plan.reviewer.name if plan.reviewer is not None else None,
+    )
     jobs_dir = args.jobs_dir.expanduser().resolve()
     manifest_path = jobs_dir / ".agent-eval-manifests" / f"{job_name}.json"
     pier_args = list(args.pier_args)
