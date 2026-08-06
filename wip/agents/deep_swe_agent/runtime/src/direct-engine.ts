@@ -14,11 +14,12 @@ import { appendFileSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import type {
-  AgentRunner,
-  EventSink,
-  TurnResult,
-  TurnUsage,
+import {
+  createEventFileSink,
+  type AgentRunner,
+  type EventSink,
+  type TurnResult,
+  type TurnUsage,
 } from './agent-runner.js';
 import {
   emptyRoleUsage,
@@ -116,13 +117,10 @@ export class DirectCollaborationEngine implements CollaborationEngine {
   }
 
   private makeEventSink(roundDir: string): EventSink {
-    const roundEvents = join(roundDir, 'events.jsonl');
-    const globalEvents = join(this.config.outputDir, 'events.jsonl');
-    return (event) => {
-      const line = JSON.stringify(event) + '\n';
-      appendFileSync(roundEvents, line);
-      appendFileSync(globalEvents, line);
-    };
+    return createEventFileSink([
+      join(roundDir, 'events.jsonl'),
+      join(this.config.outputDir, 'events.jsonl'),
+    ]);
   }
 
   private addUsage(role: 'modifier' | 'reviewer', result: TurnResult): void {

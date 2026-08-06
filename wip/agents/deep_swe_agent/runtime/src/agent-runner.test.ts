@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { CligentRunner } from './agent-runner.js';
+import { CligentRunner, createEventFileSink } from './agent-runner.js';
 
 test('headless runner aborts instead of waiting on a permission request', async () => {
   let abortSignal: AbortSignal | undefined;
@@ -185,6 +185,30 @@ test('genuine output that merely resembles the prompt is preserved', async () =>
   );
 
   assert.equal(result.finalText, 'review this change, done');
+});
+
+test('the event file sink fans out every event except token deltas', async (t) => {
+  const tempDir = await mkdtemp(join(tmpdir(), 'deep-swe-sink-'));
+  t.after(() => rm(tempDir, { recursive: true, force: true }));
+  const roundEvents = join(tempDir, 'round.jsonl');
+  const globalEvents = join(tempDir, 'global.jsonl');
+
+  const sink = createEventFileSink([roundEvents, globalEvents]);
+  sink({ type: 'text_delta', payload: { delta: 'Let' } });
+  sink({ type: 'thinking', payload: { summary: 'Let me check the diff.' } });
+  sink({ type: 'text_delta', payload: { delta: ' me' } });
+  sink({ type: 'text', payload: { content: 'Done.' } });
+
+  for (const path of [roundEvents, globalEvents]) {
+    const written = (await readFile(path, 'utf8'))
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    assert.deepEqual(
+      written.map((event) => event.type),
+      ['thinking', 'text'],
+    );
+  }
 });
 
 test('event silence captures diagnostics before aborting the turn', async (t) => {

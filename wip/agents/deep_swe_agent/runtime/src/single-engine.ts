@@ -4,7 +4,12 @@ import { appendFileSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import type { AgentRunner, EventSink, TurnResult } from './agent-runner.js';
+import {
+  createEventFileSink,
+  type AgentRunner,
+  type EventSink,
+  type TurnResult,
+} from './agent-runner.js';
 import {
   emptyRoleUsage,
   type CollaborationEngine,
@@ -96,11 +101,10 @@ export class SingleWorkflowEngine implements CollaborationEngine {
     let failure: 'modifier_failed' | 'timeout' | 'empty_patch' =
       'modifier_failed';
     let succeeded = false;
-    const sink: EventSink = (event) => {
-      const line = JSON.stringify(event) + '\n';
-      appendFileSync(join(roundDir, 'events.jsonl'), line);
-      appendFileSync(join(this.config.outputDir, 'events.jsonl'), line);
-    };
+    const sink: EventSink = createEventFileSink([
+      join(roundDir, 'events.jsonl'),
+      join(this.config.outputDir, 'events.jsonl'),
+    ]);
 
     for (let attempt = 1; attempt <= this.config.maxAgentAttempts; attempt++) {
       if (this.remainingSec() < this.config.minTurnSec) {
