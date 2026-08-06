@@ -368,7 +368,7 @@ test('a trailing log object never approves past blocking findings', async (t) =>
   assert.match(modifier.requests[1].prompt, /R1-F1/);
 });
 
-test('a truncated verdict retries instead of delivering the corrected approval', async (t) => {
+test('a verdict cut off at end of output retries instead of delivering the corrected approval', async (t) => {
   const { repo, config } = await makeFixture(t);
   const modifier = new FakeRunner('modifier', [
     editFile(repo, 'src.txt', 'fixed\n'),
@@ -377,7 +377,7 @@ test('a truncated verdict retries instead of delivering the corrected approval',
     () =>
       ok(
         '{"verdict":"approve","summary":"s","findings":[]}\n' +
-          'Correction: {"verdict":"revise","findings":[}',
+          'Correction: {"verdict":"revise","findings":[]',
       ),
     () => ok('still not a verdict'),
   ]);

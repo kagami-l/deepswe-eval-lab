@@ -88,20 +88,32 @@ function jsonObjectCandidates(text: string): Candidate[] {
     else if (char === '{') opens.push(i);
     else if (char === '}' && opens.length > 0) {
       const start = opens.pop() as number;
-      const raw = text.slice(start, i + 1);
-      let value: Record<string, unknown> | null = null;
-      try {
-        const parsed: unknown = JSON.parse(raw);
-        if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
-          value = parsed as Record<string, unknown>;
-        }
-      } catch {
-        // Left unparsed; callers decide whether the region still means something.
-      }
-      candidates.push({ raw, start, end: i + 1, value });
+      candidates.push(makeCandidate(text, start, i + 1));
     }
   }
+  // An answer cut off mid-object never reaches a closing brace. Reported last,
+  // since it runs to the end of the output, it stays visible to the callers'
+  // backwards walk instead of vanishing and handing the decision to an earlier
+  // result. Only the innermost open region is kept: any region enclosing it
+  // would repeat its keys without adding a distinct claim.
+  if (opens.length > 0) {
+    candidates.push(makeCandidate(text, opens[opens.length - 1], text.length));
+  }
   return candidates;
+}
+
+function makeCandidate(text: string, start: number, end: number): Candidate {
+  const raw = text.slice(start, end);
+  let value: Record<string, unknown> | null = null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+      value = parsed as Record<string, unknown>;
+    }
+  } catch {
+    // Left unparsed; callers decide whether the region still means something.
+  }
+  return { raw, start, end, value };
 }
 
 /**
@@ -126,9 +138,63 @@ function eligibleCandidates(text: string): Candidate[] {
   );
 }
 
-/** Whether an unparsed region still declares `key`, e.g. a truncated answer. */
+/**
+ * Whether a damaged region merely wraps an intact answer.
+ *
+ * Quoted patch code with an unbalanced brace routinely opens a region that runs
+ * to the end of the output and swallows the review sitting inside it. Such a
+ * region is noise, not a claim of its own: reading it as a truncated verdict
+ * would reject an answer that parses perfectly well one level in.
+ */
+function wrapsIntactVerdict(
+  candidate: Candidate,
+  candidates: readonly Candidate[],
+): boolean {
+  return candidates.some(
+    (other) =>
+      other.value !== null &&
+      Object.hasOwn(other.value, 'verdict') &&
+      candidate.start < other.start &&
+      other.end <= candidate.end,
+  );
+}
+
+/**
+ * Whether an unparsed region declares `key` as its own, e.g. a cut-off answer.
+ *
+ * Only the region's own keys count. A broken outer region that merely encloses
+ * a well-formed answer repeats that answer's keys, and reading them as a claim
+ * of its own would reject the very review it wraps.
+ */
 function declaresKey(raw: string, key: string): boolean {
-  return new RegExp(`"${key}"\\s*:`).test(raw);
+  const needle = `"${key}"`;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < raw.length; i++) {
+    const char = raw[i];
+    if (inString) {
+      if (char === '\n') {
+        inString = false;
+        escaped = false;
+      } else if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === '"') {
+      if (
+        depth === 1 &&
+        raw.startsWith(needle, i) &&
+        /^\s*:/.test(raw.slice(i + needle.length))
+      ) {
+        return true;
+      }
+      inString = true;
+    } else if (char === '{') depth++;
+    else if (char === '}') depth--;
+  }
+  return false;
 }
 
 function asString(value: unknown): string | null {
@@ -174,11 +240,15 @@ export function parseReview(text: string): Review {
   // A truncated answer counts too — losing its closing brace must not hand the
   // decision back to an earlier one.
   for (let index = candidates.length - 1; index >= 0; index--) {
-    const { raw, value } = candidates[index];
-    if (value !== null && Object.hasOwn(value, 'verdict')) {
-      return buildReview(value);
+    const candidate = candidates[index];
+    if (candidate.value !== null && Object.hasOwn(candidate.value, 'verdict')) {
+      return buildReview(candidate.value);
     }
-    if (value === null && declaresKey(raw, 'verdict')) {
+    if (
+      candidate.value === null &&
+      declaresKey(candidate.raw, 'verdict') &&
+      !wrapsIntactVerdict(candidate, candidates)
+    ) {
       throw new ReviewParseError(
         'the reviewer output nearest the end states a verdict but is not valid JSON',
       );

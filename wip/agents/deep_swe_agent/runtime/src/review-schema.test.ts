@@ -223,9 +223,7 @@ test('a trailing object without a verdict cannot erase blocking findings', () =>
   assert.equal(review.hasBlockingFindings, true);
 });
 
-test('a truncated latest verdict fails instead of reviving the earlier one', () => {
-  // Losing the closing brace must not hand the decision back to the approval
-  // the reviewer was in the middle of correcting.
+test('a damaged latest verdict fails instead of reviving the earlier one', () => {
   assert.throws(
     () =>
       parseReview(
@@ -235,6 +233,43 @@ test('a truncated latest verdict fails instead of reviving the earlier one', () 
     (err: unknown) =>
       err instanceof ReviewParseError && /not valid JSON/.test(err.message),
   );
+});
+
+test('a verdict cut off at end of output fails instead of reviving the earlier one', () => {
+  // No closing brace at all, so the region never closes. Dropping it would
+  // hand the decision back to the approval the reviewer was correcting.
+  assert.throws(
+    () =>
+      parseReview(
+        '{"verdict":"approve","findings":[]}\n' +
+          'Correction: {"verdict":"revise","findings":[]',
+      ),
+    (err: unknown) =>
+      err instanceof ReviewParseError && /not valid JSON/.test(err.message),
+  );
+});
+
+test('quoted code running to end of output does not bury the answer', () => {
+  // The shape that broke two historical reviews: a patch hunk leaves an
+  // unbalanced brace, so the region it opens swallows the answer and reaches
+  // the end of the output. It wraps an intact verdict, so it is noise.
+  const review = parseReview(
+    [
+      'The patch adds:',
+      '+export const run = <Value>(opts: Opts) => {',
+      '+\tconst rows = opts.items.map((item) => ({ ...item }));',
+      '',
+      '{"verdict":"revise","summary":"s","findings":[]}',
+    ].join('\n'),
+  );
+
+  assert.equal(review.verdict, 'revise');
+});
+
+test('a damaged outer region does not reject the valid answer inside it', () => {
+  const review = parseReview('{broken\n{"verdict":"approve","summary":"s","findings":[]}}');
+
+  assert.equal(review.verdict, 'approve');
 });
 
 test('a lone verdict-less review is accepted', () => {
@@ -304,6 +339,16 @@ test('a damaged latest resolutions report does not revive an earlier one', () =>
     parseResolutions(
       'Earlier {"resolutions":[{"id":"R1-F1","status":"accepted"}]}\n' +
         'Final {"resolutions":[}',
+    ),
+    null,
+  );
+});
+
+test('a resolutions report cut off at end of output does not revive an earlier one', () => {
+  assert.equal(
+    parseResolutions(
+      'Earlier {"resolutions":[{"id":"R1-F1","status":"accepted"}]}\n' +
+        'Final {"resolutions":[',
     ),
     null,
   );

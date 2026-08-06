@@ -147,3 +147,55 @@ balanced damaged region，没有覆盖 EOF 截断。
 2. 将 `verdict` / `resolutions` 的 raw key 检测限定在候选顶层。
 3. 增加三个精确回归测试，其中 verdict 同时覆盖 direct-engine 重试路径。
 4. 重跑 runtime 测试与历史 reviewer raw 回放，确认 fail-closed 收紧不影响兼容性。
+
+## 处理情况（2026-08-06）
+
+修复随本文档同一提交落地。3 条 finding 全部处理，前两轮 Review 的场景一并回归确认。
+
+- **P1（EOF 截断的最新 verdict）已处理**：扫描结束时保留最内层未闭合区域，作为最后一个
+  候选（它一直延伸到输出末尾）。指出的措辞问题属实——上次测试用的
+  `{"findings":[}` 是 balanced 区域，注释却写成 “losing the closing brace”，两者不是同一
+  回事。现已拆成两个测试分别覆盖"有闭合括号但语法损坏"和"真正缺少闭合括号"。
+- **P2（无效外层误判内层 review）已处理**，但修法与建议不同，原因见下。
+- **P2（EOF 截断的最新 resolutions）已处理**：与 verdict 共用同一候选扫描器，EOF 候选补上
+  后自动覆盖；已补精确回归测试。
+
+### 一个必须记录的中间失败
+
+先按建议实现了"raw key 检测限定在候选顶层"（按花括号和方括号计算深度），单元测试全绿，
+但历史回放从 23/23 掉到 **21/23**：Clack `v5VzvX5` 的两次 attempt 开始误报。
+
+追查后发现根因不在 key 检测，而在 EOF 候选本身：那个未闭合区域并不是"被截断的答案"，
+而是 **patch 代码里一个不配对的花括号开出的区域**，它一路延伸到输出末尾，把真正的 review
+整个包在里面。引用代码中的方括号还会让深度计算漂移，使内层的 `"verdict"` 恰好落在深度 1。
+
+因此改为按**结构**而非文本深度判定：**损坏区域若包含一个解析成功且带 `verdict` 的候选，
+即判定为噪声，不作为"被截断的声明"**。这条规则同时解决了 P2 的无效外层误判——
+`{broken\n{...}}` 正是"外层损坏、内层完整"的同一形态——因此不再需要依赖深度启发式来区分。
+深度检测仍保留但改为只计花括号（JSON 对象的 key 必然直接位于 `{` 内，方括号与之无关）。
+
+这个中间失败说明：对**引用代码构成的损坏区域**做结构推断本身不可靠，只有"里面是否存在
+一个完整可解析的答案"这类基于解析结果的判据才稳。
+
+### 复验结果
+
+| 场景 | 修复前 | 修复后 |
+| --- | --- | --- |
+| 旧 approval + EOF 截断的新 verdict | 返回旧 `approve` | 抛 `ReviewParseError` |
+| 无效 balanced 外层包含合法内层 review | 抛 `ReviewParseError` | 正确返回内层 `approve` |
+| 旧 resolutions + EOF 截断的新报告 | 返回旧 `accepted` | 返回 `null` |
+| 引用代码不配对花括号延伸至末尾 | （新增守护）| 正确返回内层 verdict |
+
+前两轮 Review 的场景全部保持：balanced 损坏 verdict 抛错、非法 verdict 值抛错、尾部嵌套
+approval 日志不覆盖、多候选无 verdict fail closed、未闭合括号在答案之前可解析、单个
+verdict-less review 可接受。
+
+### 回归验证
+
+| 检查项 | 结果 |
+| --- | --- |
+| runtime `npm test`（含 TypeScript build） | 76/76 通过 |
+| opencode reviewer 原始 finalText（含 prompt echo） | 23/23 解析成功 |
+| opencode reviewer 剥离 prompt echo 后 | 23/23 解析成功 |
+| codex reviewer 全部历史 raw | 58/58 解析成功 |
+| 与已记录 `review.json` 的 verdict / findings 逐条比对 | 62/62 一致 |
