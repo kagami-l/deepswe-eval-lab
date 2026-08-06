@@ -366,6 +366,11 @@ test('wall-clock timeout classification does not depend on adapter done status',
         signal.addEventListener('abort', () => resolve(), { once: true });
       });
       yield {
+        type: 'error',
+        agent: 'codex',
+        payload: { message: 'adapter aborted' },
+      };
+      yield {
         type: 'done',
         agent: 'codex',
         payload: { status: 'error' },
@@ -398,6 +403,7 @@ test('wall-clock timeout classification does not depend on adapter done status',
   assert.equal(result.timedOut, true);
   assert.equal(result.timeoutKind, 'stage_timeout');
   assert.match(result.error ?? '', /stage_timeout/);
+  assert.doesNotMatch(result.error ?? '', /adapter aborted/);
   const cleanup = events.find(
     (event) => event.type === 'runtime:turn_process_cleanup',
   );

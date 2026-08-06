@@ -8,6 +8,7 @@ import {
   createEventFileSink,
   type AgentRunner,
   type EventSink,
+  type TimeoutKind,
   type TurnResult,
 } from './agent-runner.js';
 import {
@@ -100,6 +101,7 @@ export class SingleWorkflowEngine implements CollaborationEngine {
     const attempts: Record<string, unknown>[] = [];
     let failure: 'modifier_failed' | 'timeout' | 'empty_patch' =
       'modifier_failed';
+    let terminalTimeoutKind: TimeoutKind | null = null;
     let succeeded = false;
     const sink: EventSink = createEventFileSink([
       join(roundDir, 'events.jsonl'),
@@ -109,6 +111,12 @@ export class SingleWorkflowEngine implements CollaborationEngine {
     for (let attempt = 1; attempt <= this.config.maxAgentAttempts; attempt++) {
       if (this.remainingSec() < this.config.minTurnSec) {
         failure = 'timeout';
+        terminalTimeoutKind = 'total_deadline';
+        this.trace('modifier_turn_skipped', {
+          attempt,
+          timeoutKind: terminalTimeoutKind,
+          remainingSec: this.remainingSec(),
+        });
         break;
       }
       this.trace('modifier_turn_start', { attempt });
@@ -141,6 +149,7 @@ export class SingleWorkflowEngine implements CollaborationEngine {
       });
       if (!result.ok) {
         failure = result.timedOut ? 'timeout' : 'modifier_failed';
+        terminalTimeoutKind = result.timeoutKind;
         await this.ws.resetTo(this.baseCommit, this.baseline);
         continue;
       }
@@ -172,7 +181,16 @@ export class SingleWorkflowEngine implements CollaborationEngine {
 
     await writeFile(
       join(roundDir, 'metadata.json'),
-      JSON.stringify({ role: 'modifier', attempts }, null, 2),
+      JSON.stringify(
+        {
+          role: 'modifier',
+          attempts,
+          timeoutKind:
+            !succeeded && failure === 'timeout' ? terminalTimeoutKind : null,
+        },
+        null,
+        2,
+      ),
     );
     return succeeded
       ? this.finalize('completed', null)

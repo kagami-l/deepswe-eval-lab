@@ -141,3 +141,14 @@ single 这边只做了一半（attempt 级有，round 级没有）。
 3.（可选）phase cap 上界校验、清理死分支。
 4. 批量评测前，用一个真实任务验证默认 review/revision 确实能跑满剩余预算，
    且 event-silence 看门狗仍在 600 秒生效。
+
+## 处理情况（2026-08-06）
+
+- Finding 1 已处理：本地 abort 确定后，adapter 随后的 `error` 事件不再覆盖
+  runtime 生成的 timeout 消息；回归测试覆盖了 abort 后依次收到 `error` 和 `done`
+  的场景。
+- Finding 2 已处理：single-engine 的 min-turn 跳过会写入
+  `modifier_turn_skipped` trace，并在 round metadata 顶层记录
+  `timeoutKind = "total_deadline"`；新增了对应测试。
+- runtime `npm test` 更新为 53/53 通过。可选小项保持原样，真实长时 smoke
+  仍留待批量评测前执行。

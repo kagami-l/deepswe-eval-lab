@@ -415,7 +415,9 @@ export class CligentRunner implements AgentRunner {
           break;
         } else if (type === 'error') {
           const payload = event.payload as { message?: string } | undefined;
-          errorMessage = payload?.message ?? 'unknown adapter error';
+          if (abortReason === null) {
+            errorMessage = payload?.message ?? 'unknown adapter error';
+          }
         } else if (type === 'done') {
           const payload = event.payload as {
             status?: string;
