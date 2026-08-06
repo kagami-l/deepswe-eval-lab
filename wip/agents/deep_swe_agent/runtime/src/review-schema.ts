@@ -53,9 +53,12 @@ export interface FindingResolution {
  * walk this list backwards and take the last region that actually validates, so
  * the answer wins over anything quoted before it.
  *
- * Quotes only toggle string state inside a region, keeping stray prose quotes
- * from masking a later object. Regions are reported on each closing brace, so
- * an object nested under an unterminated `{` is still found.
+ * Quotes are tracked everywhere, so a brace quoted in prose (`the "{" token`)
+ * does not open a bogus region and mask the answer behind it. A raw newline
+ * ends the string: real JSON strings escape their newlines, so meeting one
+ * proves the quote came from prose, and a single unbalanced quote can only
+ * disturb its own line. Regions are reported on each closing brace, so an
+ * object nested under an unterminated `{` is still found.
  */
 function jsonObjectCandidates(text: string): string[] {
   const candidates: string[] = [];
@@ -64,15 +67,7 @@ function jsonObjectCandidates(text: string): string[] {
   let escaped = false;
   for (let i = 0; i < text.length; i++) {
     const char = text[i];
-    if (opens.length === 0) {
-      if (char === '{') opens.push(i);
-      continue;
-    }
     if (inString) {
-      // A JSON string cannot hold a raw newline, so one proves the quote came
-      // from prose or code rather than from the object being scanned. Ending
-      // the string at the line break stops a single stray quote from masking
-      // every brace after it.
       if (char === '\n') {
         inString = false;
         escaped = false;
@@ -83,11 +78,29 @@ function jsonObjectCandidates(text: string): string[] {
     }
     if (char === '"') inString = true;
     else if (char === '{') opens.push(i);
-    else if (char === '}') {
+    else if (char === '}' && opens.length > 0) {
       candidates.push(text.slice(opens.pop() as number, i + 1));
     }
   }
   return candidates;
+}
+
+/** Parsed JSON objects among the balanced regions, ordered by closing position. */
+function jsonObjects(text: string): Record<string, unknown>[] {
+  const objects: Record<string, unknown>[] = [];
+  for (const candidate of jsonObjectCandidates(text)) {
+    let value: unknown;
+    try {
+      value = JSON.parse(candidate);
+    } catch {
+      // A brace region that is not JSON — quoted code, a type sketch, a log line.
+      continue;
+    }
+    if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+      objects.push(value as Record<string, unknown>);
+    }
+  }
+  return objects;
 }
 
 function asString(value: unknown): string | null {
@@ -124,26 +137,27 @@ function parseFinding(value: unknown, index: number): ReviewFinding {
 
 export function parseReview(text: string): Review {
   if (!text.trim()) throw new ReviewParseError('reviewer output is empty');
-  const candidates = jsonObjectCandidates(text);
-  if (candidates.length === 0) {
-    throw new ReviewParseError('no JSON object found in reviewer output');
-  }
-  // Last valid region wins. The first failure met walking backwards is the one
-  // reported: it comes from the candidate nearest the end, which is almost
-  // always the answer the reviewer meant to give.
-  let nearestError: ReviewParseError | null = null;
-  for (let index = candidates.length - 1; index >= 0; index--) {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(candidates[index]);
-    } catch (err) {
-      nearestError ??= new ReviewParseError(
-        `invalid JSON: ${err instanceof Error ? err.message : String(err)}`,
-      );
-      continue;
+  const objects = jsonObjects(text);
+
+  // Stating a verdict is how a reviewer signs its decision, so the last object
+  // that states one is authoritative and must validate. Falling further back
+  // would resurrect a verdict the reviewer already superseded; failing here
+  // instead surfaces `invalid_review_output` and retries the turn.
+  for (let index = objects.length - 1; index >= 0; index--) {
+    if (Object.hasOwn(objects[index], 'verdict')) {
+      return buildReview(objects[index]);
     }
+  }
+
+  // No verdict anywhere. The schema still accepts a verdict-less review because
+  // findings alone decide the outcome, so fall back to the last object that
+  // validates — but an unrelated trailing object (a log line carrying an empty
+  // `findings`) can now only be chosen when the reviewer never stated a verdict
+  // at all.
+  let nearestError: ReviewParseError | null = null;
+  for (let index = objects.length - 1; index >= 0; index--) {
     try {
-      return buildReview(parsed as Record<string, unknown>);
+      return buildReview(objects[index]);
     } catch (err) {
       if (!(err instanceof ReviewParseError)) throw err;
       nearestError ??= err;
@@ -186,17 +200,13 @@ function buildReview(record: Record<string, unknown>): Review {
  * recorded but never fails the round.
  */
 export function parseResolutions(text: string): FindingResolution[] | null {
-  const candidates = jsonObjectCandidates(text);
-  for (let index = candidates.length - 1; index >= 0; index--) {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(candidates[index]);
-    } catch {
-      continue;
-    }
-    if (typeof parsed !== 'object' || parsed === null) continue;
-    const list = (parsed as Record<string, unknown>).resolutions;
+  const objects = jsonObjects(text);
+  for (let index = objects.length - 1; index >= 0; index--) {
+    const list = objects[index].resolutions;
     if (!Array.isArray(list)) continue;
+    // The nearest report is the current one. If it resolves nothing, that is
+    // the answer — searching further back would report a superseded round's
+    // resolutions as if they applied to this one.
     const resolutions: FindingResolution[] = [];
     for (const item of list) {
       if (typeof item !== 'object' || item === null) continue;
@@ -209,7 +219,7 @@ export function parseResolutions(text: string): FindingResolution[] | null {
       }
       resolutions.push({ id, status, note: asString(record.note) });
     }
-    if (resolutions.length > 0) return resolutions;
+    return resolutions.length > 0 ? resolutions : null;
   }
   return null;
 }

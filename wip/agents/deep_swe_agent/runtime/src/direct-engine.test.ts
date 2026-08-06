@@ -320,6 +320,54 @@ test('invalid review JSON retries once then degrades but still delivers', async 
   assert.match(reviewer.requests[1].prompt, /could not be parsed/);
 });
 
+test('a retracted verdict retries instead of delivering the retracted approval', async (t) => {
+  const { repo, config } = await makeFixture(t);
+  const modifier = new FakeRunner('modifier', [
+    editFile(repo, 'src.txt', 'fixed\n'),
+  ]);
+  const reviewer = new FakeRunner('reviewer', [
+    () =>
+      ok(
+        '{"verdict":"approve","summary":"s","findings":[]}\n' +
+          'Scratch that, my verdict is:\n' +
+          '{"verdict":"maybe","findings":[]}',
+      ),
+    () => ok('still not a verdict'),
+  ]);
+  const engine = new DirectCollaborationEngine(config, modifier, reviewer);
+  const result = await engine.run();
+
+  // Reading the retracted approval would have ended the loop at "approved".
+  assert.notEqual(result.outcome, 'approved');
+  assert.equal(result.degradedReason, 'invalid_review_output');
+  assert.equal(reviewer.requests.length, 2);
+  assert.match(reviewer.requests[1].prompt, /could not be parsed/);
+});
+
+test('a trailing log object never approves past blocking findings', async (t) => {
+  const { repo, config } = await makeFixture(t);
+  const modifier = new FakeRunner('modifier', [
+    editFile(repo, 'src.txt', 'fixed\n'),
+    editFile(repo, 'src.txt', 'revised\n'),
+  ]);
+  const reviewer = new FakeRunner('reviewer', [
+    () =>
+      ok(
+        '{"verdict":"revise","summary":"s","findings":[' +
+          '{"id":"R1-F1","severity":"major","issue":"x"}]}\n' +
+          'Log: {"findings":[]}',
+      ),
+    () => ok('{"verdict":"approve","summary":"s","findings":[]}'),
+  ]);
+  const engine = new DirectCollaborationEngine(config, modifier, reviewer);
+  const result = await engine.run();
+
+  assert.equal(result.outcome, 'approved');
+  // The blocking finding drove a revision before the approval.
+  assert.equal(modifier.requests.length, 2);
+  assert.match(modifier.requests[1].prompt, /R1-F1/);
+});
+
 test('strict mode turns degraded into non-deliverable', async (t) => {
   const { repo, config } = await makeFixture(t, { strict: true });
   const modifier = new FakeRunner('modifier', [

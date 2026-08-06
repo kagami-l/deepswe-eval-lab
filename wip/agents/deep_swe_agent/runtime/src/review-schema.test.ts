@@ -193,15 +193,48 @@ test('an unterminated brace ahead of the answer is skipped', () => {
   assert.equal(review.verdict, 'approve');
 });
 
-test('an invalid trailing object falls back to an earlier valid review', () => {
-  // Deliberate: "last object that also passes the schema" means a malformed
-  // trailing object never masks a well-formed review behind it. Prompt
-  // templates and code fragments do not carry a findings array, so in practice
-  // the fallback lands on the reviewer's own answer rather than on quoted text.
+test('an invalid latest verdict fails instead of reviving the earlier one', () => {
+  // Falling back here would deliver a verdict the reviewer explicitly retracted.
+  // Throwing surfaces invalid_review_output so the turn is retried.
+  assert.throws(
+    () =>
+      parseReview(
+        '{"verdict":"approve","summary":"s","findings":[]}\n' +
+          'Scratch that, my verdict is:\n' +
+          '{"verdict":"maybe","findings":[]}',
+      ),
+    (err: unknown) =>
+      err instanceof ReviewParseError && /maybe/.test(err.message),
+  );
+});
+
+test('a trailing object without a verdict cannot erase blocking findings', () => {
+  // `{"findings":[]}` passes the schema on its own, and the engine approves on
+  // hasBlockingFindings === false — so preferring it would ship an unrevised
+  // blocking review.
   const review = parseReview(
-    '{"verdict":"approve","summary":"s","findings":[]}\n' +
-      'Scratch that, my verdict is:\n' +
-      '{"verdict":"maybe","findings":[]}',
+    '{"verdict":"revise","summary":"s","findings":[' +
+      '{"severity":"major","issue":"nested modules lose the module path"}]}\n' +
+      'Log: {"findings":[]}',
+  );
+
+  assert.equal(review.verdict, 'revise');
+  assert.equal(review.findings.length, 1);
+  assert.equal(review.hasBlockingFindings, true);
+});
+
+test('a verdict-less review is still accepted when no verdict is stated', () => {
+  const review = parseReview(
+    'Nothing blocking here.\n{"summary":"s","findings":[]}',
+  );
+
+  assert.equal(review.verdict, null);
+  assert.equal(review.hasBlockingFindings, false);
+});
+
+test('a quoted brace on the answer line does not mask the answer', () => {
+  const review = parseReview(
+    'The token "{" is special; answer: {"verdict":"approve","summary":"s","findings":[]}',
   );
 
   assert.equal(review.verdict, 'approve');
@@ -215,6 +248,16 @@ test('when nothing validates, the error comes from the nearest candidate', () =>
       ),
     (err: unknown) =>
       err instanceof ReviewParseError && /maybe/.test(err.message),
+  );
+});
+
+test('an empty latest resolutions report does not revive an earlier one', () => {
+  assert.equal(
+    parseResolutions(
+      'Earlier {"resolutions":[{"id":"R1-F1","status":"accepted"}]}\n' +
+        'Final {"resolutions":[]}',
+    ),
+    null,
   );
 });
 
