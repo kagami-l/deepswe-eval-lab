@@ -18,6 +18,8 @@ import {
   createEventFileSink,
   type AgentRunner,
   type EventSink,
+  type TimeoutKind,
+  type TurnRequest,
   type TurnResult,
   type TurnUsage,
 } from './agent-runner.js';
@@ -148,8 +150,20 @@ export class DirectCollaborationEngine implements CollaborationEngine {
     return dir;
   }
 
-  private turnTimeoutMs(roleTimeoutSec: number): number {
-    return Math.floor(Math.min(roleTimeoutSec, this.remainingSec()) * 1000);
+  private turnTimeout(
+    stageTimeoutSec: number | null,
+  ): Pick<TurnRequest, 'timeoutMs' | 'wallClockTimeoutKind'> {
+    const remainingSec = this.remainingSec();
+    const stageLimited =
+      stageTimeoutSec !== null && stageTimeoutSec <= remainingSec;
+    return {
+      timeoutMs: Math.floor(
+        Math.min(stageTimeoutSec ?? remainingSec, remainingSec) * 1000,
+      ),
+      wallClockTimeoutKind: stageLimited
+        ? 'stage_timeout'
+        : 'total_deadline',
+    };
   }
 
   // --- turns --------------------------------------------------------------
@@ -162,7 +176,7 @@ export class DirectCollaborationEngine implements CollaborationEngine {
   private async modifierTurn(options: {
     kind: 'modify' | 'revise' | 'final-revision';
     prompt: string;
-    timeoutSec: number;
+    timeoutSec: number | null;
     resetCommit: string;
     requireChange: boolean;
   }): Promise<ModifierTurnOutcome> {
@@ -171,6 +185,7 @@ export class DirectCollaborationEngine implements CollaborationEngine {
     const sink = this.makeEventSink(roundDir);
     const attempts: Record<string, unknown>[] = [];
     let failKind: ModifierTurnOutcome['failKind'] = null;
+    let terminalTimeoutKind: TimeoutKind | null = null;
     let outcome: ModifierTurnOutcome = {
       ok: false,
       changed: false,
@@ -181,15 +196,23 @@ export class DirectCollaborationEngine implements CollaborationEngine {
     for (let attempt = 1; attempt <= this.config.maxAgentAttempts; attempt++) {
       if (this.remainingSec() < this.config.minTurnSec) {
         failKind = 'timeout';
+        terminalTimeoutKind = 'total_deadline';
+        this.trace('modifier_turn_skipped', {
+          kind: options.kind,
+          attempt,
+          timeoutKind: terminalTimeoutKind,
+          remainingSec: this.remainingSec(),
+        });
         break;
       }
       this.trace('modifier_turn_start', { kind: options.kind, attempt });
+      const timeout = this.turnTimeout(options.timeoutSec);
       const result = await this.modifier.runTurn(
         {
           prompt: options.prompt,
           cwd: this.config.repoDir,
           resumeSession: true,
-          timeoutMs: this.turnTimeoutMs(options.timeoutSec),
+          ...timeout,
           inactivityTimeoutMs: Math.floor(
             this.config.eventSilenceTimeoutSec * 1000,
           ),
@@ -204,6 +227,7 @@ export class DirectCollaborationEngine implements CollaborationEngine {
         attempt,
         status: result.status,
         timedOut: result.timedOut,
+        timeoutKind: result.timeoutKind,
         durationMs: result.durationMs,
         usage: result.usage,
         error: result.error,
@@ -211,7 +235,13 @@ export class DirectCollaborationEngine implements CollaborationEngine {
 
       if (!result.ok) {
         failKind = result.timedOut ? 'timeout' : 'process';
-        this.trace('modifier_turn_failed', { kind: options.kind, attempt, failKind });
+        terminalTimeoutKind = result.timeoutKind;
+        this.trace('modifier_turn_failed', {
+          kind: options.kind,
+          attempt,
+          failKind,
+          timeoutKind: result.timeoutKind,
+        });
         await this.ws.resetTo(options.resetCommit, this.baseline);
         continue;
       }
@@ -238,7 +268,16 @@ export class DirectCollaborationEngine implements CollaborationEngine {
     if (!outcome.ok) outcome.failKind = failKind ?? 'process';
     await writeFile(
       join(roundDir, 'metadata.json'),
-      JSON.stringify({ role: 'modifier', kind: options.kind, attempts }, null, 2),
+      JSON.stringify(
+        {
+          role: 'modifier',
+          kind: options.kind,
+          attempts,
+          timeoutKind: failKind === 'timeout' ? terminalTimeoutKind : null,
+        },
+        null,
+        2,
+      ),
     );
     return outcome;
   }
@@ -258,11 +297,19 @@ export class DirectCollaborationEngine implements CollaborationEngine {
 
     let retryNote: string | null = null;
     let failReason: ReviewTurnOutcome['failReason'] = 'reviewer_failed';
+    let terminalTimeoutKind: TimeoutKind | null = null;
     let review: Review | null = null;
 
     for (let attempt = 1; attempt <= this.config.maxAgentAttempts; attempt++) {
       if (this.remainingSec() < this.config.minTurnSec) {
         failReason = 'timeout';
+        terminalTimeoutKind = 'total_deadline';
+        this.trace('review_turn_skipped', {
+          round: options.round,
+          attempt,
+          timeoutKind: terminalTimeoutKind,
+          remainingSec: this.remainingSec(),
+        });
         break;
       }
       const copyDir = join(
@@ -282,12 +329,13 @@ export class DirectCollaborationEngine implements CollaborationEngine {
       });
       await writeFile(join(roundDir, `prompt-a${attempt}.md`), prompt);
       this.trace('review_turn_start', { round: options.round, attempt });
+      const timeout = this.turnTimeout(this.config.reviewerTimeoutSec);
       const result = await this.reviewer.runTurn(
         {
           prompt,
           cwd: copyDir,
           resumeSession: false,
-          timeoutMs: this.turnTimeoutMs(this.config.reviewerTimeoutSec),
+          ...timeout,
           inactivityTimeoutMs: Math.floor(
             this.config.eventSilenceTimeoutSec * 1000,
           ),
@@ -303,14 +351,21 @@ export class DirectCollaborationEngine implements CollaborationEngine {
         attempt,
         status: result.status,
         timedOut: result.timedOut,
+        timeoutKind: result.timeoutKind,
         durationMs: result.durationMs,
         usage: result.usage,
         error: result.error,
       });
 
       if (!result.ok) {
-        failReason = 'reviewer_failed';
-        this.trace('review_turn_failed', { round: options.round, attempt });
+        failReason = result.timedOut ? 'timeout' : 'reviewer_failed';
+        terminalTimeoutKind = result.timeoutKind;
+        this.trace('review_turn_failed', {
+          round: options.round,
+          attempt,
+          failReason,
+          timeoutKind: result.timeoutKind,
+        });
         continue;
       }
       await writeFile(join(roundDir, `review-raw-a${attempt}.txt`), result.finalText);
@@ -342,7 +397,16 @@ export class DirectCollaborationEngine implements CollaborationEngine {
 
     await writeFile(
       join(roundDir, 'metadata.json'),
-      JSON.stringify({ role: 'reviewer', round: options.round, attempts }, null, 2),
+      JSON.stringify(
+        {
+          role: 'reviewer',
+          round: options.round,
+          attempts,
+          timeoutKind: failReason === 'timeout' ? terminalTimeoutKind : null,
+        },
+        null,
+        2,
+      ),
     );
     return review !== null
       ? { review, failReason: null }
@@ -406,7 +470,7 @@ export class DirectCollaborationEngine implements CollaborationEngine {
     const initial = await this.modifierTurn({
       kind: 'modify',
       prompt: buildModifierInitialPrompt(task),
-      timeoutSec: this.config.modifierTimeoutSec,
+      timeoutSec: null,
       resetCommit: this.baseCommit,
       requireChange: true,
     });

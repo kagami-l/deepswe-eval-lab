@@ -26,6 +26,8 @@ export interface TurnRequest {
   /** false forces a fresh session (Reviewer rounds); true continues. */
   resumeSession: boolean;
   timeoutMs: number;
+  /** The wall-clock budget that produced timeoutMs. */
+  wallClockTimeoutKind: 'total_deadline' | 'stage_timeout';
   /** Abort after this long without any adapter event. */
   inactivityTimeoutMs: number;
   /** Directory for pre-abort process/Git diagnostics. */
@@ -46,6 +48,7 @@ export interface TurnResult {
   ok: boolean;
   status: string;
   timedOut: boolean;
+  timeoutKind: TimeoutKind | null;
   finalText: string;
   usage: TurnUsage | null;
   durationMs: number;
@@ -53,6 +56,11 @@ export interface TurnResult {
   /** Provider-resolved model reported by the adapter's init event. */
   actualModel: string | null;
 }
+
+export type TimeoutKind =
+  | 'total_deadline'
+  | 'stage_timeout'
+  | 'event_silence';
 
 export type EventSink = (event: Record<string, unknown>) => void;
 
@@ -193,15 +201,14 @@ export class CligentRunner implements AgentRunner {
     const baselinePids = new Set(
       processBaseline.processes.map(({ pid }) => pid),
     );
-    let timerFired = false;
-
     const started = Date.now();
     let lastEventAt = started;
     let lastEventType: string | null = null;
     let lastEventAgent: string | null = null;
     let lastEventSessionId: string | null = null;
     let inactivityTimer: NodeJS.Timeout | null = null;
-    let inactivityTriggered = false;
+    let abortReason: string | null = null;
+    let timeoutKind: TimeoutKind | null = null;
     let diagnosticPromise: Promise<void> | null = null;
     let processCleanupPromise: Promise<void> | null = null;
     const textParts: string[] = [];
@@ -212,11 +219,15 @@ export class CligentRunner implements AgentRunner {
     let errorMessage: string | null = null;
     let actualModel: string | null = null;
 
-    const startAbortCleanup = (
-      reason: string,
-      earlierScope?: TurnProcessScope,
-    ): void => {
-      if (processCleanupPromise !== null) {
+    const claimAbort = (reason: string, kind: TimeoutKind | null): boolean => {
+      if (abortReason !== null) return false;
+      abortReason = reason;
+      timeoutKind = kind;
+      return true;
+    };
+
+    const beginAbortCleanup = (earlierScope?: TurnProcessScope): void => {
+      if (processCleanupPromise !== null || abortReason === null) {
         controller.abort();
         return;
       }
@@ -225,7 +236,9 @@ export class CligentRunner implements AgentRunner {
         ? mergeTurnProcessScopes(earlierScope, latestScope)
         : latestScope;
       controller.abort();
-      processCleanupPromise = cleanupTurnProcessScope(scope, reason).then(
+      const claimedReason = abortReason;
+      const claimedTimeoutKind = timeoutKind;
+      processCleanupPromise = cleanupTurnProcessScope(scope, claimedReason).then(
         (cleanup) => {
           try {
             eventSink({
@@ -234,7 +247,7 @@ export class CligentRunner implements AgentRunner {
               agent: this.config.adapter,
               timestamp: Date.now(),
               role: this.role,
-              payload: cleanup,
+              payload: { ...cleanup, timeoutKind: claimedTimeoutKind },
             });
           } catch {
             // Cleanup must remain independent of the event sink.
@@ -243,15 +256,34 @@ export class CligentRunner implements AgentRunner {
       );
     };
 
+    const startAbortCleanup = (
+      reason: string,
+      earlierScope?: TurnProcessScope,
+    ): void => {
+      if (!claimAbort(reason, null)) {
+        controller.abort();
+        return;
+      }
+      beginAbortCleanup(earlierScope);
+    };
+
     const timer = setTimeout(() => {
-      timerFired = true;
-      startAbortCleanup('turn_timeout');
+      if (
+        !claimAbort(
+          request.wallClockTimeoutKind,
+          request.wallClockTimeoutKind,
+        )
+      ) {
+        return;
+      }
+      errorMessage = `Turn exceeded its ${request.wallClockTimeoutKind} budget`;
+      beginAbortCleanup();
     }, request.timeoutMs);
 
     const armInactivityTimer = (): void => {
       if (inactivityTimer !== null) clearTimeout(inactivityTimer);
       inactivityTimer = setTimeout(() => {
-        inactivityTriggered = true;
+        if (!claimAbort('event_silence', 'event_silence')) return;
         const triggeredAt = Date.now();
         const frozenLastEventAt = lastEventAt;
         const frozenLastEventType = lastEventType;
@@ -309,12 +341,13 @@ export class CligentRunner implements AgentRunner {
                 snapshotPath,
                 patchPath,
                 captureError,
+                timeoutKind: 'event_silence',
               },
             });
           } catch {
             // A failed diagnostic sink must not prevent the watchdog abort.
           }
-          startAbortCleanup('event_silence_timeout', processScope);
+          beginAbortCleanup(processScope);
         })();
       }, request.inactivityTimeoutMs);
     };
@@ -407,7 +440,9 @@ export class CligentRunner implements AgentRunner {
         }
       }
     } catch (err) {
-      errorMessage = err instanceof Error ? err.message : String(err);
+      if (errorMessage === null) {
+        errorMessage = err instanceof Error ? err.message : String(err);
+      }
     } finally {
       clearTimeout(timer);
       if (inactivityTimer !== null) clearTimeout(inactivityTimer);
@@ -417,12 +452,12 @@ export class CligentRunner implements AgentRunner {
 
     const durationMs = Date.now() - started;
     const status = doneStatus ?? 'error';
-    const timedOut =
-      inactivityTriggered || (timerFired && status === 'interrupted');
+    const timedOut = timeoutKind !== null;
     return {
-      ok: status === 'success',
+      ok: status === 'success' && abortReason === null,
       status,
       timedOut,
+      timeoutKind,
       finalText: doneResult ?? textParts.join(''),
       usage,
       durationMs,

@@ -70,6 +70,18 @@ function positiveInteger(
   return value;
 }
 
+function optionalPositiveNumber(
+  raw: Record<string, unknown>,
+  key: string,
+): number | null {
+  const value = raw[key];
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    throw new Error(`config.${key} must be a positive number when provided`);
+  }
+  return value;
+}
+
 function parseRole(value: unknown, path: string): RoleConfig {
   const raw = record(value, path);
   const adapter = stringValue(raw, 'adapter', path);
@@ -129,12 +141,27 @@ export function parseConfig(raw: Record<string, unknown>): ParsedRuntimeConfig {
     if (roles.reviewer !== null && roles.reviewer !== undefined) {
       throw new Error('single execution plan must not define a reviewer');
     }
+    if (
+      workflow.reviewerTimeoutSeconds !== undefined &&
+      workflow.reviewerTimeoutSeconds !== null
+    ) {
+      throw new Error(
+        'single execution plan must not define reviewerTimeoutSeconds',
+      );
+    }
+    if (
+      workflow.revisionTimeoutSeconds !== undefined &&
+      workflow.revisionTimeoutSeconds !== null
+    ) {
+      throw new Error(
+        'single execution plan must not define revisionTimeoutSeconds',
+      );
+    }
     return {
       topology,
       plan,
       single: {
         ...common,
-        modifierTimeoutSec: common.totalTimeoutSec,
       },
     };
   }
@@ -142,6 +169,22 @@ export function parseConfig(raw: Record<string, unknown>): ParsedRuntimeConfig {
     roles.reviewer,
     'config.executionPlan.roles.reviewer',
   );
+  const reviewerTimeoutSec = optionalPositiveNumber(
+    workflow,
+    'reviewerTimeoutSeconds',
+  );
+  const revisionTimeoutSec = optionalPositiveNumber(
+    workflow,
+    'revisionTimeoutSeconds',
+  );
+  for (const [name, value] of [
+    ['reviewerTimeoutSeconds', reviewerTimeoutSec],
+    ['revisionTimeoutSeconds', revisionTimeoutSec],
+  ] as const) {
+    if (value !== null && value < common.minTurnSec) {
+      throw new Error(`config.${name} must be at least config.minTurnSeconds`);
+    }
+  }
   return {
     topology,
     plan,
@@ -149,17 +192,8 @@ export function parseConfig(raw: Record<string, unknown>): ParsedRuntimeConfig {
       ...common,
       reviewer,
       maxReviews: positiveInteger(workflow, 'maxReviews', 3),
-      modifierTimeoutSec: common.totalTimeoutSec,
-      reviewerTimeoutSec: positiveNumber(
-        workflow,
-        'reviewerTimeoutSeconds',
-        600,
-      ),
-      revisionTimeoutSec: positiveNumber(
-        workflow,
-        'revisionTimeoutSeconds',
-        900,
-      ),
+      reviewerTimeoutSec,
+      revisionTimeoutSec,
       strict: workflow.strict === true,
       keepWorkspaces: workflow.keepWorkspaces === true,
     },

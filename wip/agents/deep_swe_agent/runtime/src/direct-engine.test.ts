@@ -42,6 +42,7 @@ function ok(finalText: string): TurnResult {
     ok: true,
     status: 'success',
     timedOut: false,
+    timeoutKind: null,
     finalText,
     usage: { inputTokens: 100, outputTokens: 50, toolUses: 3, costUsd: 0.01 },
     durationMs: 10,
@@ -55,10 +56,27 @@ function processFailure(): TurnResult {
     ok: false,
     status: 'error',
     timedOut: false,
+    timeoutKind: null,
     finalText: '',
     usage: null,
     durationMs: 5,
     error: 'boom',
+    actualModel: null,
+  };
+}
+
+function timeoutFailure(
+  timeoutKind: 'total_deadline' | 'stage_timeout' | 'event_silence',
+): TurnResult {
+  return {
+    ok: false,
+    status: 'error',
+    timedOut: true,
+    timeoutKind,
+    finalText: '',
+    usage: null,
+    durationMs: 5,
+    error: timeoutKind,
     actualModel: null,
   };
 }
@@ -114,12 +132,11 @@ async function makeFixture(
     reviewer: { adapter: 'claude' },
     maxReviews: 3,
     maxAgentAttempts: 2,
-    modifierTimeoutSec: 60,
-    reviewerTimeoutSec: 60,
-    revisionTimeoutSec: 60,
+    reviewerTimeoutSec: null,
+    revisionTimeoutSec: null,
     eventSilenceTimeoutSec: 60,
-    totalTimeoutSec: 300,
-    minTurnSec: 0,
+    totalTimeoutSec: 1200,
+    minTurnSec: 1,
     strict: false,
     keepWorkspaces: false,
     ...overrides,
@@ -157,6 +174,8 @@ test('approve on first review delivers with outcome approved', async (t) => {
   // Reviewer ran against an isolated copy, fresh session.
   assert.equal(reviewer.requests[0].resumeSession, false);
   assert.notEqual(reviewer.requests[0].cwd, repo);
+  assert.equal(reviewer.requests[0].wallClockTimeoutKind, 'total_deadline');
+  assert.ok(reviewer.requests[0].timeoutMs > 600_000);
   const summaryUsage = result.usage;
   assert.equal(summaryUsage.modifier.turns, 1);
   assert.equal(summaryUsage.reviewer?.turns, 1);
@@ -192,6 +211,94 @@ test('revise then approve counts one revision and passes findings context', asyn
   // Revision prompt carried the finding to the modifier.
   assert.match(modifier.requests[1].prompt, /wrong value/);
   assert.equal(modifier.requests[1].resumeSession, true);
+  assert.equal(modifier.requests[1].wallClockTimeoutKind, 'total_deadline');
+  assert.ok(modifier.requests[1].timeoutMs > 900_000);
+});
+
+test('explicit reviewer cap is classified as a stage timeout budget', async (t) => {
+  const { repo, config } = await makeFixture(t, { reviewerTimeoutSec: 60 });
+  const modifier = new FakeRunner('modifier', [
+    editFile(repo, 'src.txt', 'fixed\n'),
+  ]);
+  const reviewer = new FakeRunner('reviewer', [() => ok(APPROVE)]);
+  const engine = new DirectCollaborationEngine(config, modifier, reviewer);
+  const result = await engine.run();
+
+  assert.equal(result.outcome, 'approved');
+  assert.equal(reviewer.requests[0].timeoutMs, 60_000);
+  assert.equal(reviewer.requests[0].wallClockTimeoutKind, 'stage_timeout');
+});
+
+test('explicit revision cap is classified as a stage timeout budget', async (t) => {
+  const { repo, config } = await makeFixture(t, {
+    maxReviews: 1,
+    revisionTimeoutSec: 60,
+  });
+  const modifier = new FakeRunner('modifier', [
+    editFile(repo, 'src.txt', 'attempt\n'),
+    editFile(repo, 'src.txt', 'final fix\n'),
+  ]);
+  const reviewer = new FakeRunner('reviewer', [() => ok(REVISE)]);
+  const engine = new DirectCollaborationEngine(config, modifier, reviewer);
+  const result = await engine.run();
+
+  assert.equal(result.outcome, 'max_reviews_reached');
+  assert.equal(modifier.requests[1].timeoutMs, 60_000);
+  assert.equal(modifier.requests[1].wallClockTimeoutKind, 'stage_timeout');
+});
+
+test('reviewer timeout retries up to maxAgentAttempts and reports timeout', async (t) => {
+  const { repo, config } = await makeFixture(t, {
+    reviewerTimeoutSec: 60,
+    maxAgentAttempts: 3,
+  });
+  const modifier = new FakeRunner('modifier', [
+    editFile(repo, 'src.txt', 'fixed\n'),
+  ]);
+  const reviewer = new FakeRunner('reviewer', [
+    () => timeoutFailure('stage_timeout'),
+    () => timeoutFailure('stage_timeout'),
+    () => timeoutFailure('stage_timeout'),
+  ]);
+  const engine = new DirectCollaborationEngine(config, modifier, reviewer);
+  const result = await engine.run();
+
+  assert.equal(result.outcome, 'degraded');
+  assert.equal(result.degradedReason, 'timeout');
+  assert.equal(result.deliverable, true);
+  assert.equal(reviewer.requests.length, 3);
+  const metadata = JSON.parse(
+    await readFile(join(config.outputDir, 'rounds', '01-review', 'metadata.json'), 'utf8'),
+  ) as {
+    timeoutKind: string | null;
+    attempts: { timeoutKind: string | null }[];
+  };
+  assert.equal(metadata.timeoutKind, 'stage_timeout');
+  assert.deepEqual(
+    metadata.attempts.map((attempt) => attempt.timeoutKind),
+    ['stage_timeout', 'stage_timeout', 'stage_timeout'],
+  );
+});
+
+test('min-turn admission stops retries and records total deadline exhaustion', async (t) => {
+  const { config } = await makeFixture(t, {
+    totalTimeoutSec: 1,
+    minTurnSec: 2,
+    maxAgentAttempts: 4,
+  });
+  const modifier = new FakeRunner('modifier', []);
+  const reviewer = new FakeRunner('reviewer', []);
+  const engine = new DirectCollaborationEngine(config, modifier, reviewer);
+  const result = await engine.run();
+
+  assert.equal(result.outcome, 'timeout');
+  assert.equal(result.deliverable, false);
+  assert.equal(modifier.requests.length, 0);
+  const metadata = JSON.parse(
+    await readFile(join(config.outputDir, 'rounds', '00-modify', 'metadata.json'), 'utf8'),
+  ) as { timeoutKind: string | null; attempts: unknown[] };
+  assert.equal(metadata.timeoutKind, 'total_deadline');
+  assert.deepEqual(metadata.attempts, []);
 });
 
 test('invalid review JSON retries once then degrades but still delivers', async (t) => {

@@ -65,8 +65,16 @@ def build_parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--allow-unverified", action="store_true")
     evaluate.add_argument("--max-reviews", type=int)
     evaluate.add_argument("--max-agent-attempts", type=int, default=2)
-    evaluate.add_argument("--reviewer-timeout-seconds", type=float, default=600.0)
-    evaluate.add_argument("--revision-timeout-seconds", type=float, default=900.0)
+    evaluate.add_argument(
+        "--reviewer-timeout-seconds",
+        type=float,
+        help="Optional collab review-attempt cap; defaults to the remaining workflow time",
+    )
+    evaluate.add_argument(
+        "--revision-timeout-seconds",
+        type=float,
+        help="Optional collab revision-attempt cap; defaults to the remaining workflow time",
+    )
     evaluate.add_argument(
         "--event-silence-timeout-seconds",
         type=float,

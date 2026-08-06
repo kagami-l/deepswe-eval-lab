@@ -358,17 +358,17 @@ Captain 和 Judge 的 runtime 行为也不同：
 
 DeepSWE 单任务 Agent timeout 为 5400 秒（来自各 task.toml 的 `[agent] timeout_sec`，113/113 一致；verifier 独立为 1800 秒）。agent setup 阶段有单独的默认 360 秒超时，不占这一预算。多轮协作很容易耗尽 5400 秒。
 
-首版建议：
+当前统一 runtime 的策略见
+[`collab-timeout-policy.md`](./collab-timeout-policy.md)。确认后的默认行为是：
 
 - `max_reviews=3`（与 SWE-bench Pro collab runner 的默认值一致，便于跨 benchmark 对比；这是上限而非保证，5400 秒预算内第三轮常常放不下，由 deadline 管理决定是否执行）；
 - 整体 deadline 由 runtime 统一管理；
-- Modifier 初始实现获得最大预算；
-- Reviewer 使用较短预算；
-- 修订轮使用剩余预算动态分配；
+- Modifier 初始实现、Reviewer 和修订轮默认共享全部剩余预算，不设置独立阶段上限；
+- Reviewer/修订轮仍允许显式配置绝对秒数上限，用于有意控制成本；
 - 每次 cligent 调用使用 AbortController；
 - 不在 timeout 前启动没有足够完成时间的新 review/revision。
 
-一种初始分配参考：
+以下分配只作为容量规划参考，不是 runtime 的硬阶段配额：
 
 ```text
 initial modifier          30–40 min

@@ -112,14 +112,14 @@ export class SingleWorkflowEngine implements CollaborationEngine {
         break;
       }
       this.trace('modifier_turn_start', { attempt });
+      const timeoutMs = Math.floor(this.remainingSec() * 1000);
       const result = await this.modifier.runTurn(
         {
           prompt,
           cwd: this.config.repoDir,
           resumeSession: true,
-          timeoutMs: Math.floor(
-            Math.min(this.config.modifierTimeoutSec, this.remainingSec()) * 1000,
-          ),
+          timeoutMs,
+          wallClockTimeoutKind: 'total_deadline',
           inactivityTimeoutMs: Math.floor(
             this.config.eventSilenceTimeoutSec * 1000,
           ),
@@ -134,6 +134,7 @@ export class SingleWorkflowEngine implements CollaborationEngine {
         attempt,
         status: result.status,
         timedOut: result.timedOut,
+        timeoutKind: result.timeoutKind,
         durationMs: result.durationMs,
         usage: result.usage,
         error: result.error,

@@ -41,6 +41,7 @@ test('headless runner aborts instead of waiting on a permission request', async 
       cwd: '/app',
       resumeSession: false,
       timeoutMs: 1000,
+      wallClockTimeoutKind: 'total_deadline',
       inactivityTimeoutMs: 1000,
       diagnosticDir: '/tmp/unused-diagnostics',
       label: 'modify-a1',
@@ -97,6 +98,7 @@ test('permission observability events from other adapters keep their native flow
       cwd: '/app',
       resumeSession: false,
       timeoutMs: 1000,
+      wallClockTimeoutKind: 'total_deadline',
       inactivityTimeoutMs: 1000,
       diagnosticDir: '/tmp/unused-diagnostics',
       label: 'modify-a1',
@@ -137,6 +139,7 @@ test('a replayed prompt is re-typed and kept out of the final text', async () =>
       cwd: '/app',
       resumeSession: false,
       timeoutMs: 1000,
+      wallClockTimeoutKind: 'total_deadline',
       inactivityTimeoutMs: 1000,
       diagnosticDir: '/tmp/unused-diagnostics',
       label: 'review-1-a1',
@@ -178,6 +181,7 @@ test('later OpenCode output that equals the prompt is preserved', async () => {
       cwd: '/app',
       resumeSession: false,
       timeoutMs: 1000,
+      wallClockTimeoutKind: 'total_deadline',
       inactivityTimeoutMs: 1000,
       diagnosticDir: '/tmp/unused-diagnostics',
       label: 'review-1-a1',
@@ -212,6 +216,7 @@ test('non-OpenCode output that equals the prompt is preserved', async () => {
       cwd: '/app',
       resumeSession: false,
       timeoutMs: 1000,
+      wallClockTimeoutKind: 'total_deadline',
       inactivityTimeoutMs: 1000,
       diagnosticDir: '/tmp/unused-diagnostics',
       label: 'review-1-a1',
@@ -303,6 +308,7 @@ test('event silence captures diagnostics before aborting the turn', async (t) =>
       cwd: tempDir,
       resumeSession: false,
       timeoutMs: 2000,
+      wallClockTimeoutKind: 'total_deadline',
       inactivityTimeoutMs: 20,
       diagnosticDir,
       label: 'modify-a1',
@@ -312,6 +318,7 @@ test('event silence captures diagnostics before aborting the turn', async (t) =>
 
   assert.equal(result.status, 'interrupted');
   assert.equal(result.timedOut, true);
+  assert.equal(result.timeoutKind, 'event_silence');
   assert.match(result.error ?? '', /No opencode event/);
   const watchdog = events.find(
     (event) => event.type === 'runtime:event_silence_timeout',
@@ -330,6 +337,13 @@ test('event silence captures diagnostics before aborting the turn', async (t) =>
   assert.ok(
     events.some((event) => event.type === 'runtime:turn_process_cleanup'),
   );
+  const cleanup = events.find(
+    (event) => event.type === 'runtime:turn_process_cleanup',
+  );
+  assert.equal(
+    (cleanup?.payload as Record<string, unknown>).timeoutKind,
+    'event_silence',
+  );
   const files = await readdir(diagnosticDir);
   const snapshotName = files.find((name) => name.endsWith('.json'));
   const patchName = files.find((name) => name.endsWith('.patch'));
@@ -339,4 +353,100 @@ test('event silence captures diagnostics before aborting the turn', async (t) =>
     await readFile(join(diagnosticDir, snapshotName), 'utf8'),
   ) as Record<string, unknown>;
   assert.equal(snapshot.reason, 'event_silence_timeout');
+});
+
+test('wall-clock timeout classification does not depend on adapter done status', async () => {
+  const fakeCligent = {
+    async *run(
+      _prompt: string,
+      overrides?: Record<string, unknown>,
+    ): AsyncGenerator<Record<string, unknown>> {
+      const signal = overrides?.abortSignal as AbortSignal;
+      await new Promise<void>((resolve) => {
+        signal.addEventListener('abort', () => resolve(), { once: true });
+      });
+      yield {
+        type: 'done',
+        agent: 'codex',
+        payload: { status: 'error' },
+      };
+    },
+  };
+  const runner = new CligentRunner('reviewer', {
+    adapter: 'codex',
+    model: 'test',
+    permissions: 'bypass',
+  });
+  Object.assign(runner, { cligent: fakeCligent });
+  const events: Record<string, unknown>[] = [];
+
+  const result = await runner.runTurn(
+    {
+      prompt: 'test',
+      cwd: '/tmp',
+      resumeSession: false,
+      timeoutMs: 20,
+      wallClockTimeoutKind: 'stage_timeout',
+      inactivityTimeoutMs: 1000,
+      diagnosticDir: '/tmp/unused-diagnostics',
+      label: 'review-1-a1',
+    },
+    (event) => events.push(event),
+  );
+
+  assert.equal(result.status, 'error');
+  assert.equal(result.timedOut, true);
+  assert.equal(result.timeoutKind, 'stage_timeout');
+  assert.match(result.error ?? '', /stage_timeout/);
+  const cleanup = events.find(
+    (event) => event.type === 'runtime:turn_process_cleanup',
+  );
+  assert.equal(
+    (cleanup?.payload as Record<string, unknown>).timeoutKind,
+    'stage_timeout',
+  );
+});
+
+test('a local timeout cannot become successful from the adapter terminal status', async () => {
+  const fakeCligent = {
+    async *run(
+      _prompt: string,
+      overrides?: Record<string, unknown>,
+    ): AsyncGenerator<Record<string, unknown>> {
+      const signal = overrides?.abortSignal as AbortSignal;
+      await new Promise<void>((resolve) => {
+        signal.addEventListener('abort', () => resolve(), { once: true });
+      });
+      yield {
+        type: 'done',
+        agent: 'codex',
+        payload: { status: 'success', result: 'too late' },
+      };
+    },
+  };
+  const runner = new CligentRunner('reviewer', {
+    adapter: 'codex',
+    model: 'test',
+    permissions: 'bypass',
+  });
+  Object.assign(runner, { cligent: fakeCligent });
+
+  const result = await runner.runTurn(
+    {
+      prompt: 'test',
+      cwd: '/tmp',
+      resumeSession: false,
+      timeoutMs: 20,
+      wallClockTimeoutKind: 'total_deadline',
+      inactivityTimeoutMs: 1000,
+      diagnosticDir: '/tmp/unused-diagnostics',
+      label: 'review-1-a1',
+    },
+    () => {},
+  );
+
+  assert.equal(result.status, 'success');
+  assert.equal(result.ok, false);
+  assert.equal(result.timedOut, true);
+  assert.equal(result.timeoutKind, 'total_deadline');
 });

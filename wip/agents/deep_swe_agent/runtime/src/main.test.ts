@@ -37,8 +37,6 @@ function basePlan(
       workflowConfig: {
         maxReviews: 3,
         maxAgentAttempts: 2,
-        reviewerTimeoutSeconds: 600,
-        revisionTimeoutSeconds: 900,
         eventSilenceTimeoutSeconds: 600,
         minTurnSeconds: 120,
       },
@@ -51,7 +49,6 @@ test('parses a single plan without a reviewer', () => {
   const parsed = parseConfig(basePlan('single'));
   assert.equal(parsed.topology, 'single');
   assert.equal(parsed.single?.modifier.adapter, 'codex');
-  assert.equal(parsed.single?.modifierTimeoutSec, 5100);
   assert.equal(parsed.single?.eventSilenceTimeoutSec, 600);
   assert.equal(parsed.collab, undefined);
 });
@@ -66,12 +63,46 @@ test('parses all supported reviewer adapters', () => {
   }
 });
 
+test('collab defaults phase timeouts to the remaining workflow budget', () => {
+  const parsed = parseConfig(basePlan('collab'));
+  assert.equal(parsed.collab?.reviewerTimeoutSec, null);
+  assert.equal(parsed.collab?.revisionTimeoutSec, null);
+  assert.equal(parsed.collab?.strict, false);
+});
+
+test('collab parses explicit phase timeout caps', () => {
+  const raw = basePlan('collab');
+  const plan = raw.executionPlan as Record<string, unknown>;
+  const workflow = plan.workflowConfig as Record<string, unknown>;
+  workflow.reviewerTimeoutSeconds = 1800;
+  workflow.revisionTimeoutSeconds = 1200;
+  const parsed = parseConfig(raw);
+  assert.equal(parsed.collab?.reviewerTimeoutSec, 1800);
+  assert.equal(parsed.collab?.revisionTimeoutSec, 1200);
+});
+
+test('collab rejects a phase timeout below minTurnSeconds', () => {
+  const raw = basePlan('collab');
+  const plan = raw.executionPlan as Record<string, unknown>;
+  const workflow = plan.workflowConfig as Record<string, unknown>;
+  workflow.reviewerTimeoutSeconds = 119;
+  assert.throws(() => parseConfig(raw), /at least config\.minTurnSeconds/);
+});
+
 test('single rejects a reviewer', () => {
   const raw = basePlan('single');
   const plan = raw.executionPlan as Record<string, unknown>;
   const roles = plan.roles as Record<string, unknown>;
   roles.reviewer = role('claude');
   assert.throws(() => parseConfig(raw), /must not define a reviewer/);
+});
+
+test('single rejects collab-only phase timeouts', () => {
+  const raw = basePlan('single');
+  const plan = raw.executionPlan as Record<string, unknown>;
+  const workflow = plan.workflowConfig as Record<string, unknown>;
+  workflow.reviewerTimeoutSeconds = 1800;
+  assert.throws(() => parseConfig(raw), /must not define reviewerTimeoutSeconds/);
 });
 
 test('collab rejects zero reviews', () => {

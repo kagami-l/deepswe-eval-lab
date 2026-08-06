@@ -104,6 +104,8 @@ class CliTests(unittest.TestCase):
         self.assertIn("SharedAgentRuntimeDockerEnvironment", rendered)
         self.assertIn('"topology": "single"', rendered)
         self.assertIn('"eventSilenceTimeoutSeconds": 600.0', rendered)
+        self.assertNotIn('"reviewerTimeoutSeconds"', rendered)
+        self.assertNotIn('"revisionTimeoutSeconds"', rendered)
 
     def test_runtime_dry_run_does_not_build(self) -> None:
         status = RuntimeStatus(
@@ -132,6 +134,22 @@ class CliTests(unittest.TestCase):
                         "codex",
                         "--max-reviews",
                         "1",
+                        "--dry-run",
+                    ]
+                )
+
+    def test_single_rejects_explicit_phase_timeout(self) -> None:
+        with redirect_stderr(io.StringIO()):
+            with self.assertRaisesRegex(SystemExit, "2"):
+                cli.main(
+                    [
+                        "eval",
+                        "--task",
+                        TASK,
+                        "--agent",
+                        "codex",
+                        "--reviewer-timeout-seconds",
+                        "1800",
                         "--dry-run",
                     ]
                 )

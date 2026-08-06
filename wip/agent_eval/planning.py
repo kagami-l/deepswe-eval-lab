@@ -31,8 +31,8 @@ class PlanRequest:
     runtime_image: str
     max_reviews: int
     max_agent_attempts: int
-    reviewer_timeout_seconds: float
-    revision_timeout_seconds: float
+    reviewer_timeout_seconds: float | None
+    revision_timeout_seconds: float | None
     event_silence_timeout_seconds: float
     min_turn_seconds: float
     strict: bool
@@ -86,6 +86,13 @@ def build_execution_plan(
         workflow = "single"
         max_reviews = 0
 
+    phase_timeouts = {
+        "--reviewer-timeout-seconds": request.reviewer_timeout_seconds,
+        "--revision-timeout-seconds": request.revision_timeout_seconds,
+    }
+    if topology == "single" and any(value is not None for value in phase_timeouts.values()):
+        raise ValueError("single mode does not accept reviewer/revision timeout options")
+
     if request.agent_timeout_multiplier <= 0:
         raise ValueError("--agent-timeout-multiplier must be positive")
     if request.cleanup_reserve_seconds <= 0:
@@ -100,6 +107,15 @@ def build_execution_plan(
         raise ValueError("--max-agent-attempts must be at least 1")
     if request.event_silence_timeout_seconds <= 0:
         raise ValueError("--event-silence-timeout-seconds must be positive")
+    if request.min_turn_seconds <= 0:
+        raise ValueError("--min-turn-seconds must be positive")
+    for option, value in phase_timeouts.items():
+        if value is None:
+            continue
+        if value <= 0:
+            raise ValueError(f"{option} must be positive")
+        if value < request.min_turn_seconds:
+            raise ValueError(f"{option} must be at least --min-turn-seconds")
 
     return ExecutionPlan(
         schema_version=1,

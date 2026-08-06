@@ -279,6 +279,8 @@ uv run python scripts/run_agent_eval.py eval \
 --modifier PROFILE
 --reviewer PROFILE
 --max-reviews N
+--reviewer-timeout-seconds SECONDS    可选；默认使用整体剩余时间
+--revision-timeout-seconds SECONDS    可选；默认使用整体剩余时间
 --n-attempts N
 --n-concurrent N
 --jobs-dir PATH
@@ -609,8 +611,9 @@ soft_runtime_deadline = hard_agent_timeout − cleanup_reserve
 ```
 
 `cleanup_reserve` 应是显式常量并写入 resolved config。single 可将剩余预算全部交给
-Modifier；collab 的初始修改、审查和修订共同竞争同一个软 deadline。单轮 timeout 是
-上限，还必须受剩余总预算约束。
+Modifier；collab 的初始修改、审查和修订共同竞争同一个软 deadline。默认不设置独立阶段
+timeout；显式提供 Reviewer/修订上限时，它是绝对秒数，且仍受剩余总预算约束。详细策略见
+[`collab-timeout-policy.md`](./collab-timeout-policy.md)。
 
 CLI 将 multiplier 同时传给 Pier 和 runtime config，用户不需要分别配置两层 timeout。
 不得让 runtime deadline 超过 Pier hard timeout。

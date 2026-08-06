@@ -73,8 +73,8 @@ class ExecutionPlan:
     runtime_image: str
     max_reviews: int
     max_agent_attempts: int
-    reviewer_timeout_seconds: float
-    revision_timeout_seconds: float
+    reviewer_timeout_seconds: float | None
+    revision_timeout_seconds: float | None
     event_silence_timeout_seconds: float
     min_turn_seconds: float
     strict: bool
@@ -93,6 +93,18 @@ class ExecutionPlan:
         return {profile.adapter for profile in self.profiles}
 
     def to_dict(self) -> dict[str, Any]:
+        workflow_config: dict[str, Any] = {
+            "maxReviews": self.max_reviews,
+            "maxAgentAttempts": self.max_agent_attempts,
+            "eventSilenceTimeoutSeconds": self.event_silence_timeout_seconds,
+            "minTurnSeconds": self.min_turn_seconds,
+            "strict": self.strict,
+            "keepWorkspaces": self.keep_workspaces,
+        }
+        if self.reviewer_timeout_seconds is not None:
+            workflow_config["reviewerTimeoutSeconds"] = self.reviewer_timeout_seconds
+        if self.revision_timeout_seconds is not None:
+            workflow_config["revisionTimeoutSeconds"] = self.revision_timeout_seconds
         return {
             "schemaVersion": self.schema_version,
             "topology": self.topology,
@@ -107,14 +119,5 @@ class ExecutionPlan:
                 "manifestDigest": self.runtime_manifest_digest,
                 "image": self.runtime_image,
             },
-            "workflowConfig": {
-                "maxReviews": self.max_reviews,
-                "maxAgentAttempts": self.max_agent_attempts,
-                "reviewerTimeoutSeconds": self.reviewer_timeout_seconds,
-                "revisionTimeoutSeconds": self.revision_timeout_seconds,
-                "eventSilenceTimeoutSeconds": self.event_silence_timeout_seconds,
-                "minTurnSeconds": self.min_turn_seconds,
-                "strict": self.strict,
-                "keepWorkspaces": self.keep_workspaces,
-            },
+            "workflowConfig": workflow_config,
         }
