@@ -10,8 +10,8 @@
 
 | ID | 标题 | 组件 | 严重程度 | 状态 | 首次发现 |
 |---|---|---|---|---|---|
-| CLI-001 | OpenCode 工具事件丢失参数和结果，并重复计数 | OpenCode adapter | High | Open | 2026-08-03 |
-| CLI-002 | Codex 命令执行和 MCP 调用未转换成工具事件 | Codex adapter | High | Open | 2026-08-03 |
+| CLI-001 | OpenCode 工具事件丢失参数和结果，并重复计数 | OpenCode adapter | High | Released | 2026-08-03 |
+| CLI-002 | Codex 命令执行和 MCP 调用未转换成工具事件 | Codex adapter | High | Released | 2026-08-03 |
 | CLI-003 | Kimi 未提供 token usage 时被报告为真实零值 | Kimi adapter / usage schema | Medium | Open | 2026-08-03 |
 | CLI-004 | OpenCode auto 权限遗漏 external_directory，导致 headless run 无限等待 | OpenCode adapter / permissions | Critical | Open | 2026-08-04 |
 | CLI-005 | OpenCode 工具事件后不再产生 terminal event，adapter 无限等待 SSE | OpenCode adapter / lifecycle | Critical | Open | 2026-08-04 |
@@ -36,7 +36,7 @@
   - OpenCode CLI `1.18.10`
   - `@opencode-ai/sdk` `1.18.10`
 - 严重程度：`High`
-- 状态：`Open`
+- 状态：`Released`（cligent `0.18.0`，等待真实运行验收）
 - 证据目录：[`CLI-001-opencode-tool-events/`](./CLI-001-opencode-tool-events/)
 
 ### 背景
@@ -219,7 +219,7 @@ event fixtures，并断言完整的 normalized event 序列。
   - Codex CLI `0.144.5`
   - `@openai/codex-sdk` `0.144.5`
 - 严重程度：`High`
-- 状态：`Open`
+- 状态：`Released`（cligent `0.18.0`，等待真实运行验收）
 - 证据目录：[`CLI-002-codex-command-events/`](./CLI-002-codex-command-events/)
 
 ### 现象

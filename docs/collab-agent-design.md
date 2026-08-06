@@ -19,7 +19,7 @@
 
 依赖包与本地仓库：
 
-- `cligent`：npm `@sublang/cligent`（当前 0.16.0，与本地 checkout `/Users/kgm/Projects/merico/cligent` 的 v0.16.0 tag 一致）
+- `cligent`：npm `@sublang/cligent`（当前 0.18.0，与本地 checkout `/Users/kgm/Projects/merico/cligent` 的 v0.18.0 tag 一致）
 - `playbook`（第二阶段）：npm `@sublang/playbook`（当前 3.1.0，与本地 checkout `/Users/kgm/Projects/merico/playbook` 一致）
 
 默认从 npm 锁定精确版本安装；本地 tarball 仅作为修复迭代期的 override 通道（见第 11 节）。
@@ -383,7 +383,7 @@ review 3 / final revision  使用剩余预算，不足则跳过并提前交付
 
 ## 11. 依赖安装与可复现性
 
-默认从 npm 安装并锁定精确版本（当前 `@sublang/cligent@0.16.0` 与本地 checkout 一致）：
+默认从 npm 安装并锁定精确版本（当前 `@sublang/cligent@0.18.0` 与本地 checkout 一致）：
 
 1. 容器内 `npm install @sublang/cligent@<pin>`，npm 自动解析 linux-x64/glibc 平台二进制（任务镜像是 Debian 12，无 musl 问题）。
 2. 固定 Codex SDK、Claude Agent SDK 等依赖版本；注意 cligent 的 codex adapter 一旦传 permissions 就需要完整的 `@openai/codex` 包（不只 `codex-sdk`），gemini/kimi 走 PATH 二进制而非 npm 依赖。

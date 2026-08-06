@@ -88,11 +88,11 @@ def _validated_version(name: str, value: Any) -> str:
 class DeepSweCollabAgent(BaseInstalledAgent):
     """Run the modify → review → revise collaboration as one Pier agent."""
 
-    DEFAULT_CLIGENT_VERSION = "0.16.0"
-    DEFAULT_KIMI_CODE_VERSION = "0.30.0"
+    DEFAULT_CLIGENT_VERSION = "0.18.0"
+    DEFAULT_KIMI_CODE_VERSION = "0.31.1"
     # cligent's own tested SDK versions (its devDependencies).
-    CLAUDE_SDK_VERSION = "0.3.207"
-    CODEX_SDK_VERSION = "0.144.5"
+    CLAUDE_SDK_VERSION = "0.3.220"
+    CODEX_SDK_VERSION = "0.146.0"
 
     def __init__(
         self,
@@ -433,9 +433,9 @@ npm cache clean --force
                     "CODEX_FORCE_AUTH_JSON=1 / CODEX_AUTH_JSON_PATH"
                 )
         if "kimi" in self.adapters_in_use and self._resolve_kimi_auth_home() is None:
-            # cligent 0.16.0 drives Kimi Code over ACP, which requires the
-            # `kimi login` OAuth credential; KIMI_MODEL_* provider config
-            # alone is not sufficient and would only fail at the first turn.
+            # This legacy collab harness deliberately requires the tested
+            # `kimi login` OAuth route even though newer Kimi Code releases
+            # also support configured provider credentials.
             missing.append(
                 "kimi: host auth via KIMI_FORCE_AUTH_HOME=1 / KIMI_AUTH_HOME_PATH "
                 "(a `kimi login` OAuth credential; KIMI_MODEL_* alone is not "

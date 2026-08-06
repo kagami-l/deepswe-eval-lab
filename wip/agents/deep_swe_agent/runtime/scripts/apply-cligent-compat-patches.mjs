@@ -11,7 +11,7 @@ const packageDir = join(
 );
 const packageJsonPath = join(packageDir, 'package.json');
 const adapterPath = join(packageDir, 'dist', 'adapters', 'opencode.js');
-const expectedVersion = '0.16.0';
+const expectedVersion = '0.18.0';
 
 const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf8'));
 if (packageJson.version !== expectedVersion) {
