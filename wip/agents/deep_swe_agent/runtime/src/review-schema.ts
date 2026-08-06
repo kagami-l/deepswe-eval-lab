@@ -43,18 +43,51 @@ export interface FindingResolution {
   note: string | null;
 }
 
-function extractJsonCandidate(text: string): string {
-  const fenced = text.match(/```(?:json)?\s*\n([\s\S]*?)\n\s*```/);
-  if (fenced) {
-    const inner = fenced[1].trim();
-    if (inner.startsWith('{')) return inner;
+/**
+ * Every balanced `{...}` region in `text`, ordered by closing position.
+ *
+ * Agents rarely obey "respond with ONLY a JSON object": the answer arrives
+ * after progress notes, sometimes inside a ```json fence, and the text ahead of
+ * it may hold unrelated objects (code fragments, type sketches). Picking the
+ * first fence or the first `{` therefore selects the wrong candidate. Callers
+ * walk this list backwards and take the last region that actually validates, so
+ * the answer wins over anything quoted before it.
+ *
+ * Quotes only toggle string state inside a region, keeping stray prose quotes
+ * from masking a later object. Regions are reported on each closing brace, so
+ * an object nested under an unterminated `{` is still found.
+ */
+function jsonObjectCandidates(text: string): string[] {
+  const candidates: string[] = [];
+  const opens: number[] = [];
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (opens.length === 0) {
+      if (char === '{') opens.push(i);
+      continue;
+    }
+    if (inString) {
+      // A JSON string cannot hold a raw newline, so one proves the quote came
+      // from prose or code rather than from the object being scanned. Ending
+      // the string at the line break stops a single stray quote from masking
+      // every brace after it.
+      if (char === '\n') {
+        inString = false;
+        escaped = false;
+      } else if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === '"') inString = true;
+    else if (char === '{') opens.push(i);
+    else if (char === '}') {
+      candidates.push(text.slice(opens.pop() as number, i + 1));
+    }
   }
-  const trimmed = text.trim();
-  if (trimmed.startsWith('{') && trimmed.endsWith('}')) return trimmed;
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start >= 0 && end > start) return text.slice(start, end + 1);
-  throw new ReviewParseError('no JSON object found in reviewer output');
+  return candidates;
 }
 
 function asString(value: unknown): string | null {
@@ -91,20 +124,35 @@ function parseFinding(value: unknown, index: number): ReviewFinding {
 
 export function parseReview(text: string): Review {
   if (!text.trim()) throw new ReviewParseError('reviewer output is empty');
-  const candidate = extractJsonCandidate(text);
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(candidate);
-  } catch (err) {
-    throw new ReviewParseError(
-      `invalid JSON: ${err instanceof Error ? err.message : String(err)}`,
-    );
+  const candidates = jsonObjectCandidates(text);
+  if (candidates.length === 0) {
+    throw new ReviewParseError('no JSON object found in reviewer output');
   }
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    throw new ReviewParseError('reviewer output is not a JSON object');
+  // Last valid region wins. The first failure met walking backwards is the one
+  // reported: it comes from the candidate nearest the end, which is almost
+  // always the answer the reviewer meant to give.
+  let nearestError: ReviewParseError | null = null;
+  for (let index = candidates.length - 1; index >= 0; index--) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(candidates[index]);
+    } catch (err) {
+      nearestError ??= new ReviewParseError(
+        `invalid JSON: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      continue;
+    }
+    try {
+      return buildReview(parsed as Record<string, unknown>);
+    } catch (err) {
+      if (!(err instanceof ReviewParseError)) throw err;
+      nearestError ??= err;
+    }
   }
-  const record = parsed as Record<string, unknown>;
+  throw nearestError ?? new ReviewParseError('no JSON object found in reviewer output');
+}
 
+function buildReview(record: Record<string, unknown>): Review {
   const verdictRaw = asString(record.verdict)?.toLowerCase() ?? null;
   if (verdictRaw !== null && verdictRaw !== 'approve' && verdictRaw !== 'revise') {
     throw new ReviewParseError(
@@ -138,32 +186,30 @@ export function parseReview(text: string): Review {
  * recorded but never fails the round.
  */
 export function parseResolutions(text: string): FindingResolution[] | null {
-  let candidate: string;
-  try {
-    candidate = extractJsonCandidate(text);
-  } catch {
-    return null;
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(candidate);
-  } catch {
-    return null;
-  }
-  if (typeof parsed !== 'object' || parsed === null) return null;
-  const list = (parsed as Record<string, unknown>).resolutions;
-  if (!Array.isArray(list)) return null;
-  const resolutions: FindingResolution[] = [];
-  for (const item of list) {
-    if (typeof item !== 'object' || item === null) continue;
-    const record = item as Record<string, unknown>;
-    const id = asString(record.id);
-    const status = asString(record.status)?.toLowerCase();
-    if (!id) continue;
-    if (status !== 'accepted' && status !== 'rebutted' && status !== 'unresolved') {
+  const candidates = jsonObjectCandidates(text);
+  for (let index = candidates.length - 1; index >= 0; index--) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(candidates[index]);
+    } catch {
       continue;
     }
-    resolutions.push({ id, status, note: asString(record.note) });
+    if (typeof parsed !== 'object' || parsed === null) continue;
+    const list = (parsed as Record<string, unknown>).resolutions;
+    if (!Array.isArray(list)) continue;
+    const resolutions: FindingResolution[] = [];
+    for (const item of list) {
+      if (typeof item !== 'object' || item === null) continue;
+      const record = item as Record<string, unknown>;
+      const id = asString(record.id);
+      const status = asString(record.status)?.toLowerCase();
+      if (!id) continue;
+      if (status !== 'accepted' && status !== 'rebutted' && status !== 'unresolved') {
+        continue;
+      }
+      resolutions.push({ id, status, note: asString(record.note) });
+    }
+    if (resolutions.length > 0) return resolutions;
   }
-  return resolutions.length > 0 ? resolutions : null;
+  return null;
 }

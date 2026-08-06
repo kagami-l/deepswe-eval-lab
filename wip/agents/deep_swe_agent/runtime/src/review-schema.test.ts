@@ -93,6 +93,144 @@ test('extracts the JSON object embedded in surrounding prose', () => {
   assert.equal(review.verdict, 'approve');
 });
 
+test('the answer wins over objects quoted ahead of it', () => {
+  // The shape that produced 18 false parse errors in the 12-task collab run:
+  // a replayed prompt carrying pseudo-JSON and patch code, then the answer.
+  const answer = {
+    verdict: 'revise',
+    summary: 'nested modules lose the module path',
+    findings: [
+      {
+        id: 'R1-F1',
+        severity: 'major',
+        file: 'evaluator/modules.go',
+        line: 257,
+        issue: 'child environments do not inherit ABS_MODULE_PATH',
+        evidence: 'a nested require resolves against an empty path',
+        required_change: 'carry the resolution config through nested loads',
+      },
+    ],
+  };
+  const review = parseReview(
+    [
+      'You are an independent code reviewer.',
+      'Respond with ONLY a JSON object of this shape:',
+      '{',
+      '  "verdict": "approve" | "revise",',
+      '  "line": <number or null>',
+      '}',
+      '',
+      'Patch under review:',
+      '+func init() {',
+      '+\tcounts := map[string]int{"deprecated_hits": 1}',
+      '+\tcfg := map[string]bool{"enabled": True}',
+      '+}',
+      '',
+      'I verified the nested-graph case and found a blocking issue.',
+      JSON.stringify(answer),
+    ].join('\n'),
+  );
+
+  assert.equal(review.verdict, 'revise');
+  assert.equal(review.findings.length, 1);
+  assert.equal(review.findings[0].id, 'R1-F1');
+  assert.equal(review.hasBlockingFindings, true);
+});
+
+test('a fenced answer wins over an earlier fenced code block', () => {
+  const review = parseReview(
+    [
+      'The current config object is:',
+      '```json',
+      '{"enabled": True, "retries": 3}',
+      '```',
+      'That is invalid JSON, but my review is:',
+      '```json',
+      '{"verdict":"approve","summary":"looks right","findings":[]}',
+      '```',
+    ].join('\n'),
+  );
+
+  assert.equal(review.verdict, 'approve');
+  assert.equal(review.summary, 'looks right');
+});
+
+test('prose quotes and braces inside strings do not hide the answer', () => {
+  const review = parseReview(
+    'I first thought the fix was "wrong" — see the `{` handling below.\n' +
+      '{"verdict":"revise","summary":"s","findings":[{"severity":"major",' +
+      '"issue":"unbalanced } in the error message","file":null,"line":null}]}',
+  );
+
+  assert.equal(review.verdict, 'revise');
+  assert.equal(review.findings[0].issue, 'unbalanced } in the error message');
+});
+
+test('an unmatched brace and a stray quote ahead do not mask the answer', () => {
+  // The Cliffy shape: a quoted patch left 9 unmatched `{` and an odd number of
+  // quotes ahead of the review, which used to swallow every later brace.
+  const review = parseReview(
+    [
+      'The patch adds:',
+      '+func load(path string) error {',
+      '+\tif cfg.Has("name) {',
+      '+\treturn &ConfigError{',
+      '',
+      'My review:',
+      '{"verdict":"revise","summary":"s","findings":[]}',
+    ].join('\n'),
+  );
+
+  assert.equal(review.verdict, 'revise');
+});
+
+test('an unterminated brace ahead of the answer is skipped', () => {
+  const review = parseReview(
+    'Consider the block starting at {\n' +
+      '{"verdict":"approve","summary":"s","findings":[]}',
+  );
+
+  assert.equal(review.verdict, 'approve');
+});
+
+test('an invalid trailing object falls back to an earlier valid review', () => {
+  // Deliberate: "last object that also passes the schema" means a malformed
+  // trailing object never masks a well-formed review behind it. Prompt
+  // templates and code fragments do not carry a findings array, so in practice
+  // the fallback lands on the reviewer's own answer rather than on quoted text.
+  const review = parseReview(
+    '{"verdict":"approve","summary":"s","findings":[]}\n' +
+      'Scratch that, my verdict is:\n' +
+      '{"verdict":"maybe","findings":[]}',
+  );
+
+  assert.equal(review.verdict, 'approve');
+});
+
+test('when nothing validates, the error comes from the nearest candidate', () => {
+  assert.throws(
+    () =>
+      parseReview(
+        '{"verdict":"approve"}\nActually:\n{"verdict":"maybe","findings":[]}',
+      ),
+    (err: unknown) =>
+      err instanceof ReviewParseError && /maybe/.test(err.message),
+  );
+});
+
+test('modifier resolutions also come from the last valid object', () => {
+  const resolutions = parseResolutions(
+    'The prompt listed {"resolutions": []} as the required shape.\n' +
+      JSON.stringify({
+        resolutions: [{ id: 'R1-F1', status: 'accepted', note: 'fixed' }],
+      }),
+  );
+
+  assert.ok(resolutions);
+  assert.equal(resolutions.length, 1);
+  assert.equal(resolutions[0].id, 'R1-F1');
+});
+
 test('parses modifier resolutions and ignores malformed entries', () => {
   const resolutions = parseResolutions(
     'Done.\n```json\n' +
