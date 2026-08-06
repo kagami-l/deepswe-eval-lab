@@ -109,6 +109,84 @@ test('permission observability events from other adapters keep their native flow
   assert.equal(abortSignal?.aborted, false);
 });
 
+test('a replayed prompt is re-typed and kept out of the final text', async () => {
+  const prompt = 'Review this change.\n\nRespond with ONLY a JSON object:\n{\n  "verdict": "approve" | "revise"\n}';
+  const fakeCligent = {
+    async *run(): AsyncGenerator<Record<string, unknown>> {
+      // OpenCode replays the submitted prompt as the session's first text part.
+      yield { type: 'text', payload: { content: `${prompt}\n` } };
+      yield { type: 'text', payload: { content: 'Checked the diff.' } };
+      yield {
+        type: 'text',
+        payload: { content: '{"verdict":"revise","findings":[]}' },
+      };
+      yield { type: 'done', payload: { status: 'success' } };
+    },
+  };
+  const runner = new CligentRunner('reviewer', {
+    adapter: 'opencode',
+    model: 'deepseek/test',
+    permissions: 'auto',
+  });
+  Object.assign(runner, { cligent: fakeCligent });
+  const events: Record<string, unknown>[] = [];
+
+  const result = await runner.runTurn(
+    {
+      prompt,
+      cwd: '/app',
+      resumeSession: false,
+      timeoutMs: 1000,
+      inactivityTimeoutMs: 1000,
+      diagnosticDir: '/tmp/unused-diagnostics',
+      label: 'review-1-a1',
+    },
+    (event) => events.push(event),
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(
+    result.finalText,
+    'Checked the diff.{"verdict":"revise","findings":[]}',
+  );
+  // The echo stays in the stream for auditing, under a non-output type.
+  assert.equal(
+    events.filter((event) => event.type === 'runtime:prompt_echo').length,
+    1,
+  );
+  assert.equal(events.filter((event) => event.type === 'text').length, 2);
+});
+
+test('genuine output that merely resembles the prompt is preserved', async () => {
+  const fakeCligent = {
+    async *run(): AsyncGenerator<Record<string, unknown>> {
+      yield { type: 'text', payload: { content: 'review this change, done' } };
+      yield { type: 'done', payload: { status: 'success' } };
+    },
+  };
+  const runner = new CligentRunner('reviewer', {
+    adapter: 'opencode',
+    model: 'deepseek/test',
+    permissions: 'auto',
+  });
+  Object.assign(runner, { cligent: fakeCligent });
+
+  const result = await runner.runTurn(
+    {
+      prompt: 'review this change',
+      cwd: '/app',
+      resumeSession: false,
+      timeoutMs: 1000,
+      inactivityTimeoutMs: 1000,
+      diagnosticDir: '/tmp/unused-diagnostics',
+      label: 'review-1-a1',
+    },
+    () => {},
+  );
+
+  assert.equal(result.finalText, 'review this change, done');
+});
+
 test('event silence captures diagnostics before aborting the turn', async (t) => {
   const tempDir = await mkdtemp(join(tmpdir(), 'deep-swe-watchdog-'));
   t.after(() => rm(tempDir, { recursive: true, force: true }));

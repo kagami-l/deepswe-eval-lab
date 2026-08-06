@@ -66,6 +66,17 @@ type CligentLike = {
   ): AsyncGenerator<Record<string, unknown>, void, void>;
 };
 
+/**
+ * True when a `text` event is the adapter replaying the submitted prompt.
+ *
+ * OpenCode surfaces the user message as the session's first text part, so the
+ * echo arrives byte-identical to what was sent. Matching on exact (trimmed)
+ * equality keeps genuine assistant output that merely quotes the prompt.
+ */
+export function isPromptEcho(content: string, prompt: string): boolean {
+  return content.trim() === prompt.trim();
+}
+
 async function createAdapter(name: AdapterName): Promise<unknown> {
   switch (name) {
     case 'claude': {
@@ -301,14 +312,30 @@ export class CligentRunner implements AgentRunner {
         lastEventSessionId =
           typeof event.sessionId === 'string' ? event.sessionId : null;
         armInactivityTimer();
-        eventSink({ label: request.label, ...event });
         const type = event.type as string;
+        const textContent =
+          type === 'text'
+            ? (event.payload as { content?: string } | undefined)?.content
+            : undefined;
+        // The OpenCode adapter replays the submitted prompt as the session's
+        // first `text` part. Left typed as `text` it is indistinguishable from
+        // model output, and both consumers get it wrong: it corrupts finalText
+        // (extractJsonCandidate then falls back to first-`{`..last-`}`, landing
+        // inside the prompt's own diff or output-spec template, so a Reviewer's
+        // JSON never parses) and it opens the ATIF trajectory's agent message.
+        // Re-type it so the echo stays auditable without being read as output.
+        const promptEcho =
+          textContent !== undefined && isPromptEcho(textContent, request.prompt);
+        eventSink({
+          label: request.label,
+          ...event,
+          ...(promptEcho ? { type: 'runtime:prompt_echo' } : {}),
+        });
         if (type === 'init') {
           const payload = event.payload as { model?: string } | undefined;
           if (payload?.model && actualModel === null) actualModel = payload.model;
         } else if (type === 'text') {
-          const payload = event.payload as { content?: string } | undefined;
-          if (payload?.content) textParts.push(payload.content);
+          if (textContent && !promptEcho) textParts.push(textContent);
         } else if (
           type === 'permission_request' &&
           this.config.adapter === 'opencode'
