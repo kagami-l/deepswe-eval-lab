@@ -57,11 +57,11 @@ export interface TurnResult {
 export type EventSink = (event: Record<string, unknown>) => void;
 
 /**
- * `text_delta` is pure overhead on disk. OpenCode streams one event per token,
- * and every delta also arrives whole elsewhere in the same stream: reasoning as
- * `thinking`, assistant messages as `text`. Persisting the deltas cost ~70x in
- * JSON envelope — one review round wrote 9 MB / 48k lines, against 0.1 MB / 63
- * lines for an adapter that does not stream deltas at all.
+ * OpenCode `text_delta` is pure overhead on disk. It streams one event per
+ * token, and every delta also arrives whole elsewhere in the same stream:
+ * reasoning as `thinking`, assistant messages as `text`. Persisting the deltas
+ * cost substantial JSON envelope overhead — one reviewer attempt wrote 5.7 MB /
+ * 30.6k lines, against 0.13 MB / 63 lines for a Codex reviewer turn.
  *
  * Only the tail of an interrupted turn is lost: the in-flight chunk that has
  * not yet been rolled up into a `thinking` or `text` event (~0.8% of a timed-out
@@ -69,7 +69,7 @@ export type EventSink = (event: Record<string, unknown>) => void;
  */
 export function createEventFileSink(paths: readonly string[]): EventSink {
   return (event) => {
-    if (event.type === 'text_delta') return;
+    if (event.type === 'text_delta' && event.agent === 'opencode') return;
     const line = JSON.stringify(event) + '\n';
     for (const path of paths) appendFileSync(path, line);
   };
@@ -205,6 +205,7 @@ export class CligentRunner implements AgentRunner {
     let diagnosticPromise: Promise<void> | null = null;
     let processCleanupPromise: Promise<void> | null = null;
     const textParts: string[] = [];
+    let textEventSeen = false;
     let doneStatus: string | null = null;
     let doneResult: string | undefined;
     let usage: TurnUsage | null = null;
@@ -346,7 +347,11 @@ export class CligentRunner implements AgentRunner {
         // JSON never parses) and it opens the ATIF trajectory's agent message.
         // Re-type it so the echo stays auditable without being read as output.
         const promptEcho =
-          textContent !== undefined && isPromptEcho(textContent, request.prompt);
+          this.config.adapter === 'opencode' &&
+          !textEventSeen &&
+          textContent !== undefined &&
+          isPromptEcho(textContent, request.prompt);
+        if (type === 'text') textEventSeen = true;
         eventSink({
           label: request.label,
           ...event,

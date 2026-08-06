@@ -157,10 +157,11 @@ test('a replayed prompt is re-typed and kept out of the final text', async () =>
   assert.equal(events.filter((event) => event.type === 'text').length, 2);
 });
 
-test('genuine output that merely resembles the prompt is preserved', async () => {
+test('later OpenCode output that equals the prompt is preserved', async () => {
   const fakeCligent = {
     async *run(): AsyncGenerator<Record<string, unknown>> {
       yield { type: 'text', payload: { content: 'review this change, done' } };
+      yield { type: 'text', payload: { content: 'review this change' } };
       yield { type: 'done', payload: { status: 'success' } };
     },
   };
@@ -184,20 +185,64 @@ test('genuine output that merely resembles the prompt is preserved', async () =>
     () => {},
   );
 
-  assert.equal(result.finalText, 'review this change, done');
+  assert.equal(
+    result.finalText,
+    'review this change, donereview this change',
+  );
 });
 
-test('the event file sink fans out every event except token deltas', async (t) => {
+test('non-OpenCode output that equals the prompt is preserved', async () => {
+  const fakeCligent = {
+    async *run(): AsyncGenerator<Record<string, unknown>> {
+      yield { type: 'text', payload: { content: 'repeat this exactly' } };
+      yield { type: 'done', payload: { status: 'success' } };
+    },
+  };
+  const runner = new CligentRunner('reviewer', {
+    adapter: 'codex',
+    model: 'test',
+    permissions: 'bypass',
+  });
+  Object.assign(runner, { cligent: fakeCligent });
+  const events: Record<string, unknown>[] = [];
+
+  const result = await runner.runTurn(
+    {
+      prompt: 'repeat this exactly',
+      cwd: '/app',
+      resumeSession: false,
+      timeoutMs: 1000,
+      inactivityTimeoutMs: 1000,
+      diagnosticDir: '/tmp/unused-diagnostics',
+      label: 'review-1-a1',
+    },
+    (event) => events.push(event),
+  );
+
+  assert.equal(result.finalText, 'repeat this exactly');
+  assert.equal(
+    events.filter((event) => event.type === 'runtime:prompt_echo').length,
+    0,
+  );
+  assert.equal(events.filter((event) => event.type === 'text').length, 1);
+});
+
+test('the event file sink drops only OpenCode token deltas', async (t) => {
   const tempDir = await mkdtemp(join(tmpdir(), 'deep-swe-sink-'));
   t.after(() => rm(tempDir, { recursive: true, force: true }));
   const roundEvents = join(tempDir, 'round.jsonl');
   const globalEvents = join(tempDir, 'global.jsonl');
 
   const sink = createEventFileSink([roundEvents, globalEvents]);
-  sink({ type: 'text_delta', payload: { delta: 'Let' } });
-  sink({ type: 'thinking', payload: { summary: 'Let me check the diff.' } });
-  sink({ type: 'text_delta', payload: { delta: ' me' } });
-  sink({ type: 'text', payload: { content: 'Done.' } });
+  sink({ type: 'text_delta', agent: 'opencode', payload: { delta: 'Let' } });
+  sink({
+    type: 'thinking',
+    agent: 'opencode',
+    payload: { summary: 'Let me check the diff.' },
+  });
+  sink({ type: 'text_delta', agent: 'opencode', payload: { delta: ' me' } });
+  sink({ type: 'text_delta', agent: 'kimi', payload: { delta: 'Kept.' } });
+  sink({ type: 'text', agent: 'opencode', payload: { content: 'Done.' } });
 
   for (const path of [roundEvents, globalEvents]) {
     const written = (await readFile(path, 'utf8'))
@@ -206,7 +251,15 @@ test('the event file sink fans out every event except token deltas', async (t) =
       .map((line) => JSON.parse(line) as Record<string, unknown>);
     assert.deepEqual(
       written.map((event) => event.type),
-      ['thinking', 'text'],
+      ['thinking', 'text_delta', 'text'],
+    );
+    assert.equal(
+      (
+        written.find((event) => event.type === 'text_delta')?.payload as {
+          delta?: string;
+        }
+      ).delta,
+      'Kept.',
     );
   }
 });

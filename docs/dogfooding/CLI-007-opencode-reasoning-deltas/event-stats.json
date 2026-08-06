@@ -1,0 +1,56 @@
+{
+  "opencode_reviewer_attempt_1": {
+    "adapter": "opencode",
+    "bytes_on_disk": 5722194,
+    "event_counts": {
+      "init": 1,
+      "text": 1,
+      "text_delta": 30384,
+      "thinking": 48,
+      "tool_use": 70,
+      "tool_result": 70,
+      "runtime:turn_process_cleanup": 1,
+      "done": 1
+    },
+    "text_delta_chars": 123130,
+    "thinking_chars": 123130,
+    "text_delta_equals_thinking": true,
+    "assistant_text_events_excluding_prompt_echo": 0,
+    "assistant_text_events_also_present_in_text_delta": 0
+  },
+  "opencode_modifier_round": {
+    "adapter": "opencode",
+    "bytes_on_disk": 8329567,
+    "event_counts": {
+      "init": 1,
+      "text": 21,
+      "text_delta": 44305,
+      "thinking": 80,
+      "tool_use": 127,
+      "tool_result": 127,
+      "done": 1
+    },
+    "text_delta_chars": 178203,
+    "thinking_chars": 174591,
+    "text_delta_equals_thinking": false,
+    "assistant_text_events_excluding_prompt_echo": 20,
+    "assistant_text_events_also_present_in_text_delta": 20
+  },
+  "codex_reviewer_round_control": {
+    "adapter": "codex",
+    "bytes_on_disk": 129756,
+    "event_counts": {
+      "init": 1,
+      "text": 4,
+      "tool_use": 27,
+      "tool_result": 27,
+      "codex:file_change": 3,
+      "done": 1
+    },
+    "text_delta_chars": 0,
+    "thinking_chars": 0,
+    "text_delta_equals_thinking": true,
+    "assistant_text_events_excluding_prompt_echo": 3,
+    "assistant_text_events_also_present_in_text_delta": 0
+  }
+}

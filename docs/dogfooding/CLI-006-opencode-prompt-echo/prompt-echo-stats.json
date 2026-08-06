@@ -1,0 +1,24 @@
+{
+  "opencode_reviewer_turn": {
+    "adapter": "opencode",
+    "role": "reviewer",
+    "prompt_chars": 19790,
+    "text_events": 1,
+    "first_text_event_chars": 19790,
+    "first_text_event_equals_prompt_byte_for_byte": true
+  },
+  "opencode_modifier_turn": {
+    "adapter": "opencode",
+    "role": "modifier",
+    "prompt_chars": 3068,
+    "text_events": 21,
+    "first_text_event_chars": 3068,
+    "first_text_event_equals_prompt_byte_for_byte": true
+  },
+  "codex_reviewer_turn_control": {
+    "adapter": "codex",
+    "role": "reviewer",
+    "text_events": 4,
+    "any_text_event_equals_prompt": false
+  }
+}

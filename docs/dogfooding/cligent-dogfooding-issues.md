@@ -15,6 +15,8 @@
 | CLI-003 | Kimi 未提供 token usage 时被报告为真实零值 | Kimi adapter / usage schema | Medium | Open | 2026-08-03 |
 | CLI-004 | OpenCode auto 权限遗漏 external_directory，导致 headless run 无限等待 | OpenCode adapter / permissions | Critical | Open | 2026-08-04 |
 | CLI-005 | OpenCode 工具事件后不再产生 terminal event，adapter 无限等待 SSE | OpenCode adapter / lifecycle | Critical | Open | 2026-08-04 |
+| CLI-006 | OpenCode 把用户 prompt 回放成 assistant `text` 事件，调用方无法与模型输出区分 | OpenCode adapter / message role | High | Open | 2026-08-06 |
+| CLI-007 | OpenCode reasoning 增量被标记为 `text_delta`，与 `thinking` 重复且无类型判别 | OpenCode adapter / 事件语义 | Medium | Open | 2026-08-06 |
 
 ## 状态约定
 
@@ -652,3 +654,230 @@ deadline，也不会主动查询 session 状态，因此会永久等待。现有
 Agent event 时，先保存进程、Git working tree 和最后事件快照，再触发 `AbortSignal`。该措施
 能限制并发槽损失并保留诊断材料，但不能确定或修复 OpenCode 内部 session 停滞的根因，
 因此本 issue 保持 `Open`。
+
+---
+
+## CLI-006：OpenCode 把用户 prompt 回放成 assistant `text` 事件，调用方无法与模型输出区分
+
+### 基本信息
+
+- 组件：`@sublang/cligent` OpenCode adapter / message role 判别
+- dogfooding 环境：
+  - cligent `0.18.0`
+  - OpenCode CLI `1.18.13`
+  - `@opencode-ai/sdk` `1.18.13`
+  - 模型 `deepseek/deepseek-v4-flash`
+- 严重程度：`High`
+- 状态：`Open`
+- 证据目录：[`CLI-006-opencode-prompt-echo/`](./CLI-006-opencode-prompt-echo/)
+
+### 背景与期望
+
+cligent 的统一事件流用 `text` 表示 Agent 产生的文本输出。调用方据此累积一次 turn 的
+最终回答，用于解析结构化协议（例如要求 Agent 只输出一个 JSON 对象）和生成 trajectory。
+
+因此期望是：`text` 事件只承载模型输出。调用方自己提交的 prompt 不应以同一类型回到事件
+流中；即使为了完整回放会话而保留，也必须携带可判别的 role 或使用独立事件类型。
+
+### 现象
+
+OpenCode session 的**第一个 `text` 事件就是调用方提交的 prompt 本身**，且与提交内容
+逐字节相同：
+
+| Turn | 提交 prompt 字符数 | 首个 `text` 事件字符数 | 与 prompt 逐字节相同 |
+|---|---:|---:|---|
+| reviewer（`review-1-a1`） | 19790 | 19790 | 是 |
+| modifier（`00-modify`） | 3068 | 3068 | 是 |
+
+同批次的 Codex adapter 作为对照：4 个 `text` 事件全部是真实模型输出，没有任何一个等于
+提交的 prompt。
+
+事件片段（内容已截断）见
+[`prompt-echo-event.jsonl`](./CLI-006-opencode-prompt-echo/prompt-echo-event.jsonl)，
+统计见
+[`prompt-echo-stats.json`](./CLI-006-opencode-prompt-echo/prompt-echo-stats.json)。
+
+### 影响
+
+调用方按约定累积 `text` 事件得到的"最终回答"会以整份 prompt 开头，产生两类真实故障：
+
+1. **结构化协议解析失败。** 本项目的 Reviewer 协议要求只输出一个 JSON 对象，解析器在
+   没有 ``` 围栏时回退到"首个 `{` 到末个 `}`"。prompt 里既包含被审查的代码 diff（首个
+   `{` 出现在第 3550 字符），又在末尾包含输出格式模板（`"verdict": "approve" | "revise"`
+   本身不是合法 JSON）。因此若 turn 正常返回有效 Reviewer JSON，拼接后的切片仍会必然
+   解析失败。本次 smoke 的两个 Reviewer attempt 实际均在 600 秒超时中断，没有产生
+   assistant `text` 或进入 JSON 解析；其 `reviewer_failed` 不能归因于 prompt echo。
+2. **trajectory 污染。** 下游 ATIF trajectory 的 agent message 第 0 个字符即为任务
+   prompt，使"模型说了什么"不再可信。
+
+### 定位结论
+
+OpenCode SDK `1.18.13` 明确按 role 区分消息：
+
+```ts
+export type Message = UserMessage | AssistantMessage;   // 分别为 role: "user" / "assistant"
+```
+
+而 cligent `0.18.0` 的 OpenCode adapter 在处理 `message.part.updated` 时读取
+`event.message`、`event.part`，但**整个 adapter 源码中没有任何一处引用 `role`**。
+SDK 的 `EventMessagePartUpdated` 实际只有 `properties.part` 和可选 `delta`；`part` 仅携带
+`messageID`，并不直接携带所属消息的 `role`。用户消息的 text part 与助手消息的 text part
+因而走同一条分支，被同样转换为 `text`。
+
+这与 CLI-001 的工具事件转换无关：那里丢的是参数与结果，这里是把调用方输入错误地标记
+成了 Agent 输出。
+
+### 建议处理方式
+
+1. 消费 `message.updated`，按 `info.id` 建立会话内 `messageID → role` 映射；处理
+   `message.part.updated` 时用 `part.messageID` 查询所属 role，只有 `assistant` 的 text part
+   才转换为 `text` 事件。角色事件可能晚于 part 到达时，应暂存 part 或查询消息状态，不能
+   默认当作 assistant。
+2. 若需要保留完整会话回放，为用户消息使用独立事件类型（例如 `user_message`），或在
+   payload 中带上 `role`，使调用方可无歧义过滤。
+3. 同一 role 判别应同时覆盖 `thinking` / `text_delta` 等其他内容分支，避免只修一处。
+
+### 建议的回归测试
+
+1. 提交 prompt 后，事件流中不出现 `content` 等于该 prompt 的 `text` 事件。
+2. 助手输出恰好与 prompt 文本相同时，仍作为 `text` 事件正常产出（不能按内容匹配过滤）。
+3. 多轮会话中每轮的用户消息都不进入 `text`。
+4. 若引入 `user_message` 或 role 字段，覆盖其在 resume/续跑 session 下的行为。
+5. 其他 adapter（Codex/Claude/Kimi）的 `text` 语义保持不变。
+
+### 验收标准
+
+- `text` 事件只包含模型输出。
+- 调用方拼接 `text` 得到的最终回答可直接用于严格 JSON 协议解析。
+- 用户消息若保留在事件流中，具备明确且被测试固定的判别方式。
+- 真实运行中 OpenCode 作为 Reviewer 可以产出可解析的 review 结果。
+
+### 调用方临时缓解
+
+在 cligent 发布正式修复前，调用方只对 OpenCode 本 turn 的首个 `text` 事件检查：若其
+`content` 与本次提交 prompt 完全相等（trim 后），则重新标记为 `runtime:prompt_echo`，
+既不计入最终回答，也不写入 trajectory 的 agent message。采用精确相等而非前缀匹配，
+并限制 adapter 和事件位置，避免误伤其他 adapter 或后续真实输出。
+
+该措施依赖"回放内容与提交内容逐字节相同"这一当前观察到的行为，不能替代 adapter 按
+role 判别的正式修复，因此本 issue 保持 `Open`。
+
+### 相关源码
+
+- cligent OpenCode adapter：`packages/cligent/src/adapters/opencode.ts`（以 cligent 仓库实际路径为准）
+- OpenCode SDK Message 类型：`@opencode-ai/sdk/dist/gen/types.gen.d.ts`
+
+---
+
+## CLI-007：OpenCode reasoning 增量被标记为 `text_delta`，与 `thinking` 重复且无类型判别
+
+### 基本信息
+
+- 组件：`@sublang/cligent` OpenCode adapter / 事件语义
+- dogfooding 环境：
+  - cligent `0.18.0`
+  - OpenCode CLI `1.18.13`
+  - `@opencode-ai/sdk` `1.18.13`
+  - 模型 `deepseek/deepseek-v4-flash`
+- 严重程度：`Medium`
+- 状态：`Open`
+- 证据目录：[`CLI-007-opencode-reasoning-deltas/`](./CLI-007-opencode-reasoning-deltas/)
+
+### 背景与期望
+
+统一事件流用 `thinking` 表示模型推理内容，用 `text` / `text_delta` 表示面向用户的输出。
+调用方据此分别填充 trajectory 的 `content` 与 `reasoning_content`。因此期望是：增量事件
+需要能判别其所属内容类型，推理增量不应与输出增量共用一个不带判别信息的事件类型。
+
+### 现象
+
+一次 reviewer turn（600 秒被超时中断）产生 30384 条 `text_delta`，把这些 delta 按顺序
+拼接后，与同一 turn 内 48 条 `thinking` 事件拼接的结果**逐字节完全相同**（均为 123130
+字符）。即该 turn 全部 `text_delta` 承载的都是推理内容，而非模型输出。
+
+而在 modifier turn 中，`text_delta` 又**同时**包含推理和真实输出：该 turn 除 prompt 回放
+外的 20 条 `text` 事件，其内容全部能在 delta 流中找到。因此 `text_delta` 是推理与输出的
+混合流，且事件本身不携带任何类型判别字段：
+
+```json
+{"type":"text_delta","agent":"opencode","payload":{"delta":"Let"}}
+```
+
+同批次 Codex adapter 作为对照，完全不产生 `text_delta`（整条消息以 `text` 发出）。
+
+体积影响（同一任务、同一批次）：
+
+| Round | adapter | `text_delta` 条数 | 落盘体积 |
+|---|---|---:|---:|
+| reviewer（首次 attempt） | opencode | 30384 | 5.7 MB |
+| modifier | opencode | 44305 | 8.3 MB |
+| reviewer | codex | 0 | 0.13 MB |
+
+约 12 万字符的实际内容被放大成 5.7 MB 的 JSON —— 每条 delta 独立成事件，信封开销远
+大于内容本身。
+
+统计见 [`event-stats.json`](./CLI-007-opencode-reasoning-deltas/event-stats.json)，
+片段见 [`representative-events.jsonl`](./CLI-007-opencode-reasoning-deltas/representative-events.jsonl)。
+
+### 定位结论
+
+cligent `0.18.0` 的 OpenCode adapter 有两条独立的增量路径：
+
+1. `message.part.delta` 分支只读取 `event.delta` 后直接产出 `text_delta`，**不检查所属
+   part 的类型**，因此推理增量与输出增量都被标记为 `text_delta`。
+2. `message.part.updated` 分支在 `partType === 'reasoning'` 时产出 `thinking`，携带累积
+   文本。
+
+同一段推理因而经两条路径各发一次，内容重复；而 `text_delta` 又混入真实输出，调用方既
+不能把它整体当作推理，也不能整体当作输出。
+
+补充一处可疑读法：SDK 的 `EventMessagePartUpdated` 把 `delta` 定义为 `part` 的同级字段
+（`properties: { part, delta? }`），而 adapter 在 text part 分支读取的是 `part.delta`。
+若该读法确实取不到值，会退回读取 `part.text` 并发出承载完整文本的 `text` 事件——这与
+观察到的 `text` 事件均为整条消息一致，建议一并核对。
+
+本次 dogfooding 未保存转换前的原始 OpenCode SSE，因此无法进一步断言 `message.part.delta`
+的原始 payload 中是否已携带 part id/type；修复时建议以真实 SSE fixture 确认。
+
+### 建议处理方式
+
+1. 增量事件必须可判别所属内容类型：`message.part.delta` 应关联 part id/type（必要时由
+   adapter 维护 partID → type 的会话内映射），推理增量使用独立类型（例如
+   `thinking_delta`），输出增量才使用 `text_delta`。
+2. 明确 `thinking` 与推理增量的关系：二者应为"增量 + 收尾"而非各自完整重复一份，或在
+   文档中明确调用方应消费哪一路、忽略哪一路。
+3. 考虑为增量提供合并开关：headless 批量运行的调用方通常只需要成块内容，不需要逐 token
+   事件；由 adapter 侧合并可从源头消除放大。
+
+### 建议的回归测试
+
+1. 推理 part 的增量不产出 `text_delta`。
+2. 输出 part 的增量产出 `text_delta`，且可与最终 `text` 对齐。
+3. 推理与输出交替出现时，两类增量分别归类正确，不串流。
+4. 拼接推理增量的结果与 `thinking` 内容一致，不重复计入调用方的输出文本。
+5. 覆盖 `EventMessagePartUpdated.properties.delta` 与 `part.delta` 两种读取位置，防止
+   回退到整条 `text`。
+6. 关闭增量合并与开启合并两种模式下，最终内容一致。
+
+### 验收标准
+
+- 调用方可以只依据事件类型区分推理与输出，无需按内容比对。
+- 同一段推理不再同时出现在两类事件中。
+- trajectory 的 `content` 与 `reasoning_content` 不再互相污染。
+- 事件落盘体积与实际内容量成合理比例。
+
+### 调用方临时缓解
+
+在 cligent 发布正式修复前，调用方只在事件落盘时丢弃 OpenCode 的 `text_delta`：推理内容
+已完整存在于 `thinking`，模型输出已完整存在于 `text`，因此该丢弃基本无损，仅会丢失被
+中断 turn 中尚未滚动进 `thinking`/`text` 的最后一段（实测约占一次超时 reviewer turn 的
+0.8%）。Claude、Kimi 等其他 adapter 的 `text_delta` 必须保留；内存事件流也不应过滤，
+以免影响 inactivity watchdog。
+
+该措施只解决调用方侧的体积与 trajectory 污染，不改变 adapter 的事件语义问题，因此本
+issue 保持 `Open`。
+
+### 相关源码
+
+- cligent OpenCode adapter：`packages/cligent/src/adapters/opencode.ts`（以 cligent 仓库实际路径为准）
+- OpenCode SDK Part / Event 类型：`@opencode-ai/sdk/dist/gen/types.gen.d.ts`

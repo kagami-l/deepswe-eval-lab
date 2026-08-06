@@ -1,0 +1,1 @@
+{"label": "review-1-a1", "type": "text", "agent": "opencode", "timestamp": 1785990947456, "sessionId": "ses_02aa4e02affell13idTetjccfA", "payload": {"content": "You are an independent code reviewer. This is review round 1 of 3.\n\nA coding agent implemented the following task in thi ... [truncated, 19790 chars total, byte-identical to prompt-a1.md]"}, "role": "reviewer"}

@@ -1,0 +1,5 @@
+{"label": "review-1-a1", "type": "text_delta", "agent": "opencode", "timestamp": 1785990951808, "sessionId": "ses_02aa4e02affell13idTetjccfA", "payload": {"delta": "Let"}, "role": "reviewer"}
+{"label": "review-1-a1", "type": "text_delta", "agent": "opencode", "timestamp": 1785990951902, "sessionId": "ses_02aa4e02affell13idTetjccfA", "payload": {"delta": " me"}, "role": "reviewer"}
+{"label": "review-1-a1", "type": "text_delta", "agent": "opencode", "timestamp": 1785990951935, "sessionId": "ses_02aa4e02affell13idTetjccfA", "payload": {"delta": " start"}, "role": "reviewer"}
+{"label": "review-1-a1", "type": "text_delta", "agent": "opencode", "timestamp": 1785990951936, "sessionId": "ses_02aa4e02affell13idTetjccfA", "payload": {"delta": " by"}, "role": "reviewer"}
+{"label": "review-1-a1", "type": "thinking", "agent": "opencode", "timestamp": 1785990952201, "sessionId": "ses_02aa4e02affell13idTetjccfA", "payload": {"summary": "Let me start by exploring the repository to understand the codebase and then review the change.\n\nLet me look at the diff and the relevant files."}, "role": "reviewer"}
