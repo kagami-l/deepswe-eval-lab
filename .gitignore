@@ -47,5 +47,6 @@ htmlcov/
 
 # Large evaluation data (fetch locally, do not commit)
 wip/data/official-v1.1/trials.json
+wip/data/official-v1.1-jobs/
 
 skills-lock.json
