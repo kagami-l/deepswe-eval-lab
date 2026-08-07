@@ -1,5 +1,5 @@
 /**
- * Strict-JSON review protocol (docs/collab-agent-design.md section 8).
+ * Strict-JSON review protocol (docs/archive/collab-agent-design.md section 8).
  *
  * cligent has no structured-output support, so the Reviewer's final text is
  * parsed and validated locally. Adjudication is driven by blocking findings;

@@ -1,6 +1,6 @@
 """Pier adapter for the DeepSWE Modifier/Reviewer collaboration runtime.
 
-Architecture (docs/collab-agent-design.md): this thin host-side adapter
+Architecture (docs/archive/collab-agent-design.md): this thin host-side adapter
 installs a Node runtime bundle into the task container and launches the
 TypeScript orchestrator there. The orchestrator drives exactly two LLM
 agents through cligent (a Modifier working in ``/app`` and a Reviewer in an
@@ -73,7 +73,7 @@ def _validated_adapter(name: str, value: Any) -> str:
             f"Unsupported {name} '{value}'. "
             f"Supported adapters: {', '.join(SUPPORTED_ADAPTERS)} "
             "(gemini/opencode are excluded in the first phase, see "
-            "docs/collab-agent-design.md section 6.4)."
+            "docs/archive/collab-agent-design.md section 6.4)."
         )
     return adapter
 
@@ -630,7 +630,7 @@ npm cache clean --force
     def network_allowlist(self) -> NetworkAllowlist:
         """Minimal egress set; only enforced when the task environment runs
         with ``allow_internet=False`` (pier enables its proxy solely in that
-        combination — see docs/collab-agent-design.md section 11)."""
+        combination — see docs/archive/collab-agent-design.md section 11)."""
         domains: set[str] = {"registry.npmjs.org"}
         if "claude" in self.adapters_in_use:
             domains.add("api.anthropic.com")

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "In-container Modifier/Reviewer collaboration runtime for DeepSWE (docs/collab-agent-design.md)",
+  "description": "In-container Modifier/Reviewer collaboration runtime for DeepSWE (docs/archive/collab-agent-design.md)",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "npm run build && node --test dist/*.test.js"

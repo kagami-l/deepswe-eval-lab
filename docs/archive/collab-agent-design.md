@@ -1,9 +1,11 @@
 # DeepSWE 多 Agent 协作评测方案
 
-> **文档定位（2026-08-03）**：本文描述现有 `deep_swe_collab` direct
-> review-loop 原型及其历史设计。后续 single/collab 统一新基线、通用 shared
-> runtime、版本化 Agent profiles 和正式实施计划见
-> [DeepSWE 统一 Agent 评测基线：正式设计与实施计划](./unified-agent-evaluation-design.md)。
+> **文档定位（2026-08-07 归档）**：本文描述 `deep_swe_collab` direct
+> review-loop 原型及其历史设计，已归档、不再更新。后续 single/collab 统一新基线、
+> 通用 shared runtime、版本化 Agent profiles 和正式实施计划见
+> [DeepSWE 统一 Agent 评测基线：正式设计与实施计划](../unified-agent-evaluation-design.md)；
+> 统一 runtime 中 collab（review-loop）协作流程与信息传递格式的现行详细说明见
+> [collab-review-loop.md](../collab-review-loop.md)。
 > 新基线不会在开发阶段改写本文对应的旧脚本和旧 runtime。
 
 ## 1. 目标
@@ -359,7 +361,7 @@ Captain 和 Judge 的 runtime 行为也不同：
 DeepSWE 单任务 Agent timeout 为 5400 秒（来自各 task.toml 的 `[agent] timeout_sec`，113/113 一致；verifier 独立为 1800 秒）。agent setup 阶段有单独的默认 360 秒超时，不占这一预算。多轮协作很容易耗尽 5400 秒。
 
 当前统一 runtime 的策略见
-[`collab-timeout-policy.md`](./collab-timeout-policy.md)。确认后的默认行为是：
+[`collab-timeout-policy.md`](../collab-timeout-policy.md)。确认后的默认行为是：
 
 - `max_reviews=3`（与 SWE-bench Pro collab runner 的默认值一致，便于跨 benchmark 对比；这是上限而非保证，5400 秒预算内第三轮常常放不下，由 deadline 管理决定是否执行）；
 - 整体 deadline 由 runtime 统一管理；
@@ -399,7 +401,7 @@ review 3 / final revision  使用剩余预算，不足则跳过并提前交付
 - task.toml 里的 `[agent] network_mode = "no-network"` 是 harbor 语义；pier 的 task 模型没有该字段、会静默忽略，真正的开关 `[environment] allow_internet` 默认为 True 且任务未设置。因此 **agent 容器实际有全网**，模型调用和在线安装都不需要网络豁免配置（`--allow-agent-host` 只存在于 harbor，pier 没有这个 flag）。
 - 代价是 benchmark 卫生（禁 git fetch 找答案等）只靠 prompt 约束和镜像的 git 手术（已删 origin 与未来 refs），没有网络层强制。如需收紧，pier 的机制是任务环境 `allow_internet=False` + 在 agent 代码中实现 `network_allowlist()`（egress proxy 仅在两者同时满足时启用），这是代码级配置而非 CLI flag。
 - API key 通过 Pier 的 `--ae/--agent-env` 注入（支持 `${VAR}` 引用宿主环境变量，job config 序列化时自动脱敏），不写入 prompt、日志和 artifacts。
-- 除 API key 外，支持复用宿主机登录态：Codex 走 `CODEX_FORCE_AUTH_JSON=1` / `CODEX_AUTH_JSON_PATH`（与 pier 内置 Codex agent 同机制，上传 `~/.codex/auth.json` 并落到容器 `$CODEX_HOME/auth.json`）；Kimi ACP 要求 `kimi login` 凭据。本文对应的旧原型曾复制整个 Kimi 配置，但统一新基线只通过 `KIMI_AUTH_HOME_PATH` 复制 `credentials/`、`oauth/` 和 `device_id` 登录材料，不复制宿主 `config.toml`，而由版本化 profile 在 trial 内生成最小 provider/OAuth 文件引用/model 注册；Claude 无文件注入路径（macOS 凭据在 Keychain），标准做法是 `claude setup-token` → `CLAUDE_CODE_OAUTH_TOKEN`，具体见 [`claude-code-oauth-token.md`](./claude-code-oauth-token.md)。凭据文件一律放容器 `/tmp`，不进会同步回宿主的 `/logs`。
+- 除 API key 外，支持复用宿主机登录态：Codex 走 `CODEX_FORCE_AUTH_JSON=1` / `CODEX_AUTH_JSON_PATH`（与 pier 内置 Codex agent 同机制，上传 `~/.codex/auth.json` 并落到容器 `$CODEX_HOME/auth.json`）；Kimi ACP 要求 `kimi login` 凭据。本文对应的旧原型曾复制整个 Kimi 配置，但统一新基线只通过 `KIMI_AUTH_HOME_PATH` 复制 `credentials/`、`oauth/` 和 `device_id` 登录材料，不复制宿主 `config.toml`，而由版本化 profile 在 trial 内生成最小 provider/OAuth 文件引用/model 注册；Claude 无文件注入路径（macOS 凭据在 Keychain），标准做法是 `claude setup-token` → `CLAUDE_CODE_OAUTH_TOKEN`，具体见 [`claude-code-oauth-token.md`](../claude-code-oauth-token.md)。凭据文件一律放容器 `/tmp`，不进会同步回宿主的 `/logs`。
 
 ## 12. Artifacts 与观测性
 

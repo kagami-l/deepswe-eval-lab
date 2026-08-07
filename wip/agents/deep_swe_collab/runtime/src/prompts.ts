@@ -3,7 +3,7 @@
  *
  * The Pier harness submits the task instruction exactly once; every prompt
  * here is derived from that instruction plus intermediate artifacts — never
- * from new user input (docs/collab-agent-design.md section 5.1).
+ * from new user input (docs/archive/collab-agent-design.md section 5.1).
  */
 
 import type { FindingResolution, Review } from './review-schema.js';

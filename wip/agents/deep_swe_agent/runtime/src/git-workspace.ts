@@ -1,6 +1,6 @@
 /**
  * Git checkpointing and Reviewer isolation for the collab loop
- * (docs/collab-agent-design.md section 7).
+ * (docs/archive/collab-agent-design.md section 7).
  *
  * - Checkpoints stage tracked modifications plus NEW untracked files only;
  *   files that were already untracked at the base commit (environment files

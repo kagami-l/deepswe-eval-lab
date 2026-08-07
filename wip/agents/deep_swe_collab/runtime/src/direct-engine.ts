@@ -1,6 +1,6 @@
 /**
  * DirectCollaborationEngine — the first-phase deterministic control loop
- * (docs/collab-agent-design.md sections 5.1, 7, 8, 13).
+ * (docs/archive/collab-agent-design.md sections 5.1, 7, 8, 13).
  *
  *   initial_modify → checkpoint → [review → (approve | revise → revision →
  *   checkpoint)] * maxReviews → deliver

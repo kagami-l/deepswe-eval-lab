@@ -4,7 +4,7 @@
  * The first-phase DirectCollaborationEngine and the later playbook backend
  * both implement `CollaborationEngine` so the Pier agent and cligent glue
  * stay unchanged when the control plane is swapped
- * (docs/collab-agent-design.md section 5).
+ * (docs/archive/collab-agent-design.md section 5).
  */
 
 export type AdapterName = 'claude' | 'codex' | 'gemini' | 'kimi' | 'opencode';

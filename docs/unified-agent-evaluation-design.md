@@ -593,6 +593,9 @@ prepare
 - 达到 `max_reviews` 后交付最后一个成功 checkpoint。
 - direct engine 保持当前 `deep_swe_collab` 已验证的控制语义。
 
+Modifier/Reviewer 各步骤之间传递的信息、prompt 与 JSON 格式、解析仲裁规则和降级
+语义的完整说明见 [collab-review-loop.md](./collab-review-loop.md)。
+
 ## 13. 时间预算
 
 DeepSWE 当前 task 的 Agent timeout 为 5400 秒。Pier 0.3.0 支持：

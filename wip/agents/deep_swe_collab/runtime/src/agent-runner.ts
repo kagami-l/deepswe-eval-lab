@@ -3,7 +3,7 @@
  *
  * `AgentRunner` is the seam the engine depends on; tests inject fakes.
  * `CligentRunner` wraps one `Cligent` per role with the adapter-specific
- * headless configuration from docs/collab-agent-design.md section 6.4:
+ * headless configuration from docs/archive/collab-agent-design.md section 6.4:
  * Claude/Codex run with `mode: 'bypass'` (the task container is the
  * isolation boundary; Codex's OS sandbox cannot start in Docker), Kimi gets
  * no permission policy because it rejects capability policies.

@@ -1,6 +1,6 @@
 # DeepSWE Collab Agent（deep-swe-collab）
 
-按 [docs/collab-agent-design.md](../../../docs/collab-agent-design.md) 实现的
+按 [docs/archive/collab-agent-design.md](../../../docs/archive/collab-agent-design.md) 实现的
 「修改 → 审查 → 修订」协作 Agent，作为一个 Pier 自定义复合 Agent 运行：
 
 - `pier_agent.py`：宿主侧适配层（`BaseInstalledAgent`）。负责把 Node runtime
