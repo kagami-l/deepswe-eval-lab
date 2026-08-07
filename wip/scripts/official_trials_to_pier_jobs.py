@@ -37,6 +37,8 @@ from pier.models.verifier.result import VerifierResult
 
 REWARD_KEYS = ("reward", "f2p", "p2p", "partial")
 
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+
 
 def build_trial_result(row: dict, artifact_uri_prefix: str) -> TrialResult:
     task_name = row["task_name"]
@@ -147,19 +149,19 @@ def main() -> None:
     parser.add_argument(
         "--trials",
         type=Path,
-        default=Path("wip/data/official-v1.1/trials.json"),
+        default=DATA_DIR / "official-v1.1/trials.json",
         help="Path to the official trials.json export",
     )
     parser.add_argument(
         "--release",
         type=Path,
-        default=Path("wip/data/official-v1.1/release.json"),
+        default=DATA_DIR / "official-v1.1/release.json",
         help="Path to release.json (for artifact URI prefixes)",
     )
     parser.add_argument(
         "--out",
         type=Path,
-        default=Path("wip/data/official-v1.1-jobs"),
+        default=DATA_DIR / "official-v1.1-jobs",
         help="Output jobs folder for `pier view --jobs`",
     )
     parser.add_argument(

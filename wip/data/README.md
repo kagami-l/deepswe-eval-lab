@@ -4,17 +4,33 @@
 
 ## `official-v1.1/`
 
-下载自 DeepSWE 官网 `https://deepswe.datacurve.ai/artifacts/v1.1/`，当前快照的文件修改时间为 2026-07-25（`v1-delta.json` 为 2026-07-27）。完整性校验见 `SHA256SUMS`。
+下载自 DeepSWE 官网 `https://deepswe.datacurve.ai/artifacts/v1.1/`，当前快照下载于 2026-08-07，对应官方 2026-08-06 生成的数据（52 个 config、23,490 次 rollout；相比 2026-07-25 快照新增 `mini_swe_agent_deepseek_v4_flash_max` 和 `mini_swe_agent_qwen3_8_max_xhigh`，原有数据未变）。完整性校验见 `SHA256SUMS`。
 
 | 文件 | 含义 | 是否进入主筛选 |
 | --- | --- | --- |
 | `tasks.json` | 113 个任务的 ID、语言、仓库、base commit、prompt 长度等元数据 | 是 |
-| `trials.json` | 22,586 次 rollout 的系统配置、通过/错误、分项分数、成本、tokens、steps 和工件状态 | 是，核心输入 |
+| `trials.json` | 23,490 次 rollout 的系统配置、通过/错误、分项分数、成本、tokens、steps 和工件状态 | 是，核心输入 |
 | `v1-delta.json` | 同一批共享 rollout 在 v1 和 v1.1 评分下的 task/config 差异 | 是，用于标记评分敏感题 |
 | `leaderboard-live.json` | 官网 configuration 级榜单及 pass@k、置信区间、成本等汇总 | 否，用于交叉核验 |
 | `release.json` | trajectory、patch、agent log、verifier 输出的公开下载 URL 模板 | 否，用于后续人工审计 |
 
 主筛选只使用 `source=deep-swe`、`eval_scope=full`、`included_in_score=true` 且 `errored=false` 的 trial。被排除 trial 不进入通过率分母，但会进入错误率和 verifier timeout 统计。
+
+### 用 pier view 查看官方数据
+
+`wip/scripts/official_trials_to_pier_jobs.py` 把 `trials.json` 按 config（harness + model + reasoning effort）展开成 pier 兼容的 jobs 目录 `official-v1.1-jobs/`（每个 config 一个 job，每个 trial 一个 `result.json`，只含指标数据，不含 trajectory 等工件），可在本地 viewer 中多选 config 做 heatmap 对比：
+
+```bash
+cd wip
+
+# 转换（--config 可用 glob 只转换部分 config，重跑加 --clean）
+uv run python scripts/official_trials_to_pier_jobs.py --clean
+
+# 查看
+uv run pier view data/official-v1.1-jobs --jobs
+```
+
+被官方排除的 trial（provider/verifier/网络错误）带有 `exception_info`，在 viewer 中勾选 "exclude errored" 后通过率口径与官方 leaderboard 一致。
 
 ## `selection/`
 
