@@ -1,13 +1,15 @@
 # Collab 初始 Patch 配对实验:离线重打分设计
 
-状态:设计已确认,待实现。
+状态:superseded——已并入
+[collab-paired-checkpoint-verification-design.md](../collab-paired-checkpoint-verification-design.md),
+以该文档为唯一权威设计。本文仅作历史记录保留。
 
-确认日期:2026-08-07。
+确认日期:2026-08-07。归档日期:2026-08-07。
 
 ## 背景
 
 结果报告
-[collab-codex-opencode-05_sample_confirm-12-tasks-20260806-224833](results/collab-codex-opencode-05_sample_confirm-12-tasks-20260806-224833.md)
+[collab-codex-opencode-05_sample_confirm-12-tasks-20260806-224833](../results/collab-codex-opencode-05_sample_confirm-12-tasks-20260806-224833.md)
 的建议第 7 条指出:要判断 reviewer 是否提升 verifier 分数,不应继续比较独立随机 job,
 而应对同一初始 patch 构造 no-review 与 review-loop 的配对对比,并记录每轮 revision 后的 verifier delta。
 
