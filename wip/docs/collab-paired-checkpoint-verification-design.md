@@ -206,8 +206,10 @@ Task config digest 不可省略：记录的 task checksum 只描述 eval 当时�
 
 Pier 0.3.0 没有公开的 `verify-artifact` 命令。实现使用一个窄的 `PierPatchVerifier` adapter，固定
 `datacurve-pier==0.3.0`，复用 Pier `Trial._verify_once()` 在 separate 模式下所走的同一条内部链路。
-不直接调用 `Trial._verify_once()` 本身：`Trial` 无法脱离完整 agent/environment 配置构造，
-而事后评分既没有 agent 也不需要它。Adapter 按同样顺序调用同样的 Pier 组件：
+不直接调用 `Trial._verify_once()` 本身：虽然可以用完整 `TrialConfig` 构造 `Trial`，
+但这会同时初始化事后评分不需要的 agent execution 和主环境对象，并使 verifier-only
+replay 耦合完整 `Trial` 生命周期。`PierPatchVerifier` 将 verifier-only replay 的 seam 放在“给定冻结
+patch，执行 Pier 评分”这一层，按同样顺序调用 separate verifier 路径中同样的 Pier 组件：
 
 - 用 `resolve_effective_verifier_env_config()` 解析原 task verifier 环境（非 separate 即 fail closed）；
 - 从原 task tests build context 用 `EnvironmentFactory.create_environment_from_config()`

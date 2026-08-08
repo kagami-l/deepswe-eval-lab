@@ -17,7 +17,6 @@ import argparse
 import json
 import shutil
 from collections import defaultdict
-from datetime import datetime
 from fnmatch import fnmatch
 from pathlib import Path
 from uuid import NAMESPACE_URL, uuid5
