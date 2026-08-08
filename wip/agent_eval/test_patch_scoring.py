@@ -223,6 +223,61 @@ class PatchScoringTests(unittest.TestCase):
         _run(self.job_dir, verifier)
         self.assertEqual(len(verifier.calls), calls_after_first + 1)
 
+    def test_task_toml_change_invalidates_cache(self) -> None:
+        verifier = self._standard_job()
+        _run(self.job_dir, verifier)
+        calls_after_first = len(verifier.calls)
+        # Changing the task definition the direct runner reads (verifier image,
+        # user, timeout) must not reuse scores produced under the old one.
+        task_toml = self.task_a / "task.toml"
+        task_toml.write_text(
+            task_toml.read_text().replace("timeout_sec = 1800.0", "timeout_sec = 900.0")
+        )
+        _run(self.job_dir, verifier)
+        # task-a contributes 3 unique patches; task-b's stay cached.
+        self.assertEqual(len(verifier.calls), calls_after_first + 3)
+
+    def test_job_level_artifacts_fail_closed(self) -> None:
+        verifier = self._standard_job()
+        result_path = self.job_dir / "task-a__one" / "result.json"
+        record = json.loads(result_path.read_text())
+        record["config"]["artifacts"] = ["/logs/artifacts/extra.tar"]
+        result_path.write_text(json.dumps(record))
+        with self.assertRaises(ScoringError) as ctx:
+            _run(self.job_dir, verifier)
+        self.assertIn("job-level artifacts", str(ctx.exception))
+        self.assertEqual(verifier.calls, [])
+        self.assertFalse((self.job_dir / "patch-scores").exists())
+
+    def test_corrupt_success_cache_recovers_without_force(self) -> None:
+        verifier = self._standard_job()
+        _run(self.job_dir, verifier)
+        calls_after_first = len(verifier.calls)
+        record_path = next(
+            (self.job_dir / "task-a__one" / "patch-scores" / "results").glob(
+                "*/result.json"
+            )
+        )
+        record = json.loads(record_path.read_text())
+        record["rewards"] = None  # success record with unusable rewards
+        record_path.write_text(json.dumps(record))
+        summary = _run(self.job_dir, verifier)
+        self.assertEqual(len(verifier.calls), calls_after_first + 1)
+        self.assertEqual(summary["exitCode"], 0)
+        self.assertEqual(summary["coverage"]["incompletePairs"], [])
+
+    def test_summary_reports_full_two_by_two(self) -> None:
+        verifier = self._standard_job()
+        summary = _run(self.job_dir, verifier)
+        table = summary["intentionToTreat"]["twoByTwo"]
+        self.assertEqual(
+            table,
+            {"failedBoth": 0, "improved": 1, "harmed": 1, "passedBoth": 1},
+        )
+        self.assertEqual(
+            sum(table.values()), summary["intentionToTreat"]["complete"]
+        )
+
     def test_reward_zero_is_not_retried(self) -> None:
         make_trial(
             self.job_dir,

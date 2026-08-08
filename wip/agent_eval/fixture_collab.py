@@ -122,6 +122,14 @@ def make_trial(
     resolved_revision_count = (
         revision_count if revision_count is not None else len(revise_dirs)
     )
+    checkpoint_labels = ["collab: initial implementation"] + [
+        (
+            "collab: final revision"
+            if revise_dir.name.endswith("final-revision")
+            else f"collab: revision {index + 1}"
+        )
+        for index, revise_dir in enumerate(revise_dirs)
+    ]
     (system / "summary.json").write_text(
         json.dumps(
             {
@@ -131,6 +139,10 @@ def make_trial(
                     "degradedReason": degraded_reason,
                     "deliverable": True,
                     "baseCommit": base_commit,
+                    "checkpoints": [
+                        {"label": label, "commit": f"{index:040d}"}
+                        for index, label in enumerate(checkpoint_labels)
+                    ],
                     "reviewCount": resolved_review_count,
                     "revisionCount": resolved_revision_count,
                     "noChangeRevision": no_change_revision,
@@ -167,27 +179,42 @@ def make_trial(
 
 
 def make_failed_modifier_trial(
-    job_dir: Path, task_dir: Path, trial_name: str
+    job_dir: Path,
+    task_dir: Path,
+    trial_name: str,
+    *,
+    outcome: str = "modifier_failed",
 ) -> Path:
-    """Trial whose modifier never produced an initial patch."""
+    """Trial whose modifier never produced an initial patch.
+
+    Mirrors the real runtime: ``finalize()`` runs on the failure path too, so
+    ``final/patch.diff``, ``final/git-status.txt`` and ``artifacts/model.patch``
+    all exist but are empty, and ``checkpoints`` is empty.
+    """
     trial_dir = job_dir / trial_name
     system = trial_dir / "agent" / "system"
     rounds = system / "rounds"
     rounds.mkdir(parents=True, exist_ok=True)
+    (system / "final").mkdir(parents=True, exist_ok=True)
+    (trial_dir / "artifacts").mkdir(parents=True, exist_ok=True)
     modify_dir = rounds / "00-modify"
     modify_dir.mkdir(exist_ok=True)
     (modify_dir / "metadata.json").write_text(
         json.dumps(_metadata("modifier", "error", "modify"))
     )
+    (system / "final" / "patch.diff").write_text("")
+    (system / "final" / "git-status.txt").write_text("")
+    (trial_dir / "artifacts" / "model.patch").write_text("")
     (system / "summary.json").write_text(
         json.dumps(
             {
                 "schemaVersion": 1,
                 "result": {
-                    "outcome": "failed",
+                    "outcome": outcome,
                     "degradedReason": None,
                     "deliverable": False,
                     "baseCommit": "b" * 40,
+                    "checkpoints": [],
                     "reviewCount": 0,
                     "revisionCount": 0,
                     "noChangeRevision": False,
@@ -209,8 +236,17 @@ def make_failed_modifier_trial(
                     "environment": {},
                     "verifier": {},
                 },
-                "verifier_result": None,
-                "exception_info": "modifier failed",
+                "verifier_result": {
+                    "rewards": {
+                        "reward": 0,
+                        "f2p_total": 1,
+                        "f2p_passed": 0,
+                        "p2p_total": 2,
+                        "p2p_passed": 2,
+                        "partial": 0.667,
+                    }
+                },
+                "exception_info": None,
             }
         )
     )

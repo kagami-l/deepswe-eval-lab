@@ -7,6 +7,10 @@
 (no-review 反事实)与各轮 revision 后的 stage patch,与 review-loop 终稿构成配对。
 方法与工具见[设计文档](../collab-paired-checkpoint-verification-design.md)。
 
+数据来源是对既有历史 job 的 verifier-only 回放(设计实现顺序第 9–10 步的 Phase 0),
+不调用任何模型、不产生新 trial。设计验收清单中的两方向 collab smoke 属于独立事项,
+与本文结论无关。
+
 原始工件:
 
 - [patch-scores 汇总](../../../jobs/collab-codex-opencode-05_sample_confirm-12-tasks-20260806-224833/patch-scores/summary.json)
@@ -132,5 +136,6 @@ initial→final 有节点移动的仅 4 对:
 3. 针对 final revision 的回归风险:考虑禁止 final revision 做 findings 范围之外的
    改动,或在预算允许时对 final revision 增加一轮轻量 review;至少应在结果分析中
    把"final revision 是否改变 reward"单列(本工具的 `rd` 最后一项已提供)。
-4. `score-patches` 的等价性与幂等性已在真实 job 上验收(24/24 matched、重入零
-   verifier 调用),可作为 collab eval 的常规后处理步骤。
+4. `score-patches` 在本次回放中表现出与正式 verifier 的一致性(24/24 matched)和幂等性
+   (重入零 verifier 调用),可作为 collab eval 的常规后处理步骤。注意这是历史 job 的
+   verifier-only 回放结果,不等同于设计验收清单里的两方向 collab smoke——后者尚未执行。

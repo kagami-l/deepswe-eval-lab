@@ -156,6 +156,17 @@ def build_context_digest(tests_dir: Path) -> str:
     return _sha256_text("\n".join(parts))
 
 
+def task_config_digest(task_dir: Path) -> str:
+    """Digest of the task definition the direct runner will actually read.
+
+    The recorded ``task_checksum`` describes the task as it was at eval time,
+    but the adapter loads the *current* ``task.toml`` (verifier image, user,
+    timeout, environment). Hashing it keeps a changed task from silently
+    reusing scores produced under the old definition.
+    """
+    return _sha256_text((task_dir / "task.toml").read_text())
+
+
 def _verifier_config_digest(trial: TrialPatchSet) -> str:
     return _sha256_text(
         _canonical_json(
@@ -175,11 +186,13 @@ def _fingerprint(
     *,
     identity: dict[str, str],
     context_digest: str,
+    task_digest: str,
     verifier_digest: str,
 ) -> dict[str, str]:
     return {
         "schemaVersion": str(SCORING_SCHEMA_VERSION),
         "taskChecksum": trial.task_checksum,
+        "taskConfigDigest": task_digest,
         "baseCommit": trial.base_commit,
         "patchSha256": stage.patch_sha256,
         "pierVersion": identity.get("pierVersion", ""),
@@ -248,10 +261,32 @@ def _select_trial_dirs(job_dir: Path, trial_glob: str | None) -> list[Path]:
     return trials
 
 
+def _is_reusable_record(record: Any, fingerprint_id: str) -> bool:
+    """A cached record may be reused only if it carries a usable reward.
+
+    A success record whose rewards are missing or malformed is treated as
+    absent, so a plain re-run repairs it without needing ``--force``.
+    """
+    if not isinstance(record, dict):
+        return False
+    if record.get("status") != "success":
+        return False
+    if not isinstance(record.get("fingerprint"), dict):
+        return False
+    if record.get("fingerprintId") != fingerprint_id:
+        return False
+    rewards = record.get("rewards")
+    if not isinstance(rewards, dict):
+        return False
+    return isinstance(rewards.get("reward"), (int, float)) and not isinstance(
+        rewards.get("reward"), bool
+    )
+
+
 def _scan_cached_results(
     trial_dirs: list[Path],
 ) -> dict[str, tuple[Path, dict[str, Any]]]:
-    """Index existing successful result files by fingerprint id."""
+    """Index reusable result files by fingerprint id."""
     cache: dict[str, tuple[Path, dict[str, Any]]] = {}
     for trial_dir in trial_dirs:
         results_dir = trial_dir / "patch-scores" / "results"
@@ -265,12 +300,7 @@ def _scan_cached_results(
                 record = json.loads(result_path.read_text())
             except (OSError, ValueError):
                 continue
-            if (
-                isinstance(record, dict)
-                and record.get("status") == "success"
-                and isinstance(record.get("fingerprint"), dict)
-                and record.get("fingerprintId") == result_dir.name
-            ):
+            if _is_reusable_record(record, result_dir.name):
                 cache.setdefault(result_dir.name, (result_dir, record))
     return cache
 
@@ -368,6 +398,16 @@ def _pair_stats(pairs: list[dict[str, Any]]) -> dict[str, Any]:
     improved = sum(1 for p in complete if p["classification"] == "improved")
     harmed = sum(1 for p in complete if p["classification"] == "harmed")
     unchanged = sum(1 for p in complete if p["classification"] == "unchanged")
+    failed_both = sum(
+        1
+        for p in complete
+        if p["initial_reward"] != 1 and p["final_reward"] != 1
+    )
+    passed_both = sum(
+        1
+        for p in complete
+        if p["initial_reward"] == 1 and p["final_reward"] == 1
+    )
     deltas_by_task: dict[str, list[float]] = {}
     for pair in complete:
         deltas_by_task.setdefault(pair["task"], []).append(pair["delta"])
@@ -390,6 +430,14 @@ def _pair_stats(pairs: list[dict[str, Any]]) -> dict[str, Any]:
         "improved": improved,
         "harmed": harmed,
         "unchanged": unchanged,
+        # Full paired 2x2 over the binary outcome; improved/harmed above are
+        # the discordant cells, these two split `unchanged`.
+        "twoByTwo": {
+            "failedBoth": failed_both,
+            "improved": improved,
+            "harmed": harmed,
+            "passedBoth": passed_both,
+        },
         "meanPairedDelta": mean_delta,
         "mcnemarExactP": mcnemar_exact_p(improved, harmed),
         "taskClusteredBootstrap95CI": task_clustered_bootstrap_ci(deltas_by_task),
@@ -449,7 +497,20 @@ async def score_patch_job(
     eligible = [t for t in trials if t.eligible]
     ineligible = [t for t in trials if not t.eligible]
 
+    # A trial that declared job-level artifacts cannot be reproduced from the
+    # frozen patch alone: those files came from the agent container, which is
+    # gone. Fail closed rather than score a different verifier input.
+    with_job_artifacts = [t for t in eligible if t.job_artifacts]
+    if with_job_artifacts:
+        raise ScoringError(
+            "these trials declare job-level artifacts that cannot be replayed "
+            "from a frozen patch: "
+            + ", ".join(t.trial_name for t in with_job_artifacts),
+            exit_code=2,
+        )
+
     context_digests: dict[Path, str] = {}
+    task_digests: dict[Path, str] = {}
     verifier_digests: dict[str, str] = {}
     stage_scores: dict[tuple[str, str], _StageScore] = {}
     unique_work: dict[str, _UniqueWork] = {}
@@ -462,6 +523,7 @@ async def score_patch_job(
                     f"task tests directory missing: {tests_dir}", exit_code=2
                 )
             context_digests[tests_dir] = build_context_digest(tests_dir)
+            task_digests[tests_dir] = task_config_digest(trial.task_dir)
         verifier_digests.setdefault(trial.trial_name, _verifier_config_digest(trial))
         for stage in trial.stages:
             fingerprint = _fingerprint(
@@ -469,6 +531,7 @@ async def score_patch_job(
                 stage,
                 identity=identity,
                 context_digest=context_digests[tests_dir],
+                task_digest=task_digests[tests_dir],
                 verifier_digest=verifier_digests[trial.trial_name],
             )
             fp_id = _fingerprint_id(fingerprint)

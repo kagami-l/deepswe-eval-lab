@@ -13,10 +13,16 @@ from wip.agent_eval.fixture_collab import (
 from wip.agent_eval.patch_discovery import LayoutError, discover_trial_patches
 
 
+JOBS_DIR = Path(__file__).resolve().parents[2] / "jobs"
 REAL_JOB = (
-    Path(__file__).resolve().parents[2]
-    / "jobs"
-    / "collab-codex-opencode-05_sample_confirm-12-tasks-20260806-224833"
+    JOBS_DIR / "collab-codex-opencode-05_sample_confirm-12-tasks-20260806-224833"
+)
+# A real trial whose initial modify timed out: rounds/00-modify only, empty
+# final patch and model.patch, zero checkpoints.
+REAL_FAILED_TRIAL = (
+    JOBS_DIR
+    / "unified-collab-05_sample_confirm-12-tasks-20260804-200817"
+    / "tomlkit-toml-table-converters__b8DBQ5j"
 )
 
 
@@ -104,10 +110,54 @@ class PatchDiscoveryTests(unittest.TestCase):
 
     def test_modifier_failure_is_ineligible_not_layout_error(self) -> None:
         trial = make_failed_modifier_trial(self.job_dir, self.task_dir, "task-a__five")
+        # The real runtime still runs finalize(), so these exist but are empty.
+        self.assertTrue((trial / "agent" / "system" / "final" / "patch.diff").is_file())
+        self.assertTrue((trial / "artifacts" / "model.patch").is_file())
         result = discover_trial_patches(trial)
         self.assertFalse(result.eligible)
         self.assertEqual(result.ineligible_reason, "no_initial_patch")
         self.assertEqual(result.stages, [])
+
+    def test_initial_modify_timeout_is_ineligible(self) -> None:
+        trial = make_failed_modifier_trial(
+            self.job_dir, self.task_dir, "task-a__timeout", outcome="timeout"
+        )
+        result = discover_trial_patches(trial)
+        self.assertFalse(result.eligible)
+        self.assertEqual(result.outcome, "timeout")
+
+    def test_missing_checkpoint_with_review_rounds_fails_closed(self) -> None:
+        trial = make_trial(
+            self.job_dir,
+            self.task_dir,
+            "task-a__odd",
+            review_patches=["patch-0"],
+            final_patch="patch-0",
+            eval_rewards={"reward": 1},
+        )
+        summary_path = trial / "agent" / "system" / "summary.json"
+        summary = json.loads(summary_path.read_text())
+        summary["result"]["checkpoints"] = []
+        summary_path.write_text(json.dumps(summary))
+        with self.assertRaises(LayoutError) as ctx:
+            discover_trial_patches(trial)
+        self.assertIn("no checkpoint", str(ctx.exception))
+
+    def test_job_level_artifacts_are_preserved(self) -> None:
+        trial = make_trial(
+            self.job_dir,
+            self.task_dir,
+            "task-a__artifacts",
+            review_patches=["patch-0"],
+            final_patch="patch-0",
+            eval_rewards={"reward": 1},
+        )
+        result_path = trial / "result.json"
+        record = json.loads(result_path.read_text())
+        record["config"]["artifacts"] = ["/logs/artifacts/extra.tar"]
+        result_path.write_text(json.dumps(record))
+        result = discover_trial_patches(trial)
+        self.assertEqual(result.job_artifacts, ["/logs/artifacts/extra.tar"])
 
     def test_final_model_patch_mismatch_fails_closed(self) -> None:
         trial = make_trial(
@@ -251,6 +301,18 @@ class RealJobLayoutTests(unittest.TestCase):
         self.assertEqual(result.outcome, "degraded")
         self.assertTrue(result.eligible)
         self.assertFalse(result.completed_protocol)
+
+
+@unittest.skipUnless(
+    REAL_FAILED_TRIAL.is_dir(), "historical failed-modifier trial not present"
+)
+class RealFailedTrialTests(unittest.TestCase):
+    def test_real_initial_modify_failure_is_ineligible(self) -> None:
+        result = discover_trial_patches(REAL_FAILED_TRIAL)
+        self.assertFalse(result.eligible)
+        self.assertEqual(result.ineligible_reason, "no_initial_patch")
+        self.assertEqual(result.outcome, "timeout")
+        self.assertEqual(result.stages, [])
 
 
 if __name__ == "__main__":

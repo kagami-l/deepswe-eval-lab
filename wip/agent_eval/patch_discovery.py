@@ -73,6 +73,10 @@ class TrialPatchSet:
     verifier_config: dict[str, Any] = field(default_factory=dict)
     timeout_multiplier: float = 1.0
     verifier_timeout_multiplier: float | None = None
+    # Job-level TrialConfig.artifacts. These were produced inside the agent
+    # container, which no longer exists, so a non-empty list means the frozen
+    # patch alone cannot reproduce the eval's verifier input.
+    job_artifacts: list[Any] = field(default_factory=list)
 
     @property
     def initial(self) -> StagePatch | None:
@@ -226,8 +230,25 @@ def discover_trial_patches(trial_dir: Path) -> TrialPatchSet:
     final_path = _safe_child(trial_dir, final_rel, reasons)
     model_path = _safe_child(trial_dir, "artifacts/model.patch", reasons)
 
-    # Modifier failure: recognized layout, but nothing to pair.
-    if not review_rounds and (final_path is None or not final_path.is_file()):
+    def _is_empty(path: Path | None) -> bool:
+        return path is None or not path.is_file() or path.stat().st_size == 0
+
+    # Modifier failure / empty patch: the runtime still runs finalize(), so
+    # final/patch.diff and model.patch exist but are empty and no checkpoint
+    # was ever recorded. Such a trial has nothing to pair, yet it is a
+    # recognized layout and must reach coverage rather than fail the scan.
+    checkpoints = summary_result.get("checkpoints")
+    checkpoint_count = len(checkpoints) if isinstance(checkpoints, list) else 0
+    if checkpoint_count == 0:
+        if review_rounds or revise_rounds:
+            reasons.append(
+                f"summary records no checkpoint but {len(review_rounds)} review "
+                f"and {len(revise_rounds)} revision round(s) exist"
+            )
+        if not _is_empty(final_path) or not _is_empty(model_path):
+            reasons.append(
+                "summary records no checkpoint but the final patch is non-empty"
+            )
         if reasons:
             raise LayoutError(trial_dir, reasons)
         return TrialPatchSet(
@@ -251,6 +272,7 @@ def discover_trial_patches(trial_dir: Path) -> TrialPatchSet:
             verifier_config=config.get("verifier") or {},
             timeout_multiplier=float(config.get("timeout_multiplier") or 1.0),
             verifier_timeout_multiplier=config.get("verifier_timeout_multiplier"),
+            job_artifacts=config.get("artifacts") or [],
         )
 
     if not review_rounds:
@@ -381,4 +403,5 @@ def discover_trial_patches(trial_dir: Path) -> TrialPatchSet:
         verifier_config=config.get("verifier") or {},
         timeout_multiplier=float(config.get("timeout_multiplier") or 1.0),
         verifier_timeout_multiplier=config.get("verifier_timeout_multiplier"),
+        job_artifacts=config.get("artifacts") or [],
     )

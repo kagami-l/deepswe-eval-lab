@@ -186,7 +186,8 @@ patch，命令必须在启动 verifier 前 fail closed，不能任选其一继�
 但 verifier 结果不能抽象成 patch 文本的无条件纯函数。评分 fingerprint 至少包含：
 
 ```text
-task checksum
+task checksum                          # eval 记录值
+task config digest                     # 当前 task.toml 内容（adapter 实际读取的定义）
 base commit
 patch SHA-256
 Pier version
@@ -195,18 +196,32 @@ verifier image/build-context identity
 adapter schema version
 ```
 
+Task config digest 不可省略：记录的 task checksum 只描述 eval 当时的 task，而 direct runner
+读取的是**当前** `task.toml`。只改 verifier image、user 或 timeout 时，若不纳入该 digest，
+旧 cache 会在评分口径已经改变的情况下被错误命中。
+
 所有去重、缓存和 final 一致性比较都使用完整 fingerprint；patch SHA 只是其中一项。
 
 ### Direct Pier runner
 
 Pier 0.3.0 没有公开的 `verify-artifact` 命令。实现使用一个窄的 `PierPatchVerifier` adapter，固定
-`datacurve-pier==0.3.0`，通过 Pier 内部的 `Trial._verify_once()` 进入与正式评分相同的路径：
+`datacurve-pier==0.3.0`，复用 Pier `Trial._verify_once()` 在 separate 模式下所走的同一条内部链路。
+不直接调用 `Trial._verify_once()` 本身：`Trial` 无法脱离完整 agent/environment 配置构造，
+而事后评分既没有 agent 也不需要它。Adapter 按同样顺序调用同样的 Pier 组件：
 
-- 解析原 task/job verifier 配置；
-- 从原 task tests build context 创建 fresh separate verifier environment；
+- 用 `resolve_effective_verifier_env_config()` 解析原 task verifier 环境（非 separate 即 fail closed）；
+- 从原 task tests build context 用 `EnvironmentFactory.create_environment_from_config()`
+  创建 fresh separate verifier environment；
 - 使用 Pier `ArtifactHandler` 上传已冻结的 `model.patch`；
 - 使用 Pier `Verifier.verify()` 执行测试并解析 reward；
 - 使用原 task/job 的 verifier env、timeout、resource 和 image 配置。
+
+评分逻辑（tests、grader、reward 解析）完全不被重写或绕过。等价性由默认 final re-score 的
+conformance 比较持续验证。
+
+无法从冻结 patch 复现的输入必须 fail closed：trial 若声明了 job-level `TrialConfig.artifacts`
+（这些文件产自已销毁的 agent 容器），`score-patches` 拒绝评分该 job，而不是用不同的
+verifier 输入打分。
 
 它绕过 agent setup、agent run、`pre_artifacts.sh` 和 Pier job bookkeeping，但不重写或绕过 verifier 评分逻辑。
 因此不需要 apply-patch 模拟 agent，也不需要自建 Docker 评分流程。
@@ -407,8 +422,9 @@ comparison，不复制或修改原 verifier 目录。
 
 不跨 job 复用，避免不同 task/runtime 配置误命中和掩盖 verifier nondeterminism。
 
-只有状态成功、result 可解析且 fingerprint 完整匹配的记录才能跳过。仅凭目录或 `reward.json` 存在不能视为
-cache hit。
+只有状态成功、result 可解析、fingerprint 完整匹配**且 canonical reward 存在且类型合法**的记录才能
+跳过。仅凭目录或 `reward.json` 存在不能视为 cache hit。状态为 success 但 rewards 缺失或损坏的记录
+视同不存在，由普通重入自动补跑，不需要 `--force`。
 
 ### 并发
 
@@ -444,6 +460,11 @@ Direct runner 读取原 task verifier timeout、job override、max timeout 和 m
 
 只有成功产生、校验并可应用 initial patch 的 trial 才是 eligible pair。没有 initial patch 的 modifier failure 或
 empty patch 不进入 paired denominator，但必须进入 coverage 统计。
+
+判定依据是 summary 的 checkpoint 列表，不是 final 文件是否存在：runtime 在失败路径上同样执行
+`finalize()`，因此 `final/patch.diff`、`final/git-status.txt` 和 `artifacts/model.patch` 都会存在但为空。
+零 checkpoint 且这些 patch 均为空即 ineligible；零 checkpoint 却存在 review/revision round 或非空
+final patch 属于自相矛盾的布局，fail closed。
 
 ### Workflow failure
 
@@ -513,7 +534,8 @@ Verifier infrastructure error 不决定 completed-protocol 身份，只决定该
 - improved (`0 -> 1`)；
 - harmed (`1 -> 0`)；
 - unchanged；
-- 不一致对 2×2 表及对应 task/trial 清单；
+- 完整配对 2×2 四格计数：`failedBoth`、`improved`、`harmed`、`passedBoth`；
+- 不一致对及对应 task/trial 清单；
 - mean paired reward delta；
 - 每个实际 revision 的 parent-to-child delta；
 - intention-to-treat 汇总；
