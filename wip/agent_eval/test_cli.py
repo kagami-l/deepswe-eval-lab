@@ -176,5 +176,94 @@ class CliTests(unittest.TestCase):
         prepare.assert_not_called()
 
 
+class ScorePatchesCliTests(unittest.TestCase):
+    def test_requires_job_path(self) -> None:
+        with redirect_stderr(io.StringIO()):
+            with self.assertRaisesRegex(SystemExit, "2"):
+                cli.main(["score-patches"])
+
+    def test_rejects_non_positive_concurrency(self) -> None:
+        with redirect_stderr(io.StringIO()):
+            with self.assertRaisesRegex(SystemExit, "2"):
+                cli.main(
+                    ["score-patches", "--job-path", "jobs/x", "--concurrency", "0"]
+                )
+
+    def test_wires_options_and_returns_summary_exit_code(self) -> None:
+        from wip.agent_eval import patch_scoring, patch_verifier
+
+        summary = {"exitCode": 0, "problems": []}
+        fake_verifier = mock.Mock(identity={"pierVersion": "0.3.0"})
+        with (
+            mock.patch.object(
+                patch_verifier.PierPatchVerifier, "__new__", return_value=fake_verifier
+            ),
+            mock.patch.object(
+                patch_scoring, "score_patch_job", mock.AsyncMock(return_value=summary)
+            ) as score,
+            redirect_stdout(io.StringIO()) as output,
+        ):
+            code = cli.main(
+                [
+                    "score-patches",
+                    "--job-path",
+                    "jobs/example-job",
+                    "--trial",
+                    "task-a__*",
+                    "--concurrency",
+                    "3",
+                    "--reuse-final-score",
+                    "--force",
+                ]
+            )
+        self.assertEqual(code, 0)
+        self.assertIn('"exitCode": 0', output.getvalue())
+        (job_path, options, verifier), kwargs = score.call_args
+        self.assertEqual(str(job_path), "jobs/example-job")
+        self.assertEqual(options.trial_glob, "task-a__*")
+        self.assertEqual(options.concurrency, 3)
+        self.assertTrue(options.reuse_final_score)
+        self.assertTrue(options.force)
+        self.assertIs(verifier, fake_verifier)
+        self.assertEqual(kwargs["identity"], {"pierVersion": "0.3.0"})
+
+    def test_scoring_error_maps_to_exit_code(self) -> None:
+        from wip.agent_eval import patch_scoring, patch_verifier
+
+        fake_verifier = mock.Mock(identity={})
+        error = patch_scoring.ScoringError("broken layout", exit_code=2)
+        with (
+            mock.patch.object(
+                patch_verifier.PierPatchVerifier, "__new__", return_value=fake_verifier
+            ),
+            mock.patch.object(
+                patch_scoring, "score_patch_job", mock.AsyncMock(side_effect=error)
+            ),
+            redirect_stderr(io.StringIO()) as errors,
+        ):
+            code = cli.main(["score-patches", "--job-path", "jobs/example-job"])
+        self.assertEqual(code, 2)
+        self.assertIn("broken layout", errors.getvalue())
+
+    def test_nonzero_summary_exit_code_propagates(self) -> None:
+        from wip.agent_eval import patch_scoring, patch_verifier
+
+        summary = {"exitCode": 1, "problems": ["1 pair(s) lack a verifier score"]}
+        fake_verifier = mock.Mock(identity={})
+        with (
+            mock.patch.object(
+                patch_verifier.PierPatchVerifier, "__new__", return_value=fake_verifier
+            ),
+            mock.patch.object(
+                patch_scoring, "score_patch_job", mock.AsyncMock(return_value=summary)
+            ),
+            redirect_stdout(io.StringIO()),
+            redirect_stderr(io.StringIO()) as errors,
+        ):
+            code = cli.main(["score-patches", "--job-path", "jobs/example-job"])
+        self.assertEqual(code, 1)
+        self.assertIn("lack a verifier score", errors.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

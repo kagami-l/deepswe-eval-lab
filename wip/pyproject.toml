@@ -3,7 +3,9 @@ name = "deep-swe-wip"
 version = "0.1.0"
 description = "Local development environment for DeepSWE evaluation experiments"
 requires-python = ">=3.12,<3.13"
-dependencies = []
+dependencies = [
+    "datacurve-pier==0.3.0",
+]
 
 [dependency-groups]
 dev = [

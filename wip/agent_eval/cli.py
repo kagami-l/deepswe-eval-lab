@@ -101,6 +101,38 @@ def build_parser() -> argparse.ArgumentParser:
         nargs=argparse.REMAINDER,
         help="Additional pier run arguments after --",
     )
+
+    score = subparsers.add_parser(
+        "score-patches",
+        help="Post-hoc score the stage patches of a finished collab job",
+    )
+    score.add_argument(
+        "--job-path",
+        type=Path,
+        required=True,
+        help="Existing Pier job directory (e.g. jobs/<job-name>)",
+    )
+    score.add_argument(
+        "--trial",
+        help="Only scan and score trial directories matching this glob",
+    )
+    score.add_argument(
+        "--concurrency",
+        type=int,
+        default=2,
+        help="Concurrent direct verifier environments (default: 2)",
+    )
+    score.add_argument(
+        "--reuse-final-score",
+        action="store_true",
+        help="Skip the direct final verifier and reuse the validated eval reward",
+    )
+    score.add_argument(
+        "--force",
+        action="store_true",
+        help="Ignore cached direct scores and re-run applicable verifiers",
+    )
+    score.add_argument("--pier-bin", default=os.environ.get("PIER_BIN", "pier"))
     return parser
 
 
@@ -445,6 +477,40 @@ def _evaluate(args: argparse.Namespace, argv: list[str]) -> int:
     return subprocess.run(command, cwd=REPO_ROOT, check=False).returncode
 
 
+def _score_patches(args: argparse.Namespace) -> int:
+    import asyncio
+
+    from .patch_scoring import ScoreOptions, ScoringError, score_patch_job
+    from .patch_verifier import PierContractError, PierPatchVerifier
+
+    if args.concurrency < 1:
+        raise ValueError("--concurrency must be positive")
+    options = ScoreOptions(
+        trial_glob=args.trial,
+        concurrency=args.concurrency,
+        reuse_final_score=args.reuse_final_score,
+        force=args.force,
+    )
+    try:
+        verifier = PierPatchVerifier(pier_bin=args.pier_bin)
+        summary = asyncio.run(
+            score_patch_job(
+                args.job_path.expanduser(),
+                options,
+                verifier,
+                identity=verifier.identity,
+            )
+        )
+    except (PierContractError, ScoringError) as exc:
+        print(str(exc), file=sys.stderr)
+        return getattr(exc, "exit_code", 1)
+    print(json.dumps(summary, indent=2, sort_keys=True))
+    if summary["problems"]:
+        for problem in summary["problems"]:
+            print(f"problem: {problem}", file=sys.stderr)
+    return int(summary["exitCode"])
+
+
 def main(argv: list[str] | None = None) -> int:
     actual_argv = list(sys.argv[1:] if argv is None else argv)
     parser = build_parser()
@@ -452,6 +518,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "runtime":
             return _runtime_prepare(args)
+        if args.command == "score-patches":
+            return _score_patches(args)
         return _evaluate(args, actual_argv)
     except (ProfileError, RuntimeImageError, TaskSelectionError, ValueError) as exc:
         parser.error(str(exc))
