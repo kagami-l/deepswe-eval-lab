@@ -225,3 +225,98 @@ task/trial 清单已经存在且计算正确。
 - Standards：2 项；最严重的是 Pier 依赖模型与文档化环境边界冲突。
 - Spec：6 项；最严重的是 modifier-failure 处理、task/cache identity 和 direct
   verifier artifact 口径三个 P1。
+
+---
+
+## 处理情况
+
+- 处理时间：2026-08-08
+- 修复提交：`c94c171`（基线 `64104d8`，另有 review 文档提交 `d7861d9`）
+- 验证：`agent_eval` unittest 84/84 通过；`agent_eval/` Ruff 通过
+
+| 条目 | 处理 | 说明 |
+| --- | --- | --- |
+| [P1] modifier failure/empty-patch eligibility | 已修 | 改判据 + fixture 复现真实布局 + 真实数据回归 |
+| [P1] `task.toml` 变更命中旧 cache | 已修 | fingerprint 新增 `taskConfigDigest` |
+| [P1] direct runner 路径与 artifacts | 部分采纳 | artifacts fail closed；`_verify_once()` 一节改为同步设计文档 |
+| [P2] 损坏 success cache 无法自动恢复 | 已修 | cache hit 增加 canonical reward 校验 |
+| [P2] summary 缺完整 2×2 | 已修 | 新增 `twoByTwo` 四格计数 |
+| [Standards] Pier 依赖与文档冲突 | 已修 | 按选项 1 更新 `wip/README.md` |
+| [Standards] 裸字符串 primitive obsession | 不处理 | judgement 项，改动面大于收益 |
+| [Scope] 历史 job 分析 | 保留报告 + 修措辞 | 该运行为人工授权行为，见下 |
+
+### [P1] modifier failure/empty-patch eligibility
+
+Review 结论成立，且已在真实数据上复现。评审引用的 `wip/agents/deep_swe_collab/` 是过时副本，
+但活代码 `wip/agents/deep_swe_agent/runtime/src/direct-engine.ts:605` 的 `finalize()` 同样在失败路径
+执行，无条件写出空的 `final/patch.diff`、`final/git-status.txt` 和 `artifacts/model.patch`。
+
+修复前对真实 trial
+`jobs/unified-collab-05_sample_confirm-12-tasks-20260804-200817/tomlkit-toml-table-converters__b8DBQ5j`
+（outcome `timeout`、0 checkpoint）执行 discovery 会抛
+`LayoutError: no review rounds with a pre-review patch`，并因全 job fail-closed 使整个 job 无法评分。
+
+改为以 summary 的 checkpoint 列表为判据：
+
+- 零 checkpoint 且 final/model patch 均为空 → `eligible=False`、`ineligible_reason=no_initial_patch`，进入 coverage；
+- 零 checkpoint 却存在 review/revision round 或非空 final patch → 自相矛盾布局，fail closed。
+
+`make_failed_modifier_trial()` 现在复现真实 finalize 产物（空 patch 文件、空 `checkpoints`、
+非 deliverable outcome），并新增针对上述真实 trial 的回归测试。
+
+### [P1] `task.toml` 变更命中旧 cache
+
+结论成立。fingerprint 新增 `taskConfigDigest`（当前 `task.toml` 内容摘要），与 eval 记录的
+`taskChecksum` 并存：前者描述 adapter 实际读取的定义，后者描述 eval 当时的 task。新增测试验证
+修改 `task.toml` 后只有该 task 的 patch 重新评分，其他 task 仍命中 cache。
+
+### [P1] direct runner 路径与 artifacts
+
+拆分处理：
+
+- **artifacts 部分已修**。`TrialPatchSet` 保留 `TrialConfig.artifacts`；任一 eligible trial 声明了
+  job-level artifacts 即 fail closed（这些文件产自已销毁的 agent 容器，无法从冻结 patch 复现）。
+  补充事实：目标历史 job 全部 24 个 trial 的 `config.artifacts` 均为 `[]`，task 级
+  `artifacts = ["/logs/artifacts/model.patch"]` 本就已正确传入，因此既有结论不受影响。
+- **`Trial._verify_once()` 部分未按原样采纳**。`Trial` 无法脱离完整 agent/environment 配置构造，
+  事后评分既无 agent 也不需要它。经确认后改为同步规格：设计文档现描述 adapter 复用
+  `_verify_once()` 在 separate 模式下所走的同一条内部链路，并说明不直接调用的原因。
+
+### [P2] 损坏 success cache
+
+结论成立。cache hit 现在额外要求 `rewards` 为 object 且 canonical `reward` 为合法数值；
+不满足者视同不存在，由普通重入自动补跑，无需 `--force`。新增对应测试。
+
+### [P2] 完整 2×2
+
+结论成立。summary 的 ITT 与 completed-protocol 口径均新增 `twoByTwo`
+（`failedBoth` / `improved` / `harmed` / `passedBoth`），四格之和等于 complete pair 数。
+
+### [Standards] Pier 依赖与文档冲突
+
+按选项 1 处理：保留本地固定 `datacurve-pier==0.3.0`，更新 `wip/README.md` 说明
+`score-patches` 需要进程内导入 Pier、版本被钉死并在启动时 fail-closed 校验，
+同时修正"本地环境不安装 datacurve-pier"的过期表述。
+
+### [Standards] 裸字符串
+
+不处理。属 judgement 项、不影响正确性；改为 enum/Literal 需改动三个模块及全部测试断言。
+
+### [Scope] 历史 job 分析
+
+**该运行是人工授权行为，报告保留。** Phase 0（对历史 job 的 verifier-only 回放）是用户在设计
+定稿时要求补入实现顺序第 9–10 步的交付项；两次运行均由用户亲自执行并回报结果，实现过程中
+未自行启动任何模型或 verifier。
+
+采纳其措辞意见：报告开头与结尾已明确区分"历史 job 的 verifier-only 回放（已完成）"与
+"设计验收清单中的两方向 collab smoke（尚未执行）"，避免把前者表述为后者的验收。
+
+### 附带影响
+
+fingerprint 结构变更使目标历史 job 已有的 49 份 cache 记录不再匹配：数据未删除、既有结论
+（task 与 verifier 均未变化）依然成立，但若重新执行 `score-patches`，将重新评分全部 unique patch。
+
+### 未处理的既有问题
+
+全仓 Ruff 仍被 `wip/scripts/official_trials_to_pier_jobs.py:20` 的 unused import 阻塞。该问题来自
+更早的提交 `c06bc74`，与本次改动无关，未一并修改以免混淆 diff。
