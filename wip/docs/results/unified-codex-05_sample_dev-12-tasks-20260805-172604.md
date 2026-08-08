@@ -110,6 +110,8 @@ F2P、P2P 和 partial 是 Pier 对 trial 的等权均值，不是汇总所有 no
 
 这里不能根据 patch 功能是否完整来恢复一个估计分数；正确处理是把两次 trial 标为 unscored，并在修复 task image 的 Polars 运行环境后建立独立补充 job。原地 resume 会删除现有诊断目录，不建议执行。
 
+后记（2026-08-08）：复查确认崩溃是宿主机环境问题——Apple Silicon 上 Docker Desktop 以 Rosetta 模拟 linux/amd64 时，polars 主线 x86_64 wheel 在特定 SIMD 路径原生段错误（全部 6 个本地 job 的 13 个 skrub trial 同签名失败，官方 x86_64 基础设施正常）。权衡修复成本与可比性后，决定不修复镜像，将 `skrub-duration-encoding` 从 sample-dev 运行清单移除（12 题 → 11 题），任务定义保持原样。详见 [wip/data/README.md](../../data/README.md) 的「本机运行排除」一节；本文建议 2 中的"修复后补充 job"路径不再执行。
+
 ## 有效失败分布与稳定性
 
 排除两个 Skrub invalid trial 后，有 11 个有效失败 trial：

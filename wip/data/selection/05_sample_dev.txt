@@ -7,6 +7,5 @@ scriggo-method-declarations
 adaptix-name-mapping-aliases
 anko-typed-variable-bindings
 mnamer-daemon-watch-lifecycle
-skrub-duration-encoding
 obsidian-linter-scoped-ignore-markers
 dasel-html-document-format

@@ -54,7 +54,7 @@ uv run pier view data/official-v1.1-jobs --jobs
     └── 02_broad_discriminative：51 题
         └── 03_core_discriminative：30 题
             └── 04_core_ranked：同一批 30 题，仅重新排序
-                ├── 05_sample_dev：12 题
+                ├── 05_sample_dev：12 题（2026-08-08 起运行清单为 11 题，见「本机运行排除」）
                 ├── 05_sample_confirm：12 题，与 dev 互斥
                 └── 未抽入本轮样本：6 题
 ```
@@ -83,6 +83,18 @@ uv run python scripts/select_discriminative_tasks.py \
 ```
 
 未指定 `--output-dir` 时，这类结果会自动写入独立的 `selection-leaveout-*` 目录，不覆盖全量基准结果。覆盖门槛会按剩余 base model 数同比例调整。
+
+### 本机运行排除（2026-08-08 修订）
+
+`05_sample_dev.txt` 自 2026-08-08 起从 12 题修订为 11 题：移除 `skrub-duration-encoding`。这是宿主机环境约束，不是任务质量问题：本机（Apple Silicon，Docker Desktop 以 Rosetta 模拟 linux/amd64）上，任务镜像内的 polars 主线 x86_64 wheel 在特定 SIMD 路径原生段错误（`import polars` 和简单整型 Series 正常，含 null/nan 的 DataFrame 构造、duration API 等路径直接崩溃），verifier 的 base/new pytest 均在收集阶段退出，历史 6 个 job 的全部 13 个 skrub trial 无一有效评分；官方 x86_64 基础设施上同任务 verifier 正常（如 `skrub-duration-encoding__vt9Upt6`：F2P 130/130）。完整证据链见 [unified-codex dev 结果分析](../docs/results/unified-codex-05_sample_dev-12-tasks-20260805-172604.md)。
+
+要点：
+
+- 任务定义 `tasks/skrub-duration-encoding/` 保持原样，未做任何修改；将来在 x86_64 Linux 上（或修复 polars 运行环境后，如换用 `polars-lts-cpu`，需接受 1.39.3→1.33.1 降级）可零漂移重新纳入。
+- `host-excluded.txt` 是本机不可评分任务的机器可读清单，供抽样和生成 job 时机械扣除：`skrub-duration-encoding`（核心池 30 题内唯一受影响任务）和 `narwhals-rolling-window-suite`（同样依赖 polars；已在 02 层被筛除，仅在对全池重新抽样时相关）。
+- 口径：此后 dev 集按 11 题报告 task coverage；与官方 v1.1 对照时，官方侧同步剔除 `skrub-duration-encoding` 或明确标注 coverage。历史 job 无需重算——其有效口径本来就是 11 题（所有本地 skrub trial 均为 verifier-invalid）。
+- 重新运行 `select_discriminative_tasks.py` 会按原逻辑重新生成 `05_sample_*.txt`（可能重新包含 skrub）；重跑后需对照 `host-excluded.txt` 重新应用本排除。
+- `05_sample_dev.csv`（脚本原始输出）与 `04_core.txt`（核心池 30 题）保持不变：排除只作用于运行清单，不改写筛选统计与池定义。
 
 ## 对后续 agent-system 评测的解释
 
