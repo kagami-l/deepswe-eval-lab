@@ -20,7 +20,7 @@ uv run python scripts/run_agent_eval.py eval \
 `collab-opencode-codex-05_sample_dev-12-tasks-20260804-120000`。显式
 `--job-name` 仍会完整覆盖该默认值。
 
-每个 Agent turn 默认在连续 600 秒没有任何事件时保存诊断快照并提前终止，避免静默 session
+每个 Agent turn 默认在连续 900 秒没有任何事件时保存诊断快照并提前终止，避免静默 session
 占用完整 task timeout。可按实验需要调整：
 
 ```bash

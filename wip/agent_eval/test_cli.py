@@ -103,7 +103,7 @@ class CliTests(unittest.TestCase):
         self.assertIn("DeepSweAgent", rendered)
         self.assertIn("SharedAgentRuntimeDockerEnvironment", rendered)
         self.assertIn('"topology": "single"', rendered)
-        self.assertIn('"eventSilenceTimeoutSeconds": 600.0', rendered)
+        self.assertIn('"eventSilenceTimeoutSeconds": 900.0', rendered)
         self.assertNotIn('"reviewerTimeoutSeconds"', rendered)
         self.assertNotIn('"revisionTimeoutSeconds"', rendered)
 
