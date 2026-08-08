@@ -4,7 +4,7 @@
 
 ## `official-v1.1/`
 
-下载自 DeepSWE 官网 `https://deepswe.datacurve.ai/artifacts/v1.1/`，当前快照下载于 2026-08-07，对应官方 2026-08-06 生成的数据（52 个 config、23,490 次 rollout；相比 2026-07-25 快照新增 `mini_swe_agent_deepseek_v4_flash_max` 和 `mini_swe_agent_qwen3_8_max_xhigh`，原有数据未变）。完整性校验见 `SHA256SUMS`。
+下载自 DeepSWE 官网 `https://deepswe.datacurve.ai/artifacts/v1.1/`，当前快照下载于 2026-08-07，对应官方 2026-08-06 生成的数据（52 个 config、23,490 次 rollout）。官方仍在向 v1.1 追加新 config，本地快照与远端最新版的差异见下方「官方数据更新记录」。完整性校验见 `SHA256SUMS`。
 
 | 文件 | 含义 | 是否进入主筛选 |
 | --- | --- | --- |
@@ -15,6 +15,22 @@
 | `release.json` | trajectory、patch、agent log、verifier 输出的公开下载 URL 模板 | 否，用于后续人工审计 |
 
 主筛选只使用 `source=deep-swe`、`eval_scope=full`、`included_in_score=true` 且 `errored=false` 的 trial。被排除 trial 不进入通过率分母，但会进入错误率和 verifier timeout 统计。
+
+### 官方数据更新记录
+
+官方对 v1.1 的每次更新都只追加新 config 的 rollout，已有 rollout 与指标从未被改动；实际变动的文件只有 `trials.json` 和 `leaderboard-live.json`（`tasks.json`、`v1-delta.json`、`release.json` 自 2026-07-25 起未变）。
+
+| 官方生成时间 | configs | rollouts | 变化 | 本地快照 |
+| --- | --- | --- | --- | --- |
+| 2026-07-25 | 50 | 22,586 | 初始下载版本 | 已被替换 |
+| 2026-08-06 | 52 | 23,490 | 新增 `mini_swe_agent_deepseek_v4_flash_max`、`mini_swe_agent_qwen3_8_max_xhigh` | **当前快照** |
+| 2026-08-07 | 53 | 23,942 | 新增 `mini_swe_agent_muse_spark_1_2_xhigh`（muse-spark-1.2，xhigh，pass@1 ≈ 0.549） | 暂未更新（2026-08-08 核对，近期对比不涉及该模型） |
+
+后续更新参考：
+
+- 检查远端是否有新版本，无需下载大文件：`curl -sI https://deepswe.datacurve.ai/artifacts/v1.1/trials.json` 看 `last-modified`/`content-length`，或将各文件的 `etag` 与本地 `md5 -q <file>` 对比（S3 单段上传的 etag 即内容 md5）；具体新增了哪些 config 可只下载 66KB 的 `leaderboard-live.json` 与本地 diff。
+- `trials.json` 的 rows 按 task 分组存储，新 config 的行穿插在全文件各处，无法用 Range 请求做增量下载，更新必须重下完整文件（约 39MB）。
+- 更新流程：替换 `official-v1.1/` 下变动的文件 → 重新生成 `SHA256SUMS` → 重跑 `official_trials_to_pier_jobs.py`（可用 `--config` 只转换新增 config，追加进 `official-v1.1-jobs/`，不必 `--clean` 全量重建）→ 同步本表和文中的 config/rollout 数字。
 
 ### 用 pier view 查看官方数据
 
