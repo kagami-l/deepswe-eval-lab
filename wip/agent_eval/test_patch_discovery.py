@@ -108,6 +108,72 @@ class PatchDiscoveryTests(unittest.TestCase):
         self.assertFalse(result.completed_protocol)
         self.assertEqual(result.final.alias_of, "initial")
 
+    def test_interrupted_terminal_revision_round_is_tolerated(self) -> None:
+        # Deadline expired mid-revision: the revise round directory exists
+        # with only interrupted attempts, summary counts it in neither
+        # revisionCount nor checkpoints (real shape from job
+        # collab-opencode-codex-05_sample_rest-…-130612).
+        trial = make_trial(
+            self.job_dir,
+            self.task_dir,
+            "task-a__interrupted",
+            review_patches=["patch-0", "patch-1"],
+            final_patch="patch-1",
+            outcome="degraded",
+            degraded_reason="timeout",
+            eval_rewards={"reward": 0},
+        )
+        extra = trial / "agent" / "system" / "rounds" / "04-revise"
+        extra.mkdir()
+        (extra / "metadata.json").write_text(
+            json.dumps(
+                {
+                    "role": "modifier",
+                    "kind": "revise",
+                    "attempts": [{"attempt": 1, "status": "interrupted"}],
+                }
+            )
+        )
+        result = discover_trial_patches(trial)
+        self.assertTrue(result.eligible)
+        self.assertFalse(result.completed_protocol)
+        self.assertEqual(
+            [s.stage_id for s in result.stages], ["initial", "revision-1", "final"]
+        )
+        self.assertEqual(result.final.alias_of, "revision-1")
+
+    def test_interrupted_revision_not_terminal_fails_closed(self) -> None:
+        trial = make_trial(
+            self.job_dir,
+            self.task_dir,
+            "task-a__mid-interrupt",
+            review_patches=["patch-0", "patch-1", "patch-2"],
+            final_patch="patch-2",
+            revise_statuses=["interrupted", "success"],
+            revision_count=1,
+            outcome="degraded",
+            degraded_reason="timeout",
+            eval_rewards={"reward": 0},
+        )
+        with self.assertRaisesRegex(LayoutError, "not the trial's terminal round"):
+            discover_trial_patches(trial)
+
+    def test_multiple_interrupted_revisions_fail_closed(self) -> None:
+        trial = make_trial(
+            self.job_dir,
+            self.task_dir,
+            "task-a__double-interrupt",
+            review_patches=["patch-0", "patch-1", "patch-2"],
+            final_patch="patch-2",
+            revise_statuses=["interrupted", "interrupted"],
+            revision_count=0,
+            outcome="degraded",
+            degraded_reason="timeout",
+            eval_rewards={"reward": 0},
+        )
+        with self.assertRaisesRegex(LayoutError, "interrupted revision rounds"):
+            discover_trial_patches(trial)
+
     def test_modifier_failure_is_ineligible_not_layout_error(self) -> None:
         trial = make_failed_modifier_trial(self.job_dir, self.task_dir, "task-a__five")
         # The real runtime still runs finalize(), so these exist but are empty.

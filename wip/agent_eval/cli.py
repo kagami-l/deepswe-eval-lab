@@ -480,11 +480,17 @@ def _evaluate(args: argparse.Namespace, argv: list[str]) -> int:
 def _score_patches(args: argparse.Namespace) -> int:
     import asyncio
 
-    from .patch_scoring import ScoreOptions, ScoringError, score_patch_job
+    from .patch_scoring import (
+        ScoreOptions,
+        ScoringError,
+        enable_progress_logging,
+        score_patch_job,
+    )
     from .patch_verifier import PierContractError, PierPatchVerifier
 
     if args.concurrency < 1:
         raise ValueError("--concurrency must be positive")
+    enable_progress_logging()
     options = ScoreOptions(
         trial_glob=args.trial,
         concurrency=args.concurrency,

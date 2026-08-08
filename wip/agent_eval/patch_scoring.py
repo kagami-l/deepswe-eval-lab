@@ -14,8 +14,10 @@ import csv
 import fnmatch
 import hashlib
 import json
+import logging
 import math
 import random
+import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -38,6 +40,23 @@ SCORING_SCHEMA_VERSION = 1
 _MAX_VERIFY_ATTEMPTS = 2
 _BOOTSTRAP_ITERATIONS = 10_000
 _BOOTSTRAP_SEED = 20260807
+
+logger = logging.getLogger(__name__)
+
+
+def enable_progress_logging(stream: Any = None) -> None:
+    """Attach a stderr progress handler to this module's logger.
+
+    Kept off the root logger so Pier's own components stay quiet and the
+    summary JSON on stdout remains machine-readable. Idempotent.
+    """
+    if logger.handlers:
+        return
+    handler = logging.StreamHandler(stream if stream is not None else sys.stderr)
+    handler.setFormatter(logging.Formatter("%(asctime)s %(message)s", "%H:%M:%S"))
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
 
 _STAGE_CSV_COLUMNS = [
     "task",
@@ -310,9 +329,20 @@ async def _run_unique_work(
     verifier: PatchVerifier,
     semaphore: asyncio.Semaphore,
     identity: dict[str, str],
+    progress: dict[str, int] | None = None,
 ) -> None:
     attempts: list[dict[str, Any]] = []
     async with semaphore:
+        if progress is not None:
+            progress["started"] += 1
+            logger.info(
+                "[start %d/%d] %s %s (fp %s)",
+                progress["started"],
+                progress["total"],
+                work.trial.trial_name,
+                work.stage.stage_id,
+                work.fingerprint_id,
+            )
         for attempt in range(1, _MAX_VERIFY_ATTEMPTS + 1):
             record = await verifier.verify_patch(
                 VerificationRequest(
@@ -339,6 +369,32 @@ async def _run_unique_work(
             )
             if record.status == "success" or not record.retryable:
                 break
+            logger.info(
+                "[retry] %s %s (fp %s) attempt %d %s: %s",
+                work.trial.trial_name,
+                work.stage.stage_id,
+                work.fingerprint_id,
+                attempt,
+                record.error_type or record.status,
+                (record.error_message or "")[:120],
+            )
+        if progress is not None:
+            progress["done"] += 1
+            reward = (
+                record.rewards.get("reward")
+                if isinstance(record.rewards, dict)
+                else None
+            )
+            logger.info(
+                "[done %d/%d] %s %s: status=%s reward=%s (%.0fs)",
+                progress["done"],
+                progress["total"],
+                work.trial.trial_name,
+                work.stage.stage_id,
+                record.status,
+                reward,
+                record.duration_seconds or 0.0,
+            )
     work.record = {
         "schemaVersion": SCORING_SCHEMA_VERSION,
         "fingerprintId": work.fingerprint_id,
@@ -496,6 +552,12 @@ async def score_patch_job(
 
     eligible = [t for t in trials if t.eligible]
     ineligible = [t for t in trials if not t.eligible]
+    logger.info(
+        "scanned %d trial(s): %d eligible, %d ineligible",
+        len(trials),
+        len(eligible),
+        len(ineligible),
+    )
 
     # A trial that declared job-level artifacts cannot be reproduced from the
     # frozen patch alone: those files came from the agent container, which is
@@ -568,13 +630,23 @@ async def score_patch_job(
         else:
             pending.append(work)
 
+    logger.info(
+        "%d unique patch(es): %d cached, %d to verify (concurrency %d)",
+        len(unique_work),
+        len(unique_work) - len(pending),
+        len(pending),
+        options.concurrency,
+    )
     semaphore = asyncio.Semaphore(max(1, options.concurrency))
+    progress = {"total": len(pending), "started": 0, "done": 0}
     await asyncio.gather(
         *(
-            _run_unique_work(work, verifier, semaphore, identity)
+            _run_unique_work(work, verifier, semaphore, identity, progress)
             for work in pending
         )
     )
+    if pending:
+        logger.info("verifier runs complete; building pair tables and summary")
 
     # Attach unique results back onto every stage occurrence.
     for (trial_name, stage_id), score in stage_scores.items():

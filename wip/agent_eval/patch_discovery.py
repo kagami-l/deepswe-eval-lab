@@ -302,16 +302,39 @@ def discover_trial_patches(trial_dir: Path) -> TrialPatchSet:
 
     # Cross-validation against the trial summary: a review round may exist
     # without counting (patch captured, reviewer failed), never the reverse.
+    # Likewise a revision round may exist without counting when every attempt
+    # was interrupted (e.g. the workflow deadline expired mid-revision): the
+    # runtime stops after a failed revision turn, so such a round must be the
+    # trial's terminal round and contributes no checkpoint or stage.
     if not review_count <= len(review_patches) <= review_count + 1:
         reasons.append(
             f"review rounds ({len(review_patches)}) inconsistent with "
             f"reviewCount={review_count}"
         )
-    if len(revise_rounds) != revision_count:
+    completed_revisions = [
+        entry for entry in revise_rounds if _round_succeeded(entry[2])
+    ]
+    interrupted_revisions = [
+        entry for entry in revise_rounds if not _round_succeeded(entry[2])
+    ]
+    if len(completed_revisions) != revision_count:
         reasons.append(
-            f"revision rounds ({len(revise_rounds)}) inconsistent with "
+            f"revision rounds ({len(completed_revisions)} completed, "
+            f"{len(interrupted_revisions)} interrupted) inconsistent with "
             f"revisionCount={revision_count}"
         )
+    if interrupted_revisions:
+        last_round_number = max(number for number, _, _ in entries)
+        if len(interrupted_revisions) > 1:
+            reasons.append(
+                f"{len(interrupted_revisions)} interrupted revision rounds; "
+                "at most one terminal interrupted round is supported"
+            )
+        elif interrupted_revisions[0][0] != last_round_number:
+            reasons.append(
+                f"{interrupted_revisions[0][2].name}: interrupted revision "
+                "round is not the trial's terminal round"
+            )
     if outcome not in _DELIVERABLE_OUTCOMES:
         reasons.append(f"unsupported workflow outcome {outcome!r}")
 
