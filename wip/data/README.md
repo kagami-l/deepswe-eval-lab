@@ -96,6 +96,10 @@ uv run python scripts/select_discriminative_tasks.py \
 - 重新运行 `select_discriminative_tasks.py` 会按原逻辑重新生成 `05_sample_*.txt`（可能重新包含 skrub）；重跑后需对照 `host-excluded.txt` 重新应用本排除。
 - `05_sample_dev.csv`（脚本原始输出）与 `04_core.txt`（核心池 30 题）保持不变：排除只作用于运行清单，不改写筛选统计与池定义。
 
+### 手工维护的子集
+
+`selection/complementary-luna-v4flash.txt` 是为 `gpt-5-6-luna [xhigh]` 与 `deepseek-v4-flash [max]` 互补性实验单独准备的 10 题清单（前 5 题 luna 强方向、后 5 题 flash 强方向），由手工筛选维护，不由筛选脚本生成，重跑脚本也不会更新它。筛选思路、逐题依据和替补名单见 [luna/v4-flash 互补子集文档](../docs/deepswe-luna-v4flash-complementary-subset.md)。
+
 ## 对后续 agent-system 评测的解释
 
 后续把“agent 框架 + 模型”或“coder + reviewer 协作配置”作为一个整体 agent system 比较是合适的，也不改变当前的稳定性和区分度筛选主线。做整体效果排名时，不必拆解模型效应与框架效应：每个完整配置直接作为一个 treatment，在相同 task、预算、timeout 和重复次数下做配对比较即可。如果还要进一步声称“协作机制本身带来提升”，则需要增加同模型、同预算、无 reviewer 的 matched ablation，不能只比较两个整体配置。
