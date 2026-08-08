@@ -57,7 +57,7 @@
       "status": "verified",
       "adapter": "opencode",
       "model": "deepseek/deepseek-v4-flash",
-      "effort": "high",
+      "effort": "max",
       "auth": "opencode-login",
       "permissions": "auto",
       "benchmark_mode": true
