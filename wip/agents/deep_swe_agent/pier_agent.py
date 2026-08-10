@@ -502,6 +502,11 @@ class DeepSweAgent(BaseInstalledAgent):
             "NO_COLOR": "1",
             "GEMINI_CLI_TRUST_WORKSPACE": "true",
         }
+        if "claude" in self.adapters_in_use:
+            # Task images run the agent as root; Claude Code rejects
+            # --dangerously-skip-permissions under root unless IS_SANDBOX=1
+            # marks the environment as an isolated sandbox.
+            base["IS_SANDBOX"] = "1"
         for adapter in sorted(self.adapters_in_use):
             for key in self.FORWARDED_ENVS[adapter]:
                 base[key] = self._get_env(key)

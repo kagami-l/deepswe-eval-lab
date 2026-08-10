@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Executable wrapper for :mod:`wip.agent_eval.cli`.
 
+Credentials (e.g. ``CLAUDE_CODE_OAUTH_TOKEN``) are auto-loaded from the
+gitignored ``wip/scripts/.env``; already-exported variables win.
+
 Run these examples from the repository's ``wip`` directory::
 
     # Prepare the shared runtime image before starting an evaluation.
@@ -26,10 +29,16 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
+
+# Load credentials such as CLAUDE_CODE_OAUTH_TOKEN from wip/scripts/.env
+# (gitignored); variables already present in the environment take precedence.
+load_dotenv(Path(__file__).resolve().parent / ".env", override=False)
 
 from wip.agent_eval.cli import main  # noqa: E402
 
