@@ -2,6 +2,9 @@
 
 分析日期：2026-08-10。
 
+> 后续：opus/sol 双强配对的同型实验与更新到 175 对的机制总账见
+> [opus/sol 实验总结](complementary-opus-sol-xhigh-collab-summary.md)。
+
 本文合并 [c→o](collab-codex-opencode-complementary-luna-v4flash-10-tasks-20260809-003646.md)
 与 [o→c](collab-opencode-codex-complementary-luna-v4flash-10-tasks-20260809-122655.md)
 两个方向在[互补机制探测池](../deepswe-luna-v4flash-complementary-subset.md)上的结果，回答
