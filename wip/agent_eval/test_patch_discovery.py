@@ -142,6 +142,42 @@ class PatchDiscoveryTests(unittest.TestCase):
         )
         self.assertEqual(result.final.alias_of, "revision-1")
 
+    def test_metadataless_terminal_review_round_in_degraded_trial(self) -> None:
+        # Infrastructure failure between the pre-review snapshot and the
+        # reviewer launch: 01-review holds only patch.diff, summary records
+        # reviewCount=0 and degradedReason=infrastructure (real shape from
+        # pest-character-class-coalescing__9Q3gD53).
+        trial = make_trial(
+            self.job_dir,
+            self.task_dir,
+            "task-a__snapshot-only",
+            review_patches=["patch-0"],
+            final_patch="patch-0",
+            outcome="degraded",
+            degraded_reason="infrastructure",
+            review_count=0,
+            eval_rewards={"reward": 1},
+        )
+        (trial / "agent" / "system" / "rounds" / "01-review" / "metadata.json").unlink()
+        result = discover_trial_patches(trial)
+        self.assertTrue(result.eligible)
+        self.assertFalse(result.completed_protocol)
+        self.assertEqual([s.stage_id for s in result.stages], ["initial", "final"])
+        self.assertEqual(result.final.alias_of, "initial")
+
+    def test_metadataless_review_round_without_degraded_fails_closed(self) -> None:
+        trial = make_trial(
+            self.job_dir,
+            self.task_dir,
+            "task-a__snapshot-only-bad",
+            review_patches=["patch-0"],
+            final_patch="patch-0",
+            eval_rewards={"reward": 1},
+        )
+        (trial / "agent" / "system" / "rounds" / "01-review" / "metadata.json").unlink()
+        with self.assertRaisesRegex(LayoutError, "non-degraded trial"):
+            discover_trial_patches(trial)
+
     def test_interrupted_revision_not_terminal_fails_closed(self) -> None:
         trial = make_trial(
             self.job_dir,

@@ -284,12 +284,31 @@ def discover_trial_patches(trial_dir: Path) -> TrialPatchSet:
     if reasons:
         raise LayoutError(trial_dir, reasons)
 
-    # Review round sanity: each has role=reviewer metadata and a patch.
+    # Review round sanity: each has role=reviewer metadata and a patch. A
+    # round with a patch but NO metadata file at all is the runtime's
+    # "snapshot taken, reviewer never launched" shape (e.g. infrastructure
+    # failure between the pre-review snapshot and the reviewer turn): the
+    # patch is written before the reviewer starts and stays trustworthy.
+    # Accept it only as the terminal round of a degraded trial; a present
+    # metadata file with the wrong role still fails closed.
+    degraded_reason = summary_result.get("degradedReason")
+    last_round_number = max((n for n, _, _ in entries), default=-1)
     review_patches: list[tuple[int, Path, Path]] = []
     for number, round_dir in review_rounds:
-        role = _round_role(round_dir)
-        if role != "reviewer":
-            reasons.append(f"{round_dir.name}: unexpected role {role!r}")
+        if not (round_dir / "metadata.json").is_file():
+            if degraded_reason is None:
+                reasons.append(
+                    f"{round_dir.name}: no metadata.json in a non-degraded trial"
+                )
+            elif number != last_round_number:
+                reasons.append(
+                    f"{round_dir.name}: metadata-less review round is not "
+                    "the trial's terminal round"
+                )
+        else:
+            role = _round_role(round_dir)
+            if role != "reviewer":
+                reasons.append(f"{round_dir.name}: unexpected role {role!r}")
         patch = round_dir / "patch.diff"
         if not patch.is_file() or patch.stat().st_size == 0:
             reasons.append(f"{round_dir.name}: missing or empty patch.diff")
