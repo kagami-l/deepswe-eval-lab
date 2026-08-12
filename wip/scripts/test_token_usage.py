@@ -52,7 +52,7 @@ class TokenUsageCostTest(unittest.TestCase):
             reward=1,
             usage={
                 "planner": self._usage(1_000_000, 100_000),
-                "reviewer": self._usage(2_000_000, 200_000),
+                "reviewer": self._usage(2_000_000, 200_000, cache_tokens=1_500_000),
                 "other": self._usage(123, 456),
             },
         )
@@ -60,19 +60,24 @@ class TokenUsageCostTest(unittest.TestCase):
             job_dir,
             "trial-b",
             reward=0,
-            usage={"planner": self._usage(500_000, 50_000)},
+            usage={"planner": self._usage(500_000, 50_000, cache_tokens=0)},
         )
         return job_dir
 
     @staticmethod
-    def _usage(input_tokens: int, output_tokens: int) -> dict[str, int]:
-        return {
+    def _usage(
+        input_tokens: int, output_tokens: int, *, cache_tokens: int | None = None
+    ) -> dict[str, int]:
+        usage = {
             "inputTokens": input_tokens,
             "outputTokens": output_tokens,
             "toolUses": 1,
             "turns": 1,
             "wallMs": 1_000,
         }
+        if cache_tokens is not None:
+            usage["cacheTokens"] = cache_tokens
+        return usage
 
     @staticmethod
     def _trial(
@@ -98,12 +103,25 @@ class TokenUsageCostTest(unittest.TestCase):
 
         self.assertEqual(report["costs"]["planner"]["model"], "gpt-5.6-sol")
         self.assertEqual(report["costs"]["planner"]["inputUsd"], 7.5)
+        self.assertIsNone(report["costs"]["planner"]["cacheUsd"])
         self.assertEqual(report["costs"]["planner"]["outputUsd"], 4.5)
         self.assertEqual(report["costs"]["planner"]["totalUsd"], 12.0)
-        self.assertEqual(report["costs"]["reviewer"]["totalUsd"], 15.0)
+        self.assertEqual(report["costs"]["reviewer"]["inputUsd"], 2.5)
+        self.assertEqual(report["costs"]["reviewer"]["cacheUsd"], 0.75)
+        self.assertEqual(report["costs"]["reviewer"]["outputUsd"], 5.0)
+        self.assertEqual(report["costs"]["reviewer"]["totalUsd"], 8.25)
+        self.assertEqual(
+            report["costs"]["reviewer"]["breakdownUsd"],
+            {"in": 2.5, "cache": 0.75, "out": 5.0},
+        )
         self.assertEqual(report["trials"][0]["costs"]["planner"]["totalUsd"], 8.0)
         self.assertEqual(report["pricing"]["unpricedRoles"], ["other"])
         self.assertTrue(report["costs"]["planner"]["estimated"])
+        self.assertEqual(report["stats"]["planner"]["costInUsd"]["mean"], 3.75)
+        self.assertEqual(report["stats"]["planner"]["costCacheUsd"], {})
+        self.assertEqual(report["stats"]["planner"]["costOutUsd"]["mean"], 2.25)
+        self.assertEqual(report["stats"]["planner"]["costTotalUsd"]["mean"], 6.0)
+        self.assertEqual(report["stats"]["reviewer"]["costCacheUsd"]["mean"], 0.75)
 
     def test_text_report_shows_estimated_cost_and_unpriced_model(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -113,9 +131,14 @@ class TokenUsageCostTest(unittest.TestCase):
             token_usage.print_report(report)
 
         text = output.getvalue()
-        self.assertIn("est. cost    $12.000000", text)
-        self.assertIn("est. cost           n/a", text)
+        self.assertIn("planner cache$", text)
+        self.assertIn("$0.750000", text)
+        self.assertIn("cost n/a", text)
         self.assertIn("API-rate estimate", text)
+        self.assertIn("costInUsd", text)
+        self.assertEqual(text.count("costCacheUsd"), 2)
+        self.assertIn("costOutUsd", text)
+        self.assertIn("costTotalUsd", text)
 
     def test_invalid_pricing_file_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

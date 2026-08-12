@@ -39,6 +39,7 @@ from typing import Any
 
 
 USAGE_KEYS = ("inputTokens", "outputTokens", "toolUses", "turns", "wallMs")
+OPTIONAL_USAGE_KEYS = ("cacheTokens",)
 DEFAULT_PRICING_PATH = Path(__file__).resolve().parents[1] / "data" / "model-pricing.json"
 
 
@@ -125,17 +126,38 @@ def _usage_cost(
         return None
     canonical, spec, rates = match
     unit = pricing["unitTokens"]
-    input_usd = usage["inputTokens"] * rates["input"] / unit
+    cache_tokens = max(0, usage.get("cacheTokens", 0))
+    input_tokens = max(0, usage["inputTokens"] - cache_tokens)
+    input_usd = input_tokens * rates["input"] / unit
+    cache_rate = rates.get("cachedInput")
+    cache_usd = (
+        cache_tokens * cache_rate / unit
+        if cache_tokens and isinstance(cache_rate, (int, float))
+        else None
+    )
     output_usd = usage["outputTokens"] * rates["output"] / unit
+    total_usd = input_usd + (cache_usd or 0) + output_usd
     return {
         "model": canonical,
         "provider": spec.get("provider"),
         "inputUsd": round(input_usd, 12),
+        "cacheUsd": round(cache_usd, 12) if cache_usd is not None else None,
         "outputUsd": round(output_usd, 12),
-        "totalUsd": round(input_usd + output_usd, 12),
+        "totalUsd": round(total_usd, 12),
+        "breakdownUsd": {
+            "in": round(input_usd, 12),
+            "cache": round(cache_usd, 12) if cache_usd is not None else None,
+            "out": round(output_usd, 12),
+        },
+        "tokensPriced": {
+            "in": input_tokens,
+            "cache": cache_tokens if cache_tokens else None,
+            "out": usage["outputTokens"],
+        },
         "estimated": True,
         "rates": {
             "inputPerMillion": rates["input"],
+            "cachedInputPerMillion": cache_rate,
             "outputPerMillion": rates["output"],
         },
     }
@@ -163,12 +185,16 @@ def _trial_rows(job_dir: Path) -> tuple[list[dict[str, Any]], list[str]]:
             "trial": trial_dir.name,
             "reward": rewards.get("reward"),
             "outcome": ((summary or {}).get("result") or {}).get("outcome"),
-            "usage": {
-                role: {key: (spec or {}).get(key, 0) or 0 for key in USAGE_KEYS}
-                for role, spec in usage.items()
-                if isinstance(spec, dict)
-            },
+            "usage": {},
         }
+        for role, spec in usage.items():
+            if not isinstance(spec, dict):
+                continue
+            role_usage = {key: spec.get(key, 0) or 0 for key in USAGE_KEYS}
+            for key in OPTIONAL_USAGE_KEYS:
+                if key in spec and spec[key] is not None:
+                    role_usage[key] = spec[key] or 0
+            row["usage"][role] = role_usage
         rows.append(row)
     return rows, skipped
 
@@ -180,10 +206,13 @@ def _totals(rows: list[dict[str, Any]]) -> dict[str, dict[str, int]]:
             bucket = totals.setdefault(role, {key: 0 for key in USAGE_KEYS})
             for key in USAGE_KEYS:
                 bucket[key] += spec[key]
+            for key in OPTIONAL_USAGE_KEYS:
+                if key in spec:
+                    bucket[key] = bucket.get(key, 0) + spec[key]
     return totals
 
 
-def _stats(values: list[int]) -> dict[str, float]:
+def _stats(values: list[int | float]) -> dict[str, float]:
     if not values:
         return {}
     ordered = sorted(values)
@@ -238,7 +267,20 @@ def build_report(job_dir: Path, pricing_path: Path = DEFAULT_PRICING_PATH) -> di
                 [r["usage"][role]["outputTokens"] for r in rows if role in r["usage"]]
             ),
             "wallMs": _stats([r["usage"][role]["wallMs"] for r in rows if role in r["usage"]]),
-            "costUsd": _stats([r["costs"][role]["totalUsd"] for r in rows if role in r["costs"]]),
+            "costInUsd": _stats([r["costs"][role]["inputUsd"] for r in rows if role in r["costs"]]),
+            "costCacheUsd": _stats(
+                [
+                    r["costs"][role]["cacheUsd"]
+                    for r in rows
+                    if role in r["costs"] and r["costs"][role]["cacheUsd"] is not None
+                ]
+            ),
+            "costOutUsd": _stats(
+                [r["costs"][role]["outputUsd"] for r in rows if role in r["costs"]]
+            ),
+            "costTotalUsd": _stats(
+                [r["costs"][role]["totalUsd"] for r in rows if role in r["costs"]]
+            ),
         }
 
     def _split_totals(predicate) -> dict[str, dict[str, float]]:
@@ -276,8 +318,9 @@ def build_report(job_dir: Path, pricing_path: Path = DEFAULT_PRICING_PATH) -> di
             "updatedAt": pricing.get("updatedAt"),
             "unpricedRoles": [role for role in totals if role not in costs],
             "estimateBasis": (
-                "All aggregate inputTokens are charged at the base input rate; "
-                "cache discounts/writes and per-request long-context tiers are not applied."
+                "cacheTokens, when present, are priced as cached input and subtracted from "
+                "inputTokens; otherwise cache cost is null and all aggregate inputTokens use "
+                "the base input rate. Per-request long-context tiers are not applied."
             ),
         },
         "stats": per_role_stats,
@@ -311,9 +354,12 @@ def print_report(report: dict[str, Any]) -> None:
         wall_h = t["wallMs"] / 3_600_000
         cost = report["costs"].get(role)
         cost_text = (
-            f"  est. cost {_fmt_usd(cost['totalUsd']):>13s}"
+            f"  cost in {_fmt_usd(cost['inputUsd']):>13s}"
+            f"  cache {(_fmt_usd(cost['cacheUsd']) if cost['cacheUsd'] is not None else ''):>13s}"
+            f"  out {_fmt_usd(cost['outputUsd']):>13s}"
+            f"  total {_fmt_usd(cost['totalUsd']):>13s}"
             if cost
-            else "  est. cost           n/a"
+            else "  cost n/a"
         )
         print(
             f"  {name(role):48s} in {_fmt(t['inputTokens']):>15s}  out {_fmt(t['outputTokens']):>11s}"
@@ -331,7 +377,11 @@ def print_report(report: dict[str, Any]) -> None:
     roles = list(report["totals"])
     header = f"  {'trial':44s} {'reward':>6s}"
     for role in roles:
-        header += f" {role + ' in':>14s} {role + ' out':>12s} {role + ' cost':>14s}"
+        header += (
+            f" {role + ' in':>14s} {role + ' out':>12s}"
+            f" {role + ' in$':>14s} {role + ' cache$':>14s}"
+            f" {role + ' out$':>14s} {role + ' total$':>14s}"
+        )
     print(header)
     for row in rows:
         line = f"  {row['trial'][:44]:44s} {str(row['reward']):>6s}"
@@ -343,18 +393,31 @@ def print_report(report: dict[str, Any]) -> None:
                 else f" {'-':>14s} {'-':>12s}"
             )
             cost = row["costs"].get(role)
-            line += f" {_fmt_usd(cost['totalUsd']):>14s}" if cost else f" {'n/a':>14s}"
+            if cost:
+                cache_text = _fmt_usd(cost["cacheUsd"]) if cost["cacheUsd"] is not None else ""
+                line += (
+                    f" {_fmt_usd(cost['inputUsd']):>14s} {cache_text:>14s}"
+                    f" {_fmt_usd(cost['outputUsd']):>14s} {_fmt_usd(cost['totalUsd']):>14s}"
+                )
+            else:
+                line += f" {'n/a':>14s} {'':>14s} {'':>14s} {'':>14s}"
         print(line)
 
     print("\n## Per-trial distribution stats")
     for role, metrics in report["stats"].items():
         print(f"  {name(role)}")
+        has_cost_stats = any(
+            metrics[metric] for metric in ("costInUsd", "costOutUsd", "costTotalUsd")
+        )
         for metric, st in metrics.items():
             if not st:
+                if metric == "costCacheUsd" and has_cost_stats:
+                    print(f"    {metric:13s}")
                 continue
-            unit = " min" if metric == "wallMs" else (" USD" if metric == "costUsd" else "")
+            is_cost = metric.startswith("cost") and metric.endswith("Usd")
+            unit = " min" if metric == "wallMs" else (" USD" if is_cost else "")
             scale = 60000 if metric == "wallMs" else 1
-            formatter = _fmt_usd if metric == "costUsd" else _fmt
+            formatter = _fmt_usd if is_cost else _fmt
             print(
                 f"    {metric:13s} mean {formatter(st['mean']/scale):>12s}{unit}"
                 f"  median {formatter(st['median']/scale):>12s}{unit}"
@@ -384,8 +447,9 @@ def print_report(report: dict[str, Any]) -> None:
         " opencode/deepseek EXCLUDES cache hits (miss-only, ~100x smaller"
         " numbers). Output tokens have no cache concept and are comparable."
         " Cost is an API-rate estimate, not the actual charge for login-based"
-        " adapters: all aggregate inputs use the standard short-context base"
-        " rate because cache and per-request context splits are unavailable."
+        " adapters. cacheTokens is priced separately when recorded; otherwise"
+        " cache cost is blank and all aggregate inputs use the standard"
+        " short-context base rate. Per-request context splits are unavailable."
         " Interrupted attempts record zero usage."
     )
 
