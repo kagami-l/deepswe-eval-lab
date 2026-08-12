@@ -7,6 +7,10 @@ Codex/sol（xhigh）modifier + Claude/opus-5（high）reviewer。反方向见
 [A 方向结果](collab-claude-codex-complementary-opus-sol-xhigh-10-tasks-20260810-154536.md),
 合并结论见[实验总结](complementary-opus-sol-xhigh-collab-summary.md)。
 
+> 后续：本方向的[第二轮扩样](collab-codex-claude-complementary-opus-sol-xhigh-10-tasks-20260811-190656.md)
+> （2026-08-12）未能延续本轮的"净正零破坏"——合并 40 对为 3↑/1↓（净 +5pp,p≈0.625）,
+> 本文单轮结论的引用应以合并口径为准。
+
 原始工件：
 
 - [job result](../../../jobs/collab-codex-claude-complementary-opus-sol-xhigh-10-tasks-20260810-154601/result.json)

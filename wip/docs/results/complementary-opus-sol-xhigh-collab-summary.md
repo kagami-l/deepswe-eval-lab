@@ -1,12 +1,13 @@
 # opus/sol 互补子集 collab 实验总结（两方向合并）
 
-分析日期：2026-08-11。
+分析日期：2026-08-11；2026-08-12 并入 B 方向
+[第二轮扩样](collab-codex-claude-complementary-opus-sol-xhigh-10-tasks-20260811-190656.md)
+（B 方向合并至 40 对,总账更新至 195 对,见"B 方向扩样合并"与"读数三"）。
 
 本文合并 [A: opus 改,sol 审](collab-claude-codex-complementary-opus-sol-xhigh-10-tasks-20260810-154536.md)
 与 [B: sol 改,opus 审](collab-codex-claude-complementary-opus-sol-xhigh-10-tasks-20260810-154601.md)
 在 [opus/sol 互补子集（配对一）](../deepswe-opus-sol-complementary-subsets.md)上的结果,
-回答本实验的核心问题：**表现最强的模型配对能否让 review-loop 协助得更好**。并更新全部
-七个方向-配置、175 对的机制总账。前序实验见
+回答本实验的核心问题：**表现最强的模型配对能否让 review-loop 协助得更好**。前序实验见
 [luna/v4-flash 总结](complementary-luna-v4flash-collab-summary.md)。
 
 ## 实验设置
@@ -28,6 +29,25 @@
 | 修好 / 修坏 | 3 / 3（净 0） | **2 / 0（净 +10pp）** |
 | Reviewer verdict | 85% revise,92% blocking findings | 50% revise,23% blocking |
 | Outcome | 12 max_reviews / 7 approved / 1 degraded | 17 approved / 3 max_reviews |
+
+## B 方向扩样合并（2026-08-12 增补）
+
+第二轮扩样与第一轮配置相同（并发 2→3,已判定不影响可合并性）。合并 40 对：
+
+| B 方向 | 第一轮 | 第二轮 | **合并（n=4）** |
+|---|---:|---:|---:|
+| initial → final | 45% → 55% | 40% → 40% | **42.5% → 47.5%** |
+| 修好 / 修坏 | 2 / 0 | 1 / 1 | **3 / 1（净 +5pp）** |
+| 符号检验 | — | — | p ≈ 0.625,不显著 |
+| opus reviewer capture（opus 强格子） | 1/10 | 1/10 | **2/20 = 10%** |
+| opus reviewer harm（通过 initial） | 0/9 | 1/8 | **1/17 ≈ 6%** |
+
+第一轮的"净正零破坏"未能延续：第二轮 scc `FDKdUkJ`（31/31 → 28/31）是 opus reviewer
+的第一次破坏,位置精确落在 reviewer 弱格子（scc 为 sol 强题）。"opus 零破坏"据此修正为
+"低破坏但非零"。opus reviewer 的两例 capture（psm 69/72→72/72、participle 89/91→91/91）
+均为 opus 强题上的真跨模型迁移、均为补齐式——**capture 类型规律在强 reviewer 上同样
+成立,但速率止步 10%**。"安全 review-loop"假设降级为：opus 式克制审查是 harm 最低的
+配置（6% vs sol 33%）,但不是零,且净收益不显著。
 
 ## 读数一：内部确认与 oracle——双强配对的互补结构保存得最好
 
@@ -67,39 +87,43 @@
   克制审查（50% revise、23% blocking）直接换来零破坏,代价是 capture 只有 10%
   （testem 上"没拦"、koota-pair 上"教不会"各占一半）。
 
-## 读数三：175 对机制总账
+## 读数三：195 对机制总账（含 B 方向第二轮）
 
 | Job | 对数 | 修好 | 修坏 |
 |---|---:|---:|---:|
 | confirm c→o（224833） | 24 | 1 | 1 |
 | rest c→o / o→c | 18 / 16 | 0 / 1 | 0 / 1 |
 | luna 互补 c→o / o→c | 39 / 38 | 3 / 1 | 2 / 0 |
-| **opus-sol A / B** | **20 / 20** | **3 / 2** | **3 / 0** |
-| **合计** | **175** | **11** | **7** |
+| opus-sol A | 20 | 3 | 3 |
+| opus-sol B 第一轮 / 第二轮 | 20 / 20 | 2 / 1 | 0 / 1 |
+| **合计** | **195** | **12** | **8** |
 
 三条规律至今零反例：
 
-1. **修好 11 例全部是补齐式**（本实验 5 例 initial F2P：107/108 ×3、28/31、69/72）,
-   路线级失败（≈0 F2P 或大缺口）在任何 reviewer 下零捕获。
-2. **修坏 7 例全部发生在 reviewer 弱格子**,且集中于高 revise 率 reviewer
-   （flash 2、sol 3、codex 0、opus 0）。
-3. **capture 与 harm 正相关于审查强度**：激进 reviewer（sol）两头都高,克制 reviewer
-   （opus）两头都低;不存在"高 capture + 低 harm"的免费午餐配置。
+1. **修好 12 例全部是补齐式**（本实验 6 例 initial F2P：107/108 ×3、28/31、69/72、
+   89/91）,路线级失败（≈0 F2P 或大缺口）在任何 reviewer 下零捕获。
+2. **修坏 8 例全部发生在 reviewer 弱格子**（flash 2、sol 3、codex 0、opus 1）——
+   第二轮 scc 案例把 opus 从"零破坏"修正为"低破坏",但位置仍分毫不差落在弱格子。
+3. **capture 与 harm 正相关于审查强度**：激进 reviewer（sol,85% revise）两头最高,
+   克制 reviewer（opus,50–60% revise）两头最低;不存在"高 capture + 低 harm"的
+   免费午餐配置。
 
 ## 结论与建议
 
-1. **对主问题的回答**：最强配对确实把 capture 上限推到 43%,并首次出现净正零害的方向
-   （B）,但 A 方向净 0 再次证明 review-loop 的收益-损害耦合是机制性的,不随模型能力
-   解耦。两方向最好的 final（60%）仍只及内部 oracle（90%）的三分之二,
+1. **对主问题的回答**：最强配对确实把 capture 上限推到 43%（sol reviewer）,但 A 方向
+   净 0、B 方向合并后净 +5pp（p≈0.625）——review-loop 的收益-损害耦合是机制性的,
+   不随模型能力解耦。两方向最好的 final（60%）仍只及内部 oracle（90%）的三分之二,
    **headroom 捕获率 ≤22%**。
 2. **routing 论证达到最强形态**：双强配对下互补结构近乎完整保存（9/10 题、oracle 90%）,
-   同样 40 个 initial patch,任务级选择器的理论上限比最好的 review-loop 高 30pp。
+   同样的 initial patch,任务级选择器的理论上限比最好的 review-loop 高 30pp。
    下一个实验应直接做 routing/多候选选择（最小设计见 luna 总结文档建议 2）,
-   opus/sol 是首选配对（成本论证见子集文档）。
-3. **review-loop 的残值配方已收敛**：opus 式克制审查 + 仅在 initial 未全绿时触发 +
-   预期缺口为补齐式。若要验证,以 B 方向为基线加触发条件做一个小型对照即可,
-   不必再扫配置。
+   opus/sol 是首选配对（成本论证见子集文档）。routing 底料现状：sol initial n=4 已齐,
+   opus initial 尚为 n=2（A 方向扩样轮可按"底料采集"定位补齐,预期无机制惊喜）。
+3. **"安全 review-loop"假设经扩样降级**：opus 式克制审查是 harm 最低配置
+   （1/17 ≈ 6%,对比 sol 33%）但非零,净收益不显著。残值配方维持——克制审查 +
+   仅在 initial 未全绿时触发 + 预期缺口为补齐式——但其验证实验的优先级应排在
+   routing 之后。
 4. **子集维护**：bandit-interprocedural-taint-checks 从机制池移除（三次跨 harness 反转）;
    koota-pair、httpx-streaming、scc 的"弱化复现"在扩样时优先复核。
-5. n=2 是初筛规模,两方向 CI 都宽（±0.25–0.30）。若要确认 B 方向的净正,按预注册路径
-   扩样到 n=4 合并,而不是重跑替换。
+5. 机制研究阶段就此收档：195 对、七个方向-配置、三条零反例规律。后续新增配对数据
+   （如 A 方向扩样）只更新总账,不再重开机制结论。
