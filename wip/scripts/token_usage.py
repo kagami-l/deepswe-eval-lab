@@ -11,8 +11,8 @@ per-role source of truth) plus the trial/job ``result.json``, and prints:
    figure for reference.
 
 Caveats printed with the report: input tokens are NOT comparable across
-adapters; cost is null for login-based adapters; interrupted attempts record
-zero usage. No layer of the job records splits cached vs uncached tokens
+adapters; interrupted attempts record zero usage. No layer of the job records
+splits cached vs uncached tokens
 (cligent flattens provider usage to three fields; pier's ``n_cache_tokens``
 is never fed). Magnitude-based inference of what ``inputTokens`` contains,
 per adapter (2026-08 records):
@@ -39,6 +39,7 @@ from typing import Any
 
 
 USAGE_KEYS = ("inputTokens", "outputTokens", "toolUses", "turns", "wallMs")
+DEFAULT_PRICING_PATH = Path(__file__).resolve().parents[1] / "data" / "model-pricing.json"
 
 
 def _load_json(path: Path) -> Any | None:
@@ -48,8 +49,8 @@ def _load_json(path: Path) -> Any | None:
         return None
 
 
-def _role_labels(job_dir: Path) -> dict[str, str]:
-    """Map role -> 'adapter/model' from the job config's execution plan."""
+def _role_specs(job_dir: Path) -> dict[str, dict[str, str]]:
+    """Map role to its adapter, model, and display label from the execution plan."""
     config = _load_json(job_dir / "config.json") or {}
     plan: dict[str, Any] = {}
     agents = config.get("agents") or []
@@ -59,11 +60,85 @@ def _role_labels(job_dir: Path) -> dict[str, str]:
             if isinstance(agents[0], dict)
             else {}
         )
-    labels = {}
+    role_specs = {}
     for role, spec in (plan.get("roles") or {}).items():
         if isinstance(spec, dict):
-            labels[role] = f"{spec.get('adapter', role)}/{spec.get('model', '?')}"
-    return labels
+            adapter = str(spec.get("adapter", role))
+            model = str(spec.get("model", "?"))
+            role_specs[role] = {
+                "adapter": adapter,
+                "model": model,
+                "label": f"{adapter}/{model}",
+            }
+    return role_specs
+
+
+def _load_pricing(path: Path) -> dict[str, Any]:
+    pricing = _load_json(path)
+    if not isinstance(pricing, dict) or not isinstance(pricing.get("models"), dict):
+        raise ValueError(f"invalid model pricing file: {path}")
+    unit_tokens = pricing.get("unitTokens")
+    if not isinstance(unit_tokens, int) or unit_tokens <= 0:
+        raise ValueError(f"invalid unitTokens in model pricing file: {path}")
+    return pricing
+
+
+def _pricing_index(pricing: dict[str, Any]) -> dict[str, tuple[str, dict[str, Any]]]:
+    index: dict[str, tuple[str, dict[str, Any]]] = {}
+    for canonical, spec in pricing["models"].items():
+        if not isinstance(canonical, str) or not isinstance(spec, dict):
+            continue
+        index[canonical] = (canonical, spec)
+        for alias in spec.get("aliases") or []:
+            if isinstance(alias, str):
+                index[alias] = (canonical, spec)
+    return index
+
+
+def _model_price(
+    model: str, pricing: dict[str, Any]
+) -> tuple[str, dict[str, Any], dict[str, Any]] | None:
+    index = _pricing_index(pricing)
+    match = index.get(model)
+    if match is None and "/" in model:
+        match = index.get(model.rsplit("/", 1)[-1])
+    if match is None:
+        return None
+    canonical, spec = match
+    tier = pricing.get("defaultTier", "standard")
+    context = pricing.get("defaultContext", "shortContext")
+    rates = (spec.get(tier) or {}).get(context)
+    if not isinstance(rates, dict):
+        return None
+    if not isinstance(rates.get("input"), (int, float)) or not isinstance(
+        rates.get("output"), (int, float)
+    ):
+        return None
+    return canonical, spec, rates
+
+
+def _usage_cost(
+    usage: dict[str, int], model: str, pricing: dict[str, Any]
+) -> dict[str, Any] | None:
+    match = _model_price(model, pricing)
+    if match is None:
+        return None
+    canonical, spec, rates = match
+    unit = pricing["unitTokens"]
+    input_usd = usage["inputTokens"] * rates["input"] / unit
+    output_usd = usage["outputTokens"] * rates["output"] / unit
+    return {
+        "model": canonical,
+        "provider": spec.get("provider"),
+        "inputUsd": round(input_usd, 12),
+        "outputUsd": round(output_usd, 12),
+        "totalUsd": round(input_usd + output_usd, 12),
+        "estimated": True,
+        "rates": {
+            "inputPerMillion": rates["input"],
+            "outputPerMillion": rates["output"],
+        },
+    }
 
 
 def _trial_rows(job_dir: Path) -> tuple[list[dict[str, Any]], list[str]]:
@@ -126,40 +201,85 @@ def _fmt(value: float) -> str:
     return f"{value:,.0f}"
 
 
-def build_report(job_dir: Path) -> dict[str, Any]:
-    labels = _role_labels(job_dir)
+def _fmt_usd(value: float) -> str:
+    return f"${value:,.6f}"
+
+
+def build_report(job_dir: Path, pricing_path: Path = DEFAULT_PRICING_PATH) -> dict[str, Any]:
+    role_specs = _role_specs(job_dir)
+    labels = {role: spec["label"] for role, spec in role_specs.items()}
+    models = {role: spec["model"] for role, spec in role_specs.items()}
     rows, skipped = _trial_rows(job_dir)
     job_result = _load_json(job_dir / "result.json") or {}
     job_stats = job_result.get("stats") or {}
+    pricing = _load_pricing(pricing_path)
+    totals = _totals(rows)
+
+    for row in rows:
+        row["costs"] = {
+            role: cost
+            for role, usage in row["usage"].items()
+            if (cost := _usage_cost(usage, models.get(role, "?"), pricing)) is not None
+        }
+
+    costs = {
+        role: cost
+        for role, usage in totals.items()
+        if (cost := _usage_cost(usage, models.get(role, "?"), pricing)) is not None
+    }
 
     per_role_stats: dict[str, dict[str, dict[str, float]]] = {}
-    for role in _totals(rows):
+    for role in totals:
         per_role_stats[role] = {
-            "inputTokens": _stats([r["usage"][role]["inputTokens"] for r in rows if role in r["usage"]]),
-            "outputTokens": _stats([r["usage"][role]["outputTokens"] for r in rows if role in r["usage"]]),
+            "inputTokens": _stats(
+                [r["usage"][role]["inputTokens"] for r in rows if role in r["usage"]]
+            ),
+            "outputTokens": _stats(
+                [r["usage"][role]["outputTokens"] for r in rows if role in r["usage"]]
+            ),
             "wallMs": _stats([r["usage"][role]["wallMs"] for r in rows if role in r["usage"]]),
+            "costUsd": _stats([r["costs"][role]["totalUsd"] for r in rows if role in r["costs"]]),
         }
 
     def _split_totals(predicate) -> dict[str, dict[str, float]]:
         subset = [r for r in rows if predicate(r)]
         out: dict[str, dict[str, float]] = {}
-        for role in _totals(rows):
+        for role in totals:
             values = [r["usage"][role]["inputTokens"] + 0 for r in subset if role in r["usage"]]
             outs = [r["usage"][role]["outputTokens"] for r in subset if role in r["usage"]]
             if values:
-                out[role] = {
+                bucket = {
                     "trials": len(values),
                     "meanInput": statistics.mean(values),
                     "meanOutput": statistics.mean(outs),
                 }
+                trial_costs = [r["costs"][role]["totalUsd"] for r in subset if role in r["costs"]]
+                if trial_costs:
+                    bucket["meanCostUsd"] = statistics.mean(trial_costs)
+                out[role] = bucket
         return out
 
     return {
         "jobDir": str(job_dir),
         "roleModels": labels,
+        "roleModelIds": models,
         "trials": rows,
         "skippedTrials": skipped,
-        "totals": _totals(rows),
+        "totals": totals,
+        "costs": costs,
+        "pricing": {
+            "path": str(pricing_path),
+            "currency": pricing.get("currency", "USD"),
+            "unitTokens": pricing["unitTokens"],
+            "tier": pricing.get("defaultTier", "standard"),
+            "context": pricing.get("defaultContext", "shortContext"),
+            "updatedAt": pricing.get("updatedAt"),
+            "unpricedRoles": [role for role in totals if role not in costs],
+            "estimateBasis": (
+                "All aggregate inputTokens are charged at the base input rate; "
+                "cache discounts/writes and per-request long-context tiers are not applied."
+            ),
+        },
         "stats": per_role_stats,
         "passedVsFailed": {
             "passed": _split_totals(lambda r: r["reward"] == 1),
@@ -189,9 +309,15 @@ def print_report(report: dict[str, Any]) -> None:
     print("## Job totals per model")
     for role, t in report["totals"].items():
         wall_h = t["wallMs"] / 3_600_000
+        cost = report["costs"].get(role)
+        cost_text = (
+            f"  est. cost {_fmt_usd(cost['totalUsd']):>13s}"
+            if cost
+            else "  est. cost           n/a"
+        )
         print(
             f"  {name(role):48s} in {_fmt(t['inputTokens']):>15s}  out {_fmt(t['outputTokens']):>11s}"
-            f"  toolUses {t['toolUses']:>5d}  turns {t['turns']:>3d}  wall {wall_h:.1f}h"
+            f"{cost_text}  toolUses {t['toolUses']:>5d}  turns {t['turns']:>3d}  wall {wall_h:.1f}h"
         )
     pier = report["pierJobLevel"]
     if pier.get("inputTokens") is not None:
@@ -205,7 +331,7 @@ def print_report(report: dict[str, Any]) -> None:
     roles = list(report["totals"])
     header = f"  {'trial':44s} {'reward':>6s}"
     for role in roles:
-        header += f" {role + ' in':>14s} {role + ' out':>12s}"
+        header += f" {role + ' in':>14s} {role + ' out':>12s} {role + ' cost':>14s}"
     print(header)
     for row in rows:
         line = f"  {row['trial'][:44]:44s} {str(row['reward']):>6s}"
@@ -216,6 +342,8 @@ def print_report(report: dict[str, Any]) -> None:
                 if spec
                 else f" {'-':>14s} {'-':>12s}"
             )
+            cost = row["costs"].get(role)
+            line += f" {_fmt_usd(cost['totalUsd']):>14s}" if cost else f" {'n/a':>14s}"
         print(line)
 
     print("\n## Per-trial distribution stats")
@@ -224,22 +352,29 @@ def print_report(report: dict[str, Any]) -> None:
         for metric, st in metrics.items():
             if not st:
                 continue
-            unit = " min" if metric == "wallMs" else ""
+            unit = " min" if metric == "wallMs" else (" USD" if metric == "costUsd" else "")
             scale = 60000 if metric == "wallMs" else 1
+            formatter = _fmt_usd if metric == "costUsd" else _fmt
             print(
-                f"    {metric:13s} mean {_fmt(st['mean']/scale):>12s}{unit}"
-                f"  median {_fmt(st['median']/scale):>12s}{unit}"
-                f"  p90 {_fmt(st['p90']/scale):>12s}{unit}"
-                f"  min {_fmt(st['min']/scale):>10s}{unit}"
-                f"  max {_fmt(st['max']/scale):>12s}{unit}"
+                f"    {metric:13s} mean {formatter(st['mean']/scale):>12s}{unit}"
+                f"  median {formatter(st['median']/scale):>12s}{unit}"
+                f"  p90 {formatter(st['p90']/scale):>12s}{unit}"
+                f"  min {formatter(st['min']/scale):>10s}{unit}"
+                f"  max {formatter(st['max']/scale):>12s}{unit}"
             )
 
     print("\n## Passed vs failed trials (mean per trial)")
     for bucket, per_role in report["passedVsFailed"].items():
         for role, st in per_role.items():
+            cost_text = (
+                f"  mean cost {_fmt_usd(st['meanCostUsd']):>13s}"
+                if "meanCostUsd" in st
+                else "  mean cost           n/a"
+            )
             print(
                 f"  {bucket:6s} {name(role):48s} n={st['trials']:<3d}"
                 f" mean in {_fmt(st['meanInput']):>14s}  mean out {_fmt(st['meanOutput']):>11s}"
+                f"{cost_text}"
             )
 
     print(
@@ -248,8 +383,10 @@ def print_report(report: dict[str, Any]) -> None:
         " claude inputTokens INCLUDE cache reads (cumulative full-context);"
         " opencode/deepseek EXCLUDES cache hits (miss-only, ~100x smaller"
         " numbers). Output tokens have no cache concept and are comparable."
-        " Cost is null for login-based adapters; interrupted attempts record"
-        " zero usage."
+        " Cost is an API-rate estimate, not the actual charge for login-based"
+        " adapters: all aggregate inputs use the standard short-context base"
+        " rate because cache and per-request context splits are unavailable."
+        " Interrupted attempts record zero usage."
     )
 
 
@@ -257,13 +394,24 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("job_dir", type=Path, help="Pier job directory")
     parser.add_argument("--json", action="store_true", help="emit JSON instead of text")
+    parser.add_argument(
+        "--pricing",
+        type=Path,
+        default=DEFAULT_PRICING_PATH,
+        help=f"model pricing JSON (default: {DEFAULT_PRICING_PATH})",
+    )
     args = parser.parse_args(argv)
 
     job_dir = args.job_dir.expanduser().resolve()
     if not job_dir.is_dir():
         print(f"not a directory: {job_dir}", file=sys.stderr)
         return 2
-    report = build_report(job_dir)
+    pricing_path = args.pricing.expanduser().resolve()
+    try:
+        report = build_report(job_dir, pricing_path)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     if not report["trials"]:
         print(f"no trials with usage found in {job_dir}", file=sys.stderr)
         return 1
