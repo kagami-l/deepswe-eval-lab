@@ -56,7 +56,14 @@ resume 顺利补齐全部剩余 trial，无 errored、无重跑。
 | Review / revision | 34 轮 / 17 次（34 attempts 零失败） |
 | Findings | 133（**仅 23% blocking**） |
 | Verdict | 17 approve / 17 revise（50% revise 率） |
-| Tokens in/out | 429,367,549 / 2,901,809（cost 双侧均为 null） |
+| sol modifier tokens in/out | 362,234,168 / 1,975,019 |
+| opus-5 reviewer tokens in/out | 94,668,686 / 1,118,499 |
+| Pier job 级 tokens in/out | 429,367,549 / 2,901,809（混合口径,≠ 角色求和） |
+
+Token 口径：分角色数字来自各 trial `summary.json` 的 `result.usage`（20/20 齐全）;
+input tokens 跨 adapter 语义不同（codex 含缓存重复计数,claude 口径另异）,只宜同模型
+纵向对比,output 相对可比；cost 双侧均为 null（登录订阅制）;claude adapter 未上报
+toolUses（计 0）。
 
 ## Task 级配对结果
 

@@ -68,7 +68,14 @@ sol-xhigh）的方向 A：Claude/opus-5（high）modifier + Codex/sol（xhigh）
 | Review / revision | 48 轮 / 40 次（48 attempts 零失败,zero watchdog 触发） |
 | Findings | 142（**92% blocking**） |
 | Verdict | 7 approve / 41 revise（85% revise 率） |
-| Tokens in/out | 415,752,244 / 2,757,959（cost 双侧均为 null） |
+| opus-5 modifier tokens in/out | 441,996,879 / 2,446,776 |
+| sol reviewer tokens in/out | 67,512,669 / 735,835 |
+| Pier job 级 tokens in/out | 415,752,244 / 2,757,959（混合口径,≠ 角色求和） |
+
+Token 口径：分角色数字来自各 trial `summary.json` 的 `result.usage`（20/20 齐全）;
+input tokens 跨 adapter 语义不同（codex 含缓存重复计数,claude 口径另异）,只宜同模型
+纵向对比,output 相对可比；cost 双侧均为 null（登录订阅制）;claude adapter 未上报
+toolUses（计 0）。
 
 ## Task 级配对结果
 

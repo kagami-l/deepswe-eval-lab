@@ -39,7 +39,14 @@ B 方向（sol 改,opus 审）的**预注册扩样轮**：与
 | Reward | 8 / 20（40%） |
 | Outcome | 16 approved / 2 max_reviews / 2 degraded（timeout、infrastructure 各 1） |
 | Review / revision | 40 轮 / 23 次；verdict 16 approve / 24 revise |
-| Tokens in/out | 457,956,884 / 3,242,888（cost 双侧 null） |
+| sol modifier tokens in/out | 444,164,985 / 2,320,487 |
+| opus-5 reviewer tokens in/out | 113,496,036 / 1,325,333 |
+| Pier job 级 tokens in/out | 457,956,884 / 3,242,888（混合口径,≠ 角色求和） |
+
+Token 口径：分角色数字来自各 trial `summary.json` 的 `result.usage`（20/20 齐全）;
+input tokens 跨 adapter 语义不同（codex 含缓存重复计数,claude 口径另异）,只宜同模型
+纵向对比,output 相对可比；cost 双侧均为 null（登录订阅制）;claude adapter 未上报
+toolUses（计 0）。
 
 ## Task 级配对结果
 

@@ -40,6 +40,27 @@ uv run python scripts/run_agent_eval.py eval \
 下文的 `run_codex_eval.sh`、`run_opencode_eval.sh`、`run_kimi_sample_dev.sh` 和
 mini-swe 入口保留为旧基线/历史参考，不迁移到统一 runtime。
 
+## Token 消耗报告
+
+`token_usage.py` 对一个 job 目录输出按模型（角色）区分的 token 消耗：job 级合计、
+trial 级明细、分布统计（mean/median/p90/min/max）、通过与失败 trial 的均值对比,
+以及 Pier job 级混合口径参照。数据源是各 trial `summary.json` 的 `result.usage`
+（唯一分角色可信来源）；兼容 single/collab 拓扑,容忍缺 usage 的 trial（列入 skipped）。
+
+```bash
+# 在 wip/ 目录下执行
+uv run python scripts/token_usage.py ../jobs/<job-name>          # 人读格式
+uv run python scripts/token_usage.py ../jobs/<job-name> --json   # 机器格式
+```
+
+口径注意：input tokens 跨 adapter 语义不同,只宜同模型纵向对比；登录订阅制 adapter
+的 cost 为 null；中断 attempt 计 0。所有记录层（summary usage、events.jsonl、pier
+`n_cache_tokens`）都**不区分 cached / uncached**,cligent 落盘前已拍平。按量级推断
+（2026-08 记录）：codex 与 claude 的 inputTokens **含** cache 读取（逐次调用全上下文
+累计口径）,opencode/deepseek **不含** cache 命中（miss-only,数字小约两个数量级）;
+两类口径互不可比,也都不能直接乘单价折算成本。output tokens 无缓存概念,跨 adapter
+可比。
+
 ## 用共享 mini-swe-agent runtime 运行评测
 
 `wip/scripts/run_mini_swe_eval.sh` 默认使用只读共享 runtime 镜像。第一次运行
