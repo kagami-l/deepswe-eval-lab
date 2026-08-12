@@ -1,0 +1,10 @@
+helm-array-merge-strategies
+obsidian-linter-scoped-ignore-markers
+dasel-html-document-format
+python-statemachine-state-data-scoping
+pest-character-class-coalescing
+bandit-interprocedural-taint-checks
+meriyah-explicit-resource-declarations
+koota-deferred-mutation-buffer
+scc-bounded-memory-spilling
+superjson-error-stack-serialization

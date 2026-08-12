@@ -116,7 +116,11 @@ uv run python scripts/select_discriminative_tasks.py \
 
 `selection/complementary-luna-v4flash.txt` 是为 `gpt-5-6-luna [xhigh]` 与 `deepseek-v4-flash [max]` 互补性实验单独准备的 10 题清单（前 5 题 luna 强方向、后 5 题 flash 强方向），由手工筛选维护，不由筛选脚本生成，重跑脚本也不会更新它。筛选思路、逐题依据和替补名单见 [luna/v4-flash 互补子集文档](../docs/deepswe-luna-v4flash-complementary-subset.md)。
 
-`selection/complementary-opus-sol-xhigh.txt` 与 `selection/complementary-opus-sol-max.txt` 是为 `claude-opus-5 [high]` 分别与 `gpt-5-6-sol [xhigh]`、`[max]` 配对准备的同类 10 题清单（前 5 题 opus 强方向、后 5 题 sol 强方向，两份重叠 8 题），同为手工维护。筛选依据、替补名单及两组配对的优先级建议（推荐先做 xhigh 配对）见 [opus/sol 互补子集文档](../docs/deepswe-opus-sol-complementary-subsets.md)。
+`selection/complementary-opus-sol-{medium,high,xhigh,max}.txt` 是为 `claude-opus-5 [high]` 分别与 `gpt-5-6-sol` 四个 effort 档位配对准备的同类 10 题清单（前 5 题 opus 强方向、后 5 题 sol 强方向），同为手工维护。medium 配对严格口径只有 3 道 sol 强题，故其最后 2 题是明确标记的 2/4 vs 0/4 放宽项；不放宽时使用独立的 8 题清单 `selection/complementary-opus-sol-medium-strict.txt`。筛选依据、完整候选、替补名单和优先级建议见 [opus/sol 互补子集文档](../docs/deepswe-opus-sol-complementary-subsets.md)。
+
+`selection/complementary-opus-luna-max.txt` 是为 `claude-opus-5 [high]` 与 `gpt-5-6-luna [max]` 配对准备的 10 题清单（前 5 题 opus 强方向、后 5 题 luna 强方向）。两配置在该池均为 21/40，逐题 oracle 为 38/40。筛选依据、完整候选和替补名单见 [opus/luna 互补子集文档](../docs/deepswe-opus-luna-complementary-subset.md)。
+
+`selection/complementary-opus-v4flash.txt` 是为 `claude-opus-5 [high]` 与 `deepseek-v4-flash [max]` 配对准备的 10 题清单（前 5 题 opus 强方向、后 5 题 v4-flash 强方向）。两配置在该池分别为 21/40、19/40，逐题 oracle 为 38/40。v4-flash 只有单一 config，家族佐证只来自 opus 一侧；筛选依据、完整候选和替补名单见 [opus/v4-flash 互补子集文档](../docs/deepswe-opus-v4flash-complementary-subset.md)。
 
 ## 对后续 agent-system 评测的解释
 
