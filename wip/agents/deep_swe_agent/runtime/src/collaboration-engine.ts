@@ -75,8 +75,9 @@ export type DegradedReason =
   | 'infrastructure';
 
 export interface RoleUsage {
-  inputTokens: number;
-  outputTokens: number;
+  tokenAvailability: 'reported' | 'unavailable';
+  inputTokens: number | null;
+  outputTokens: number | null;
   toolUses: number;
   costUsd: number | null;
   turns: number;
@@ -113,8 +114,9 @@ export function isDeliverable(outcome: Outcome, strict: boolean): boolean {
 
 export function emptyRoleUsage(): RoleUsage {
   return {
-    inputTokens: 0,
-    outputTokens: 0,
+    tokenAvailability: 'unavailable',
+    inputTokens: null,
+    outputTokens: null,
     toolUses: 0,
     costUsd: null,
     turns: 0,

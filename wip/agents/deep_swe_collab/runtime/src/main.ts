@@ -141,16 +141,18 @@ async function main(): Promise<number> {
       protocolViolations: [],
       usage: {
         modifier: {
-          inputTokens: 0,
-          outputTokens: 0,
+          tokenAvailability: 'unavailable',
+          inputTokens: null,
+          outputTokens: null,
           toolUses: 0,
           costUsd: null,
           turns: 0,
           wallMs: 0,
         },
         reviewer: {
-          inputTokens: 0,
-          outputTokens: 0,
+          tokenAvailability: 'unavailable',
+          inputTokens: null,
+          outputTokens: null,
           toolUses: 0,
           costUsd: null,
           turns: 0,

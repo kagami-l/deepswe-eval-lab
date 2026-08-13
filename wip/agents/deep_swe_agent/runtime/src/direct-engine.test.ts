@@ -44,7 +44,13 @@ function ok(finalText: string): TurnResult {
     timedOut: false,
     timeoutKind: null,
     finalText,
-    usage: { inputTokens: 100, outputTokens: 50, toolUses: 3, costUsd: 0.01 },
+    usage: {
+      tokenAvailability: 'reported',
+      inputTokens: 100,
+      outputTokens: 50,
+      toolUses: 3,
+      costUsd: 0.01,
+    },
     durationMs: 10,
     error: null,
     actualModel: 'fake-model-v1',
@@ -179,9 +185,42 @@ test('approve on first review delivers with outcome approved', async (t) => {
   const summaryUsage = result.usage;
   assert.equal(summaryUsage.modifier.turns, 1);
   assert.equal(summaryUsage.reviewer?.turns, 1);
+  assert.equal(summaryUsage.modifier.tokenAvailability, 'reported');
+  assert.equal(summaryUsage.modifier.inputTokens, 100);
+  assert.equal(summaryUsage.reviewer?.outputTokens, 50);
   // Provider-resolved models are captured from the init events.
   assert.equal(result.actualModels.modifier, 'fake-model-v1');
   assert.equal(result.actualModels.reviewer, 'fake-model-v1');
+});
+
+test('unavailable turn tokens remain null while tool uses are preserved', async (t) => {
+  const { repo, config } = await makeFixture(t);
+  const modifier = new FakeRunner('modifier', [async () => {
+    await writeFile(join(repo, 'src.txt'), 'fixed\n');
+    return {
+      ...ok('done'),
+      usage: {
+        tokenAvailability: 'unavailable',
+        inputTokens: 0,
+        outputTokens: 0,
+        toolUses: 7,
+        costUsd: null,
+      },
+    };
+  }]);
+  const reviewer = new FakeRunner('reviewer', [() => ok(APPROVE)]);
+
+  const result = await new DirectCollaborationEngine(
+    config,
+    modifier,
+    reviewer,
+  ).run();
+
+  assert.equal(result.outcome, 'approved');
+  assert.equal(result.usage.modifier.tokenAvailability, 'unavailable');
+  assert.equal(result.usage.modifier.inputTokens, null);
+  assert.equal(result.usage.modifier.outputTokens, null);
+  assert.equal(result.usage.modifier.toolUses, 7);
 });
 
 test('revise then approve counts one revision and passes findings context', async (t) => {

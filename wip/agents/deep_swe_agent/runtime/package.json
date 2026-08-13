@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "postinstall": "node scripts/apply-cligent-compat-patches.mjs",
+    "prebuild": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "build": "tsc -p tsconfig.json",
     "test": "npm run build && node --test dist/*.test.js"
   },
@@ -13,7 +13,7 @@
     "@openai/codex": "0.146.0",
     "@openai/codex-sdk": "0.146.0",
     "@opencode-ai/sdk": "1.18.13",
-    "@sublang/cligent": "0.18.0"
+    "@sublang/cligent": "0.20.0"
   },
   "devDependencies": {
     "@types/node": "25.0.3",

@@ -11,7 +11,8 @@ per-role source of truth) plus the trial/job ``result.json``, and prints:
    figure for reference.
 
 Caveats printed with the report: input tokens are NOT comparable across
-adapters; interrupted attempts record zero usage. No layer of the job records
+adapters; unavailable accounting remains unknown rather than becoming zero.
+No layer of the job records
 splits cached vs uncached tokens
 (cligent flattens provider usage to three fields; pier's ``n_cache_tokens``
 is never fed). Magnitude-based inference of what ``inputTokens`` contains,
@@ -38,7 +39,9 @@ from pathlib import Path
 from typing import Any
 
 
-USAGE_KEYS = ("inputTokens", "outputTokens", "toolUses", "turns", "wallMs")
+TOKEN_USAGE_KEYS = ("inputTokens", "outputTokens")
+OPERATIONAL_USAGE_KEYS = ("toolUses", "turns", "wallMs")
+USAGE_KEYS = TOKEN_USAGE_KEYS + OPERATIONAL_USAGE_KEYS
 OPTIONAL_USAGE_KEYS = ("cacheTokens",)
 DEFAULT_PRICING_PATH = Path(__file__).resolve().parents[1] / "data" / "model-pricing.json"
 
@@ -119,8 +122,12 @@ def _model_price(
 
 
 def _usage_cost(
-    usage: dict[str, int], model: str, pricing: dict[str, Any]
+    usage: dict[str, Any], model: str, pricing: dict[str, Any]
 ) -> dict[str, Any] | None:
+    if usage.get("tokenAvailability") != "reported":
+        return None
+    if not all(isinstance(usage.get(key), int) for key in TOKEN_USAGE_KEYS):
+        return None
     match = _model_price(model, pricing)
     if match is None:
         return None
@@ -190,7 +197,31 @@ def _trial_rows(job_dir: Path) -> tuple[list[dict[str, Any]], list[str]]:
         for role, spec in usage.items():
             if not isinstance(spec, dict):
                 continue
-            role_usage = {key: spec.get(key, 0) or 0 for key in USAGE_KEYS}
+            turns = int(spec.get("turns") or 0)
+            if turns <= 0:
+                continue
+            token_availability = (
+                "reported"
+                if spec.get("tokenAvailability") == "reported"
+                and all(isinstance(spec.get(key), int) for key in TOKEN_USAGE_KEYS)
+                else "unavailable"
+            )
+            role_usage = {
+                "tokenAvailability": token_availability,
+                "inputTokens": (
+                    int(spec.get("inputTokens") or 0)
+                    if token_availability == "reported"
+                    else None
+                ),
+                "outputTokens": (
+                    int(spec.get("outputTokens") or 0)
+                    if token_availability == "reported"
+                    else None
+                ),
+                "toolUses": int(spec.get("toolUses") or 0),
+                "turns": turns,
+                "wallMs": int(spec.get("wallMs") or 0),
+            }
             for key in OPTIONAL_USAGE_KEYS:
                 if key in spec and spec[key] is not None:
                     role_usage[key] = spec[key] or 0
@@ -199,16 +230,42 @@ def _trial_rows(job_dir: Path) -> tuple[list[dict[str, Any]], list[str]]:
     return rows, skipped
 
 
-def _totals(rows: list[dict[str, Any]]) -> dict[str, dict[str, int]]:
-    totals: dict[str, dict[str, int]] = {}
+def _totals(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    totals: dict[str, dict[str, Any]] = {}
     for row in rows:
         for role, spec in row["usage"].items():
-            bucket = totals.setdefault(role, {key: 0 for key in USAGE_KEYS})
-            for key in USAGE_KEYS:
+            bucket = totals.setdefault(
+                role,
+                {
+                    "tokenAvailability": "reported",
+                    "inputTokens": 0,
+                    "outputTokens": 0,
+                    "reportedInputTokens": 0,
+                    "reportedOutputTokens": 0,
+                    "reportedTokenTrials": 0,
+                    "unavailableTokenTrials": 0,
+                    **{key: 0 for key in OPERATIONAL_USAGE_KEYS},
+                },
+            )
+            for key in OPERATIONAL_USAGE_KEYS:
                 bucket[key] += spec[key]
-            for key in OPTIONAL_USAGE_KEYS:
-                if key in spec:
-                    bucket[key] = bucket.get(key, 0) + spec[key]
+            if spec["tokenAvailability"] == "reported":
+                bucket["reportedInputTokens"] += spec["inputTokens"]
+                bucket["reportedOutputTokens"] += spec["outputTokens"]
+                bucket["reportedTokenTrials"] += 1
+                for key in OPTIONAL_USAGE_KEYS:
+                    if key in spec:
+                        bucket[key] = bucket.get(key, 0) + spec[key]
+            else:
+                bucket["unavailableTokenTrials"] += 1
+    for bucket in totals.values():
+        if bucket["unavailableTokenTrials"]:
+            bucket["tokenAvailability"] = "unavailable"
+            bucket["inputTokens"] = None
+            bucket["outputTokens"] = None
+        else:
+            bucket["inputTokens"] = bucket["reportedInputTokens"]
+            bucket["outputTokens"] = bucket["reportedOutputTokens"]
     return totals
 
 
@@ -261,10 +318,20 @@ def build_report(job_dir: Path, pricing_path: Path = DEFAULT_PRICING_PATH) -> di
     for role in totals:
         per_role_stats[role] = {
             "inputTokens": _stats(
-                [r["usage"][role]["inputTokens"] for r in rows if role in r["usage"]]
+                [
+                    r["usage"][role]["inputTokens"]
+                    for r in rows
+                    if role in r["usage"]
+                    and r["usage"][role]["tokenAvailability"] == "reported"
+                ]
             ),
             "outputTokens": _stats(
-                [r["usage"][role]["outputTokens"] for r in rows if role in r["usage"]]
+                [
+                    r["usage"][role]["outputTokens"]
+                    for r in rows
+                    if role in r["usage"]
+                    and r["usage"][role]["tokenAvailability"] == "reported"
+                ]
             ),
             "wallMs": _stats([r["usage"][role]["wallMs"] for r in rows if role in r["usage"]]),
             "costInUsd": _stats([r["costs"][role]["inputUsd"] for r in rows if role in r["costs"]]),
@@ -287,8 +354,14 @@ def build_report(job_dir: Path, pricing_path: Path = DEFAULT_PRICING_PATH) -> di
         subset = [r for r in rows if predicate(r)]
         out: dict[str, dict[str, float]] = {}
         for role in totals:
-            values = [r["usage"][role]["inputTokens"] + 0 for r in subset if role in r["usage"]]
-            outs = [r["usage"][role]["outputTokens"] for r in subset if role in r["usage"]]
+            reported = [
+                r["usage"][role]
+                for r in subset
+                if role in r["usage"]
+                and r["usage"][role]["tokenAvailability"] == "reported"
+            ]
+            values = [usage["inputTokens"] for usage in reported]
+            outs = [usage["outputTokens"] for usage in reported]
             if values:
                 bucket = {
                     "trials": len(values),
@@ -316,7 +389,16 @@ def build_report(job_dir: Path, pricing_path: Path = DEFAULT_PRICING_PATH) -> di
             "tier": pricing.get("defaultTier", "standard"),
             "context": pricing.get("defaultContext", "shortContext"),
             "updatedAt": pricing.get("updatedAt"),
-            "unpricedRoles": [role for role in totals if role not in costs],
+            "unpricedRoles": [
+                role
+                for role in totals
+                if _model_price(models.get(role, "?"), pricing) is None
+            ],
+            "unavailableTokenRoles": [
+                role
+                for role, usage in totals.items()
+                if usage["tokenAvailability"] != "reported"
+            ],
             "estimateBasis": (
                 "cacheTokens, when present, are priced as cached input and subtracted from "
                 "inputTokens; otherwise cache cost is null and all aggregate inputTokens use "
@@ -361,9 +443,24 @@ def print_report(report: dict[str, Any]) -> None:
             if cost
             else "  cost n/a"
         )
+        input_text = (
+            _fmt(t["inputTokens"])
+            if t["tokenAvailability"] == "reported"
+            else "unavailable"
+        )
+        output_text = (
+            _fmt(t["outputTokens"])
+            if t["tokenAvailability"] == "reported"
+            else "unavailable"
+        )
+        availability_text = (
+            f"  token trials reported {t['reportedTokenTrials']}"
+            f" unavailable {t['unavailableTokenTrials']}"
+        )
         print(
-            f"  {name(role):48s} in {_fmt(t['inputTokens']):>15s}  out {_fmt(t['outputTokens']):>11s}"
-            f"{cost_text}  toolUses {t['toolUses']:>5d}  turns {t['turns']:>3d}  wall {wall_h:.1f}h"
+            f"  {name(role):48s} in {input_text:>15s}  out {output_text:>11s}"
+            f"{cost_text}  toolUses {t['toolUses']:>5d}  turns {t['turns']:>3d}"
+            f"  wall {wall_h:.1f}h{availability_text}"
         )
     pier = report["pierJobLevel"]
     if pier.get("inputTokens") is not None:
@@ -387,11 +484,15 @@ def print_report(report: dict[str, Any]) -> None:
         line = f"  {row['trial'][:44]:44s} {str(row['reward']):>6s}"
         for role in roles:
             spec = row["usage"].get(role)
-            line += (
-                f" {_fmt(spec['inputTokens']):>14s} {_fmt(spec['outputTokens']):>12s}"
-                if spec
-                else f" {'-':>14s} {'-':>12s}"
-            )
+            if spec and spec["tokenAvailability"] == "reported":
+                line += (
+                    f" {_fmt(spec['inputTokens']):>14s}"
+                    f" {_fmt(spec['outputTokens']):>12s}"
+                )
+            elif spec:
+                line += f" {'unavailable':>14s} {'unavailable':>12s}"
+            else:
+                line += f" {'-':>14s} {'-':>12s}"
             cost = row["costs"].get(role)
             if cost:
                 cache_text = _fmt_usd(cost["cacheUsd"]) if cost["cacheUsd"] is not None else ""
@@ -450,7 +551,8 @@ def print_report(report: dict[str, Any]) -> None:
         " adapters. cacheTokens is priced separately when recorded; otherwise"
         " cache cost is blank and all aggregate inputs use the standard"
         " short-context base rate. Per-request context splits are unavailable."
-        " Interrupted attempts record zero usage."
+        " Unavailable or legacy-undiscriminated token accounting remains"
+        " unknown; toolUses, turns, and wall time are still aggregated."
     )
 
 

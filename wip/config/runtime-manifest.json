@@ -1,26 +1,18 @@
 {
   "schema_version": 1,
-  "runtime_version": "0.3.0",
+  "runtime_version": "0.4.0",
   "node_image": "node:22-bookworm-slim",
   "packages": {
     "@anthropic-ai/claude-agent-sdk": "0.3.220",
     "@openai/codex": "0.146.0",
     "@openai/codex-sdk": "0.146.0",
     "@opencode-ai/sdk": "1.18.13",
-    "@sublang/cligent": "0.18.0"
+    "@sublang/cligent": "0.20.0"
   },
   "global_packages": {
     "@google/gemini-cli": "0.53.1",
     "@moonshot-ai/kimi-code": "0.31.1",
     "opencode-ai": "1.18.13"
-  },
-  "compatibility_patches": {
-    "cligent-0.18.0-opencode-auto-external-directory": {
-      "dependency": "@sublang/cligent",
-      "issue": "CLI-004",
-      "remove_when": "cligent auto mode covers external_directory and cannot hang on permission requests",
-      "version": "0.18.0"
-    }
   },
   "watchdogs": {
     "event_silence": {

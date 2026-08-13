@@ -38,6 +38,7 @@ export interface TurnRequest {
 }
 
 export interface TurnUsage {
+  tokenAvailability: 'reported' | 'unavailable';
   inputTokens: number;
   outputTokens: number;
   toolUses: number;
@@ -64,20 +65,8 @@ export type TimeoutKind =
 
 export type EventSink = (event: Record<string, unknown>) => void;
 
-/**
- * OpenCode `text_delta` is pure overhead on disk. It streams one event per
- * token, and every delta also arrives whole elsewhere in the same stream:
- * reasoning as `thinking`, assistant messages as `text`. Persisting the deltas
- * cost substantial JSON envelope overhead — one reviewer attempt wrote 5.7 MB /
- * 30.6k lines, against 0.13 MB / 63 lines for a Codex reviewer turn.
- *
- * Only the tail of an interrupted turn is lost: the in-flight chunk that has
- * not yet been rolled up into a `thinking` or `text` event (~0.8% of a timed-out
- * reviewer turn, measured).
- */
 export function createEventFileSink(paths: readonly string[]): EventSink {
   return (event) => {
-    if (event.type === 'text_delta' && event.agent === 'opencode') return;
     const line = JSON.stringify(event) + '\n';
     for (const path of paths) appendFileSync(path, line);
   };
@@ -94,17 +83,6 @@ type CligentLike = {
     overrides?: Record<string, unknown>,
   ): AsyncGenerator<Record<string, unknown>, void, void>;
 };
-
-/**
- * True when a `text` event is the adapter replaying the submitted prompt.
- *
- * OpenCode surfaces the user message as the session's first text part, so the
- * echo arrives byte-identical to what was sent. Matching on exact (trimmed)
- * equality keeps genuine assistant output that merely quotes the prompt.
- */
-export function isPromptEcho(content: string, prompt: string): boolean {
-  return content.trim() === prompt.trim();
-}
 
 async function createAdapter(name: AdapterName): Promise<unknown> {
   switch (name) {
@@ -212,7 +190,6 @@ export class CligentRunner implements AgentRunner {
     let diagnosticPromise: Promise<void> | null = null;
     let processCleanupPromise: Promise<void> | null = null;
     const textParts: string[] = [];
-    let textEventSeen = false;
     let doneStatus: string | null = null;
     let doneResult: string | undefined;
     let usage: TurnUsage | null = null;
@@ -372,29 +349,18 @@ export class CligentRunner implements AgentRunner {
           type === 'text'
             ? (event.payload as { content?: string } | undefined)?.content
             : undefined;
-        // The OpenCode adapter replays the submitted prompt as the session's
-        // first `text` part. Left typed as `text` it is indistinguishable from
-        // model output, and both consumers get it wrong: it corrupts finalText
-        // (extractJsonCandidate then falls back to first-`{`..last-`}`, landing
-        // inside the prompt's own diff or output-spec template, so a Reviewer's
-        // JSON never parses) and it opens the ATIF trajectory's agent message.
-        // Re-type it so the echo stays auditable without being read as output.
-        const promptEcho =
-          this.config.adapter === 'opencode' &&
-          !textEventSeen &&
-          textContent !== undefined &&
-          isPromptEcho(textContent, request.prompt);
-        if (type === 'text') textEventSeen = true;
-        eventSink({
-          label: request.label,
-          ...event,
-          ...(promptEcho ? { type: 'runtime:prompt_echo' } : {}),
-        });
+        const textDelta =
+          type === 'text_delta'
+            ? (event.payload as { delta?: string } | undefined)?.delta
+            : undefined;
+        eventSink({ label: request.label, ...event });
         if (type === 'init') {
           const payload = event.payload as { model?: string } | undefined;
           if (payload?.model && actualModel === null) actualModel = payload.model;
         } else if (type === 'text') {
-          if (textContent && !promptEcho) textParts.push(textContent);
+          if (textContent) textParts.push(textContent);
+        } else if (type === 'text_delta') {
+          if (textDelta) textParts.push(textDelta);
         } else if (
           type === 'permission_request' &&
           this.config.adapter === 'opencode'
@@ -423,6 +389,7 @@ export class CligentRunner implements AgentRunner {
             status?: string;
             result?: string;
             usage?: {
+              tokenAvailability?: 'reported' | 'unavailable';
               inputTokens?: number;
               outputTokens?: number;
               toolUses?: number;
@@ -433,6 +400,10 @@ export class CligentRunner implements AgentRunner {
           doneResult = payload.result;
           if (payload.usage) {
             usage = {
+              tokenAvailability:
+                payload.usage.tokenAvailability === 'reported'
+                  ? 'reported'
+                  : 'unavailable',
               inputTokens: payload.usage.inputTokens ?? 0,
               outputTokens: payload.usage.outputTokens ?? 0,
               toolUses: payload.usage.toolUses ?? 0,

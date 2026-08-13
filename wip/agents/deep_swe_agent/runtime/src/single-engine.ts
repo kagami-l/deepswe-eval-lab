@@ -57,11 +57,35 @@ export class SingleWorkflowEngine implements CollaborationEngine {
     if (this.actualModel === null && result.actualModel !== null) {
       this.actualModel = result.actualModel;
     }
+    const previousTurns = this.usage.turns;
     this.usage.turns += 1;
     this.usage.wallMs += result.durationMs;
-    if (result.usage === null) return;
-    this.usage.inputTokens += result.usage.inputTokens;
-    this.usage.outputTokens += result.usage.outputTokens;
+    if (result.usage === null) {
+      this.usage.tokenAvailability = 'unavailable';
+      this.usage.inputTokens = null;
+      this.usage.outputTokens = null;
+      return;
+    }
+    if (
+      result.usage.tokenAvailability === 'reported' &&
+      previousTurns === 0
+    ) {
+      this.usage.tokenAvailability = 'reported';
+      this.usage.inputTokens = result.usage.inputTokens;
+      this.usage.outputTokens = result.usage.outputTokens;
+    } else if (
+      result.usage.tokenAvailability === 'reported' &&
+      this.usage.tokenAvailability === 'reported' &&
+      this.usage.inputTokens !== null &&
+      this.usage.outputTokens !== null
+    ) {
+      this.usage.inputTokens += result.usage.inputTokens;
+      this.usage.outputTokens += result.usage.outputTokens;
+    } else {
+      this.usage.tokenAvailability = 'unavailable';
+      this.usage.inputTokens = null;
+      this.usage.outputTokens = null;
+    }
     this.usage.toolUses += result.usage.toolUses;
     if (result.usage.costUsd !== null) {
       this.usage.costUsd = (this.usage.costUsd ?? 0) + result.usage.costUsd;

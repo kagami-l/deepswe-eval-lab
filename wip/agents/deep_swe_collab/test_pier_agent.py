@@ -87,8 +87,8 @@ class InstallSpecTests(unittest.TestCase):
             agent = make_agent(Path(directory))
             spec = agent.install_spec()
             self.assertEqual(spec.agent_name, "deep-swe-collab")
-            self.assertEqual(spec.version, "0.18.0")
-            self.assertIn('"@sublang/cligent": "0.18.0"', spec.steps[1].run)
+            self.assertEqual(spec.version, "0.20.0")
+            self.assertIn('"@sublang/cligent": "0.20.0"', spec.steps[1].run)
             self.assertIn(RUNTIME_DIR, spec.steps[1].run)
             self.assertNotIn("test-openai", json.dumps(spec.model_dump()))
             self.assertEqual(spec.fingerprint(), agent.install_spec().fingerprint())
@@ -124,7 +124,7 @@ class ValidationTests(unittest.TestCase):
     def test_unsafe_versions_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaises(ValueError):
-                make_agent(Path(directory), cligent_version="0.18.0; rm -rf /")
+                make_agent(Path(directory), cligent_version="0.20.0; rm -rf /")
             with self.assertRaises(ValueError):
                 make_agent(Path(directory), kimi_code_version="$(curl evil)")
 
@@ -390,6 +390,7 @@ class ContextTests(unittest.TestCase):
                 "protocolViolations": [],
                 "usage": {
                     "modifier": {
+                        "tokenAvailability": "reported",
                         "inputTokens": 1000,
                         "outputTokens": 400,
                         "toolUses": 12,
@@ -398,6 +399,7 @@ class ContextTests(unittest.TestCase):
                         "wallMs": 60000,
                     },
                     "reviewer": {
+                        "tokenAvailability": "reported",
                         "inputTokens": 600,
                         "outputTokens": 100,
                         "toolUses": 4,
@@ -434,6 +436,25 @@ class ContextTests(unittest.TestCase):
             context = AgentContext()
             agent.populate_context_post_run(context)
             self.assertTrue(context.is_empty())
+
+    def test_unavailable_role_tokens_keep_context_totals_unknown(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            logs_dir = Path(directory)
+            summary = self.make_summary()
+            reviewer = summary["result"]["usage"]["reviewer"]
+            reviewer["tokenAvailability"] = "unavailable"
+            reviewer["inputTokens"] = None
+            reviewer["outputTokens"] = None
+            collab_dir = logs_dir / "collab"
+            collab_dir.mkdir()
+            (collab_dir / "summary.json").write_text(json.dumps(summary))
+
+            context = AgentContext()
+            make_agent(logs_dir).populate_context_post_run(context)
+
+            self.assertIsNone(context.n_input_tokens)
+            self.assertIsNone(context.n_output_tokens)
+            self.assertEqual(context.n_agent_steps, 2)
 
 
 class NetworkTests(unittest.TestCase):

@@ -130,12 +130,33 @@ export class DirectCollaborationEngine implements CollaborationEngine {
       this.actualModels[role] = result.actualModel;
     }
     const bucket: RoleUsage = this.usage[role];
+    const previousTurns = bucket.turns;
     bucket.turns += 1;
     bucket.wallMs += result.durationMs;
     const usage: TurnUsage | null = result.usage;
-    if (!usage) return;
-    bucket.inputTokens += usage.inputTokens;
-    bucket.outputTokens += usage.outputTokens;
+    if (!usage) {
+      bucket.tokenAvailability = 'unavailable';
+      bucket.inputTokens = null;
+      bucket.outputTokens = null;
+      return;
+    }
+    if (usage.tokenAvailability === 'reported' && previousTurns === 0) {
+      bucket.tokenAvailability = 'reported';
+      bucket.inputTokens = usage.inputTokens;
+      bucket.outputTokens = usage.outputTokens;
+    } else if (
+      usage.tokenAvailability === 'reported' &&
+      bucket.tokenAvailability === 'reported' &&
+      bucket.inputTokens !== null &&
+      bucket.outputTokens !== null
+    ) {
+      bucket.inputTokens += usage.inputTokens;
+      bucket.outputTokens += usage.outputTokens;
+    } else {
+      bucket.tokenAvailability = 'unavailable';
+      bucket.inputTokens = null;
+      bucket.outputTokens = null;
+    }
     bucket.toolUses += usage.toolUses;
     if (usage.costUsd !== null) {
       bucket.costUsd = (bucket.costUsd ?? 0) + usage.costUsd;

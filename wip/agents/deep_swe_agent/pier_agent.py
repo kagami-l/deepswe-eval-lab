@@ -591,12 +591,19 @@ class DeepSweAgent(BaseInstalledAgent):
         usage = result.get("usage") if isinstance(result, dict) else None
         if isinstance(usage, dict):
             role_usage = [value for value in usage.values() if isinstance(value, dict)]
-            context.n_input_tokens = sum(
-                int(value.get("inputTokens") or 0) for value in role_usage
-            )
-            context.n_output_tokens = sum(
-                int(value.get("outputTokens") or 0) for value in role_usage
-            )
+            active_role_usage = [
+                value for value in role_usage if int(value.get("turns") or 0) > 0
+            ]
+            if active_role_usage and all(
+                value.get("tokenAvailability") == "reported"
+                for value in active_role_usage
+            ):
+                context.n_input_tokens = sum(
+                    int(value["inputTokens"]) for value in active_role_usage
+                )
+                context.n_output_tokens = sum(
+                    int(value["outputTokens"]) for value in active_role_usage
+                )
             context.n_agent_steps = sum(
                 int(value.get("turns") or 0) for value in role_usage
             )

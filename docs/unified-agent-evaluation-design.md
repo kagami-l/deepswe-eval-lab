@@ -645,8 +645,9 @@ PGID；已停止执行但尚未被 PID 1 回收的 zombie 与仍在运行的 sur
 watchdog 的触发时间、`lastEventAt` 和最后事件字段必须在 timer callback 中一次性冻结；诊断
 期间到达的 terminal event 不得改变错误消息和 timeout 事件中的静默时长。该 timeout 计入
 原有 modifier/reviewer timeout 失败语义，不扩张总预算。诊断与清理失败采用 best-effort
-记录，但不能阻止 abort。此机制是 CLI-005 的调用方保护，不替代 cligent 对 session
-lifecycle、raw SSE 和 terminal event 的正式修复。
+记录，但不能阻止 abort。cligent `0.20.0` 已提供 OpenCode adapter 内部 300 秒 relevant-event
+inactivity deadline、session status 恢复和有界清理；此处 600 秒 watchdog 继续作为跨 adapter、
+runner 与进程树的第二层保护，并保留 DeepSWE 级诊断材料。
 
 ## 14. Git、checkpoint 与交付
 

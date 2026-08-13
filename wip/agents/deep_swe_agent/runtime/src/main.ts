@@ -217,8 +217,9 @@ function emptyFailure(error: unknown): CollaborationResult {
     protocolViolations: [],
     usage: {
       modifier: {
-        inputTokens: 0,
-        outputTokens: 0,
+        tokenAvailability: 'unavailable',
+        inputTokens: null,
+        outputTokens: null,
         toolUses: 0,
         costUsd: null,
         turns: 0,

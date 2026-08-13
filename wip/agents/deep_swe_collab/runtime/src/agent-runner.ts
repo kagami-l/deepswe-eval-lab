@@ -21,6 +21,7 @@ export interface TurnRequest {
 }
 
 export interface TurnUsage {
+  tokenAvailability: 'reported' | 'unavailable';
   inputTokens: number;
   outputTokens: number;
   toolUses: number;
@@ -153,6 +154,9 @@ export class CligentRunner implements AgentRunner {
         } else if (type === 'text') {
           const payload = event.payload as { content?: string } | undefined;
           if (payload?.content) textParts.push(payload.content);
+        } else if (type === 'text_delta') {
+          const payload = event.payload as { delta?: string } | undefined;
+          if (payload?.delta) textParts.push(payload.delta);
         } else if (type === 'error') {
           const payload = event.payload as { message?: string } | undefined;
           errorMessage = payload?.message ?? 'unknown adapter error';
@@ -161,6 +165,7 @@ export class CligentRunner implements AgentRunner {
             status?: string;
             result?: string;
             usage?: {
+              tokenAvailability?: 'reported' | 'unavailable';
               inputTokens?: number;
               outputTokens?: number;
               toolUses?: number;
@@ -171,6 +176,10 @@ export class CligentRunner implements AgentRunner {
           doneResult = payload.result;
           if (payload.usage) {
             usage = {
+              tokenAvailability:
+                payload.usage.tokenAvailability === 'reported'
+                  ? 'reported'
+                  : 'unavailable',
               inputTokens: payload.usage.inputTokens ?? 0,
               outputTokens: payload.usage.outputTokens ?? 0,
               toolUses: payload.usage.toolUses ?? 0,

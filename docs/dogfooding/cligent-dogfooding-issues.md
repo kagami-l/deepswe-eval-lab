@@ -12,11 +12,11 @@
 |---|---|---|---|---|---|
 | CLI-001 | OpenCode 工具事件丢失参数和结果，并重复计数 | OpenCode adapter | High | Released | 2026-08-03 |
 | CLI-002 | Codex 命令执行和 MCP 调用未转换成工具事件 | Codex adapter | High | Released | 2026-08-03 |
-| CLI-003 | Kimi 未提供 token usage 时被报告为真实零值 | Kimi adapter / usage schema | Medium | Open | 2026-08-03 |
-| CLI-004 | OpenCode auto 权限遗漏 external_directory，导致 headless run 无限等待 | OpenCode adapter / permissions | Critical | Open | 2026-08-04 |
-| CLI-005 | OpenCode 工具事件后不再产生 terminal event，adapter 无限等待 SSE | OpenCode adapter / lifecycle | Critical | Open | 2026-08-04 |
-| CLI-006 | OpenCode 把用户 prompt 回放成 assistant `text` 事件，调用方无法与模型输出区分 | OpenCode adapter / message role | High | Open | 2026-08-06 |
-| CLI-007 | OpenCode reasoning 增量被标记为 `text_delta`，与 `thinking` 重复且无类型判别 | OpenCode adapter / 事件语义 | Medium | Open | 2026-08-06 |
+| CLI-003 | Kimi 未提供 token usage 时被报告为真实零值 | Kimi adapter / usage schema | Medium | Released | 2026-08-03 |
+| CLI-004 | OpenCode auto 权限遗漏 external_directory，导致 headless run 无限等待 | OpenCode adapter / permissions | Critical | Released | 2026-08-04 |
+| CLI-005 | OpenCode 工具事件后不再产生 terminal event，adapter 无限等待 SSE | OpenCode adapter / lifecycle | Critical | Released | 2026-08-04 |
+| CLI-006 | OpenCode 把用户 prompt 回放成 assistant `text` 事件，调用方无法与模型输出区分 | OpenCode adapter / message role | High | Released | 2026-08-06 |
+| CLI-007 | OpenCode reasoning 增量被标记为 `text_delta`，与 `thinking` 重复且无类型判别 | OpenCode adapter / 事件语义 | Medium | Released | 2026-08-06 |
 
 ## 状态约定
 
@@ -345,7 +345,7 @@ ThreadItem 类型补齐 fixture，并增加一次真实运行验收。
   - Kimi Code CLI `0.30.0`
   - 模型 `kimi-code/k3`
 - 严重程度：`Medium`
-- 状态：`Open`
+- 状态：`Released`（cligent `0.20.0`，等待真实运行验收）
 - 证据目录：[`CLI-003-kimi-unknown-token-usage/`](./CLI-003-kimi-unknown-token-usage/)
 
 ### 现象
@@ -429,7 +429,7 @@ if (!usage) return { inputTokens: 0, outputTokens: 0, toolUses }
   - OpenCode CLI `1.18.10`
   - `@opencode-ai/sdk` `1.18.10`
 - 严重程度：`Critical`
-- 状态：`Open`
+- 状态：`Released`（cligent `0.20.0`，等待真实运行验收）
 - 证据目录：[`CLI-004-opencode-auto-permission-hang/`](./CLI-004-opencode-auto-permission-hang/)
 
 ### 背景与期望
@@ -545,16 +545,16 @@ Cligent run 接口也没有提供一个正在等待本次请求的交互回调�
 - 权限 request/reply 可观测且与正确 session/request ID 关联。
 - 真实并发运行不再停在 `permission_request` 直到外层 timeout。
 
-### 调用方临时缓解
+### 调用方临时缓解（cligent 0.18.0 历史方案）
 
 在 cligent 发布正式修复前，dogfooding 调用方可以对 `0.16.0` 使用严格版本限定的 runtime
 兼容补丁：为 OpenCode auto policy 和 v2 ruleset 增加 `external_directory=allow`。同时，
 OpenCode headless runner 收到任何残留 `permission_request` 时应中止当前 turn 并快速失败，
 不能继续等待交互；其他 adapter 保留各自原生的 request/reply 或自动拒绝语义。
 
-该措施只用于恢复评测可运行性，不改变本 issue 的 `Open` 状态，也不能替代 cligent 对
-全局 auto 权限语义、未知权限和 request/reply 生命周期的正式修复。升级 cligent 后应先
-移除兼容补丁，再按本节验收标准回归。
+升级到 cligent `0.20.0` 后已移除该二进制兼容补丁和对应的旧映射测试。调用方仍对残留
+`permission_request` 快速失败，作为非 auto 或异常路径的第二层保护；正常 auto 审计事件为
+`opencode:permission_decision`。issue 进入 `Released`，待真实任务 smoke 验收。
 
 ### 相关源码
 
@@ -574,7 +574,7 @@ OpenCode headless runner 收到任何残留 `permission_request` 时应中止当
   - OpenCode CLI `1.18.10`
   - `@opencode-ai/sdk` `1.18.10`
 - 严重程度：`Critical`
-- 状态：`Open`
+- 状态：`Released`（cligent `0.20.0`，等待真实运行验收）
 - 证据目录：[`CLI-005-opencode-session-silence/`](./CLI-005-opencode-session-silence/)
 
 ### 背景与期望
@@ -653,7 +653,8 @@ deadline，也不会主动查询 session 状态，因此会永久等待。现有
 在 cligent 发布正式修复前，调用方可在统一事件流外增加 watchdog：连续 600 秒没有任何
 Agent event 时，先保存进程、Git working tree 和最后事件快照，再触发 `AbortSignal`。该措施
 能限制并发槽损失并保留诊断材料，但不能确定或修复 OpenCode 内部 session 停滞的根因，
-因此本 issue 保持 `Open`。
+升级到 cligent `0.20.0` 后仍保留该外层 watchdog 作为第二层诊断与进程清理保护；issue
+进入 `Released`，待真实任务 smoke 验证上游 300 秒 inactivity 恢复路径。
 
 ---
 
@@ -668,7 +669,7 @@ Agent event 时，先保存进程、Git working tree 和最后事件快照，再
   - `@opencode-ai/sdk` `1.18.13`
   - 模型 `deepseek/deepseek-v4-flash`
 - 严重程度：`High`
-- 状态：`Open`
+- 状态：`Released`（cligent `0.20.0`，等待真实运行验收）
 - 证据目录：[`CLI-006-opencode-prompt-echo/`](./CLI-006-opencode-prompt-echo/)
 
 ### 背景与期望
@@ -760,7 +761,8 @@ SDK 的 `EventMessagePartUpdated` 实际只有 `properties.part` 和可选 `delt
 并限制 adapter 和事件位置，避免误伤其他 adapter 或后续真实输出。
 
 该措施依赖"回放内容与提交内容逐字节相同"这一当前观察到的行为，不能替代 adapter 按
-role 判别的正式修复，因此本 issue 保持 `Open`。
+升级到 cligent `0.20.0` 后已删除该内容匹配缓解，直接采用上游的 message role 判别；
+issue 进入 `Released`，待真实任务 smoke 验收。
 
 ### 相关源码
 
@@ -780,7 +782,7 @@ role 判别的正式修复，因此本 issue 保持 `Open`。
   - `@opencode-ai/sdk` `1.18.13`
   - 模型 `deepseek/deepseek-v4-flash`
 - 严重程度：`Medium`
-- 状态：`Open`
+- 状态：`Released`（cligent `0.20.0`，等待真实运行验收）
 - 证据目录：[`CLI-007-opencode-reasoning-deltas/`](./CLI-007-opencode-reasoning-deltas/)
 
 ### 背景与期望
@@ -874,8 +876,8 @@ cligent `0.18.0` 的 OpenCode adapter 有两条独立的增量路径：
 0.8%）。Claude、Kimi 等其他 adapter 的 `text_delta` 必须保留；内存事件流也不应过滤，
 以免影响 inactivity watchdog。
 
-该措施只解决调用方侧的体积与 trajectory 污染，不改变 adapter 的事件语义问题，因此本
-issue 保持 `Open`。
+升级到 cligent `0.20.0` 后已删除该过滤：OpenCode `text_delta` 现在只承载 assistant 输出，
+必须落盘并与 `text` 按事件顺序合并。issue 进入 `Released`，待真实任务 smoke 验收。
 
 ### 相关源码
 

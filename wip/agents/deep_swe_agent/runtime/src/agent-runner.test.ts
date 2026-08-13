@@ -111,17 +111,11 @@ test('permission observability events from other adapters keep their native flow
   assert.equal(abortSignal?.aborted, false);
 });
 
-test('a replayed prompt is re-typed and kept out of the final text', async () => {
-  const prompt = 'Review this change.\n\nRespond with ONLY a JSON object:\n{\n  "verdict": "approve" | "revise"\n}';
+test('OpenCode assistant output equal to the prompt is preserved', async () => {
+  const prompt = 'repeat this exactly';
   const fakeCligent = {
     async *run(): AsyncGenerator<Record<string, unknown>> {
-      // OpenCode replays the submitted prompt as the session's first text part.
-      yield { type: 'text', payload: { content: `${prompt}\n` } };
-      yield { type: 'text', payload: { content: 'Checked the diff.' } };
-      yield {
-        type: 'text',
-        payload: { content: '{"verdict":"revise","findings":[]}' },
-      };
+      yield { type: 'text', payload: { content: prompt } };
       yield { type: 'done', payload: { status: 'success' } };
     },
   };
@@ -148,23 +142,16 @@ test('a replayed prompt is re-typed and kept out of the final text', async () =>
   );
 
   assert.equal(result.ok, true);
-  assert.equal(
-    result.finalText,
-    'Checked the diff.{"verdict":"revise","findings":[]}',
-  );
-  // The echo stays in the stream for auditing, under a non-output type.
-  assert.equal(
-    events.filter((event) => event.type === 'runtime:prompt_echo').length,
-    1,
-  );
-  assert.equal(events.filter((event) => event.type === 'text').length, 2);
+  assert.equal(result.finalText, prompt);
+  assert.equal(events.filter((event) => event.type === 'text').length, 1);
 });
 
-test('later OpenCode output that equals the prompt is preserved', async () => {
+test('text and text_delta reconstruct final output in event order', async () => {
   const fakeCligent = {
     async *run(): AsyncGenerator<Record<string, unknown>> {
-      yield { type: 'text', payload: { content: 'review this change, done' } };
-      yield { type: 'text', payload: { content: 'review this change' } };
+      yield { type: 'text_delta', payload: { delta: 'Checked ' } };
+      yield { type: 'text_delta', payload: { delta: 'the diff.' } };
+      yield { type: 'text', payload: { content: ' Approved.' } };
       yield { type: 'done', payload: { status: 'success' } };
     },
   };
@@ -189,10 +176,7 @@ test('later OpenCode output that equals the prompt is preserved', async () => {
     () => {},
   );
 
-  assert.equal(
-    result.finalText,
-    'review this change, donereview this change',
-  );
+  assert.equal(result.finalText, 'Checked the diff. Approved.');
 });
 
 test('non-OpenCode output that equals the prompt is preserved', async () => {
@@ -225,14 +209,10 @@ test('non-OpenCode output that equals the prompt is preserved', async () => {
   );
 
   assert.equal(result.finalText, 'repeat this exactly');
-  assert.equal(
-    events.filter((event) => event.type === 'runtime:prompt_echo').length,
-    0,
-  );
   assert.equal(events.filter((event) => event.type === 'text').length, 1);
 });
 
-test('the event file sink drops only OpenCode token deltas', async (t) => {
+test('the event file sink preserves OpenCode output deltas', async (t) => {
   const tempDir = await mkdtemp(join(tmpdir(), 'deep-swe-sink-'));
   t.after(() => rm(tempDir, { recursive: true, force: true }));
   const roundEvents = join(tempDir, 'round.jsonl');
@@ -256,17 +236,62 @@ test('the event file sink drops only OpenCode token deltas', async (t) => {
       .map((line) => JSON.parse(line) as Record<string, unknown>);
     assert.deepEqual(
       written.map((event) => event.type),
-      ['thinking', 'text_delta', 'text'],
+      ['text_delta', 'thinking', 'text_delta', 'text_delta', 'text'],
     );
-    assert.equal(
-      (
-        written.find((event) => event.type === 'text_delta')?.payload as {
-          delta?: string;
-        }
-      ).delta,
-      'Kept.',
+    assert.deepEqual(
+      written
+        .filter((event) => event.type === 'text_delta')
+        .map((event) => (event.payload as { delta?: string }).delta),
+      ['Let', ' me', 'Kept.'],
     );
   }
+});
+
+test('done usage preserves the token availability discriminator', async () => {
+  const fakeCligent = {
+    async *run(): AsyncGenerator<Record<string, unknown>> {
+      yield {
+        type: 'done',
+        payload: {
+          status: 'success',
+          usage: {
+            tokenAvailability: 'unavailable',
+            inputTokens: 0,
+            outputTokens: 0,
+            toolUses: 7,
+          },
+        },
+      };
+    },
+  };
+  const runner = new CligentRunner('modifier', {
+    adapter: 'kimi',
+    model: 'kimi-code/k3',
+    permissions: 'auto',
+  });
+  Object.assign(runner, { cligent: fakeCligent });
+
+  const result = await runner.runTurn(
+    {
+      prompt: 'test',
+      cwd: '/app',
+      resumeSession: false,
+      timeoutMs: 1000,
+      wallClockTimeoutKind: 'total_deadline',
+      inactivityTimeoutMs: 1000,
+      diagnosticDir: '/tmp/unused-diagnostics',
+      label: 'modify-a1',
+    },
+    () => {},
+  );
+
+  assert.deepEqual(result.usage, {
+    tokenAvailability: 'unavailable',
+    inputTokens: 0,
+    outputTokens: 0,
+    toolUses: 7,
+    costUsd: null,
+  });
 });
 
 test('event silence captures diagnostics before aborting the turn', async (t) => {

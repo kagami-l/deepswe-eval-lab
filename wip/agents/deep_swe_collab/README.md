@@ -145,7 +145,7 @@ CODEX_FORCE_AUTH_JSON=1 KIMI_FORCE_AUTH_HOME=1 pier run \
 | `total_timeout_seconds` | 5100 | 协作总 deadline（任务 5400s 内留余量） |
 | `strict` | false | degraded 不交付、trial 失败（设计文档 §13） |
 | `keep_workspaces` | false | 保留 review 拷贝目录便于调试 |
-| `cligent_version` | 0.18.0 | npm 锁定版本 |
+| `cligent_version` | 0.20.0 | npm 锁定版本 |
 | `kimi_code_version` | 0.31.1 | 仅当某角色为 kimi 时安装 `@moonshot-ai/kimi-code` |
 
 ## 产物（`/logs/agent/collab/`）

@@ -46,6 +46,8 @@ mini-swe 入口保留为旧基线/历史参考，不迁移到统一 runtime。
 trial 级明细、分布统计（mean/median/p90/min/max）、通过与失败 trial 的均值对比,
 以及 Pier job 级混合口径参照。数据源是各 trial `summary.json` 的 `result.usage`
 （唯一分角色可信来源）；兼容 single/collab 拓扑,容忍缺 usage 的 trial（列入 skipped）。
+只有 `tokenAvailability=reported` 的 token 才进入总量和成本；unavailable 或旧版缺少判别字段
+的 token 保持 unknown，`toolUses`、turns 和 wall time 仍独立汇总。
 
 ```bash
 # 在 wip/ 目录下执行
@@ -54,7 +56,7 @@ uv run python scripts/token_usage.py ../jobs/<job-name> --json   # 机器格式
 ```
 
 口径注意：input tokens 跨 adapter 语义不同,只宜同模型纵向对比；登录订阅制 adapter
-的 cost 为 null；中断 attempt 计 0。所有记录层（summary usage、events.jsonl、pier
+的 cost 为 null；缺失或中断的 token accounting 记为 unavailable，而不是 0。所有记录层（summary usage、events.jsonl、pier
 `n_cache_tokens`）都**不区分 cached / uncached**,cligent 落盘前已拍平。按量级推断
 （2026-08 记录）：codex 与 claude 的 inputTokens **含** cache 读取（逐次调用全上下文
 累计口径）,opencode/deepseek **不含** cache 命中（miss-only,数字小约两个数量级）;

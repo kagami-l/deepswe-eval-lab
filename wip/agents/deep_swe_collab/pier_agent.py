@@ -88,7 +88,7 @@ def _validated_version(name: str, value: Any) -> str:
 class DeepSweCollabAgent(BaseInstalledAgent):
     """Run the modify → review → revise collaboration as one Pier agent."""
 
-    DEFAULT_CLIGENT_VERSION = "0.18.0"
+    DEFAULT_CLIGENT_VERSION = "0.20.0"
     DEFAULT_KIMI_CODE_VERSION = "0.31.1"
     # cligent's own tested SDK versions (its devDependencies).
     CLAUDE_SDK_VERSION = "0.3.220"
@@ -585,12 +585,22 @@ npm cache clean --force
         usage = result.get("usage")
         roles = ("modifier", "reviewer")
         if isinstance(usage, dict):
+            role_usage = [
+                usage.get(role)
+                for role in roles
+                if isinstance(usage.get(role), dict)
+                and int(usage.get(role, {}).get("turns") or 0) > 0
+            ]
 
             def total(field: str) -> int:
                 return sum(int(usage.get(role, {}).get(field) or 0) for role in roles)
 
-            context.n_input_tokens = total("inputTokens")
-            context.n_output_tokens = total("outputTokens")
+            if role_usage and all(
+                value.get("tokenAvailability") == "reported"
+                for value in role_usage
+            ):
+                context.n_input_tokens = total("inputTokens")
+                context.n_output_tokens = total("outputTokens")
             context.n_agent_steps = total("turns")
             costs = [
                 usage.get(role, {}).get("costUsd")

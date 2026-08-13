@@ -7,6 +7,8 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
+from pier.models.agent.context import AgentContext
+
 from wip.agents.deep_swe_agent.atif import events_to_trajectory
 from wip.agents.deep_swe_agent.pier_agent import DeepSweAgent, ExecutionPlanError
 
@@ -330,7 +332,12 @@ class PierAgentTests(unittest.IsolatedAsyncioTestCase):
                 "payload": {
                     "status": "success",
                     "result": "fixed",
-                    "usage": {"inputTokens": 10, "outputTokens": 5, "toolUses": 1},
+                    "usage": {
+                        "tokenAvailability": "reported",
+                        "inputTokens": 10,
+                        "outputTokens": 5,
+                        "toolUses": 1,
+                    },
                 },
             },
             {
@@ -341,7 +348,12 @@ class PierAgentTests(unittest.IsolatedAsyncioTestCase):
                 "payload": {
                     "status": "success",
                     "result": "approved",
-                    "usage": {"inputTokens": 7, "outputTokens": 2, "toolUses": 0},
+                    "usage": {
+                        "tokenAvailability": "reported",
+                        "inputTokens": 7,
+                        "outputTokens": 2,
+                        "toolUses": 0,
+                    },
                 },
             },
         ]
@@ -357,6 +369,119 @@ class PierAgentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(trajectory.steps[1].extra["role"], "modifier")
         self.assertEqual(trajectory.steps[2].extra["role"], "reviewer")
         self.assertEqual(trajectory.final_metrics.total_prompt_tokens, 17)
+        self.assertEqual(
+            trajectory.final_metrics.extra["token_availability"], "reported"
+        )
+
+    def test_atif_keeps_unavailable_tokens_unknown(self) -> None:
+        trajectory = events_to_trajectory(
+            events=[
+                {
+                    "label": "modify-a1",
+                    "type": "done",
+                    "agent": "kimi",
+                    "sessionId": "modifier-session",
+                    "payload": {
+                        "status": "success",
+                        "result": "fixed",
+                        "usage": {
+                            "tokenAvailability": "unavailable",
+                            "inputTokens": 0,
+                            "outputTokens": 0,
+                            "toolUses": 7,
+                        },
+                    },
+                }
+            ],
+            instruction="fix it",
+            summary=None,
+            agent_version="test",
+        )
+
+        self.assertIsNotNone(trajectory)
+        assert trajectory is not None
+        metrics = trajectory.steps[1].metrics
+        self.assertIsNotNone(metrics)
+        assert metrics is not None
+        self.assertIsNone(metrics.prompt_tokens)
+        self.assertIsNone(metrics.completion_tokens)
+        self.assertEqual(metrics.extra["tool_uses"], 7)
+        self.assertEqual(metrics.extra["token_availability"], "unavailable")
+        self.assertIsNone(trajectory.final_metrics.total_prompt_tokens)
+        self.assertIsNone(trajectory.final_metrics.total_completion_tokens)
+        self.assertEqual(
+            trajectory.final_metrics.extra["token_availability"], "unavailable"
+        )
+
+    def test_context_keeps_unavailable_summary_tokens_unknown(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            logs_dir = Path(directory)
+            system = logs_dir / "system"
+            system.mkdir()
+            (system / "summary.json").write_text(
+                json.dumps(
+                    {
+                        "result": {
+                            "usage": {
+                                "modifier": {
+                                    "tokenAvailability": "unavailable",
+                                    "inputTokens": None,
+                                    "outputTokens": None,
+                                    "toolUses": 7,
+                                    "costUsd": None,
+                                    "turns": 1,
+                                }
+                            }
+                        }
+                    }
+                )
+            )
+
+            context = AgentContext()
+            agent(logs_dir, plan(modifier="kimi")).populate_context_post_run(context)
+
+            self.assertIsNone(context.n_input_tokens)
+            self.assertIsNone(context.n_output_tokens)
+            self.assertEqual(context.n_agent_steps, 1)
+
+    def test_context_ignores_an_unrun_role_when_aggregating_tokens(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            logs_dir = Path(directory)
+            system = logs_dir / "system"
+            system.mkdir()
+            (system / "summary.json").write_text(
+                json.dumps(
+                    {
+                        "result": {
+                            "usage": {
+                                "modifier": {
+                                    "tokenAvailability": "reported",
+                                    "inputTokens": 10,
+                                    "outputTokens": 5,
+                                    "toolUses": 1,
+                                    "costUsd": None,
+                                    "turns": 1,
+                                },
+                                "reviewer": {
+                                    "tokenAvailability": "unavailable",
+                                    "inputTokens": None,
+                                    "outputTokens": None,
+                                    "toolUses": 0,
+                                    "costUsd": None,
+                                    "turns": 0,
+                                },
+                            }
+                        }
+                    }
+                )
+            )
+
+            context = AgentContext()
+            agent(logs_dir, plan()).populate_context_post_run(context)
+
+            self.assertEqual(context.n_input_tokens, 10)
+            self.assertEqual(context.n_output_tokens, 5)
+            self.assertEqual(context.n_agent_steps, 1)
 
 
 if __name__ == "__main__":

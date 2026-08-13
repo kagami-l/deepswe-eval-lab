@@ -126,15 +126,31 @@ def _turns(events: list[dict[str, Any]]) -> list[_Turn]:
                 turn.text.append(payload["result"])
             usage = payload.get("usage")
             if isinstance(usage, dict):
+                token_availability = (
+                    "reported"
+                    if usage.get("tokenAvailability") == "reported"
+                    else "unavailable"
+                )
                 turn.metrics = Metrics(
-                    prompt_tokens=int(usage.get("inputTokens") or 0),
-                    completion_tokens=int(usage.get("outputTokens") or 0),
+                    prompt_tokens=(
+                        int(usage.get("inputTokens") or 0)
+                        if token_availability == "reported"
+                        else None
+                    ),
+                    completion_tokens=(
+                        int(usage.get("outputTokens") or 0)
+                        if token_availability == "reported"
+                        else None
+                    ),
                     cost_usd=(
                         float(usage["totalCostUsd"])
                         if usage.get("totalCostUsd") is not None
                         else None
                     ),
-                    extra={"tool_uses": int(usage.get("toolUses") or 0)},
+                    extra={
+                        "token_availability": token_availability,
+                        "tool_uses": int(usage.get("toolUses") or 0),
+                    },
                 )
     return ordered
 
@@ -180,11 +196,26 @@ def events_to_trajectory(
         )
 
     agent_steps = [step for step in steps if step.source == "agent"]
-    prompt_tokens = sum(
-        step.metrics.prompt_tokens or 0 for step in agent_steps if step.metrics
+    token_availability = (
+        "reported"
+        if agent_steps
+        and all(
+            step.metrics is not None
+            and isinstance(step.metrics.extra, dict)
+            and step.metrics.extra.get("token_availability") == "reported"
+            for step in agent_steps
+        )
+        else "unavailable"
     )
-    completion_tokens = sum(
-        step.metrics.completion_tokens or 0 for step in agent_steps if step.metrics
+    prompt_tokens = (
+        sum(step.metrics.prompt_tokens or 0 for step in agent_steps if step.metrics)
+        if token_availability == "reported"
+        else None
+    )
+    completion_tokens = (
+        sum(step.metrics.completion_tokens or 0 for step in agent_steps if step.metrics)
+        if token_availability == "reported"
+        else None
     )
     costs = [
         step.metrics.cost_usd
@@ -212,6 +243,7 @@ def events_to_trajectory(
             total_completion_tokens=completion_tokens,
             total_cost_usd=sum(costs) if costs else None,
             total_steps=len(agent_steps),
+            extra={"token_availability": token_availability},
         ),
         extra={
             "workflow": summary.get("workflow") if isinstance(summary, dict) else None,

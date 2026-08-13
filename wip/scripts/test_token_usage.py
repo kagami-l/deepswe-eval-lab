@@ -67,8 +67,9 @@ class TokenUsageCostTest(unittest.TestCase):
     @staticmethod
     def _usage(
         input_tokens: int, output_tokens: int, *, cache_tokens: int | None = None
-    ) -> dict[str, int]:
+    ) -> dict[str, object]:
         usage = {
+            "tokenAvailability": "reported",
             "inputTokens": input_tokens,
             "outputTokens": output_tokens,
             "toolUses": 1,
@@ -85,7 +86,7 @@ class TokenUsageCostTest(unittest.TestCase):
         name: str,
         *,
         reward: int,
-        usage: dict[str, dict[str, int]],
+        usage: dict[str, dict[str, object]],
     ) -> None:
         trial_dir = job_dir / name
         _write_json(
@@ -149,6 +150,73 @@ class TokenUsageCostTest(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "invalid model pricing file"):
                 token_usage.build_report(job_dir, pricing_path)
+
+    def test_unavailable_tokens_remain_unknown_but_tool_uses_are_counted(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            job_dir = self._job(Path(temp_dir))
+            unavailable = self._usage(0, 0)
+            unavailable.update(
+                {
+                    "tokenAvailability": "unavailable",
+                    "inputTokens": None,
+                    "outputTokens": None,
+                    "toolUses": 7,
+                }
+            )
+            self._trial(
+                job_dir,
+                "trial-c",
+                reward=0,
+                usage={"planner": unavailable},
+            )
+            report = token_usage.build_report(job_dir)
+
+        planner = report["totals"]["planner"]
+        self.assertEqual(planner["tokenAvailability"], "unavailable")
+        self.assertIsNone(planner["inputTokens"])
+        self.assertIsNone(planner["outputTokens"])
+        self.assertEqual(planner["reportedInputTokens"], 1_500_000)
+        self.assertEqual(planner["toolUses"], 9)
+        self.assertEqual(planner["reportedTokenTrials"], 2)
+        self.assertEqual(planner["unavailableTokenTrials"], 1)
+        self.assertNotIn("planner", report["costs"])
+        self.assertNotIn("planner", report["pricing"]["unpricedRoles"])
+        self.assertIn("planner", report["pricing"]["unavailableTokenRoles"])
+        self.assertEqual(report["stats"]["planner"]["inputTokens"]["mean"], 750_000)
+
+    def test_legacy_usage_without_discriminator_is_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            job_dir = self._job(Path(temp_dir))
+            legacy = self._usage(123, 45)
+            del legacy["tokenAvailability"]
+            self._trial(
+                job_dir,
+                "trial-c",
+                reward=0,
+                usage={"planner": legacy},
+            )
+            report = token_usage.build_report(job_dir)
+
+        row = next(row for row in report["trials"] if row["trial"] == "trial-c")
+        self.assertEqual(row["usage"]["planner"]["tokenAvailability"], "unavailable")
+        self.assertIsNone(row["usage"]["planner"]["inputTokens"])
+
+    def test_reported_usage_without_token_numbers_is_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            job_dir = self._job(Path(temp_dir))
+            malformed = self._usage(123, 45)
+            malformed["inputTokens"] = None
+            self._trial(
+                job_dir,
+                "trial-c",
+                reward=0,
+                usage={"planner": malformed},
+            )
+            report = token_usage.build_report(job_dir)
+
+        row = next(row for row in report["trials"] if row["trial"] == "trial-c")
+        self.assertEqual(row["usage"]["planner"]["tokenAvailability"], "unavailable")
+        self.assertIsNone(row["usage"]["planner"]["inputTokens"])
 
 
 if __name__ == "__main__":
