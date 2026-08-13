@@ -27,6 +27,13 @@
 
 confirm 隔离在本次同样触发：`clack-async-autocomplete-options` 在两组配对里都是 opus 强 A 档（4/4 vs 0/4），但属于 `05_sample_confirm`，为避免污染 confirm 组的未接触状态被排除，不列入替补。
 
+> **2026-08-13 决策更新**：自 candidates 扫描 job
+> `collab-codex-claude-complementary-opus-sol-xhigh-candidates-18-tasks-20260813-215326`
+> 起，机制探索线**不再刻意回避 confirm 任务**（本轮目标是尽量扩大互补任务池,
+> `clack` 已随 18 题候选清单进入 collab 机制实验）。含义：`05_sample_confirm` 对
+> collab/机制类实验的"未接触"隔离自该 job 起失效；confirm 组在主线 harness 对比中的
+> 用途不受影响,但引用其结果时应注明该组任务曾进入机制调试线。
+
 ## 推荐子集一：opus-high vs sol-xhigh（10 题）
 
 | # | 任务 | 方向 | 档 | opus high | sol xhigh | opus 家族 | sol 家族 | 语言 | 标记 |
