@@ -1,0 +1,40 @@
+{
+  "issue": "CLI-008",
+  "observedAt": "2026-08-13",
+  "cligentVersion": "0.20.0",
+  "claudeAgentSdkVersion": "0.3.220",
+  "cases": [
+    {
+      "job": "claude-one_task-abs-module-cache-flags-20260813-123541",
+      "trial": "abs-module-cache-flags__TH8K3A6",
+      "role": "modifier",
+      "turns": 1,
+      "initEvents": 356,
+      "initEventsWithTools": 1,
+      "initEventsWithEmptyTools": 355,
+      "terminalStatus": "success",
+      "reward": 1
+    },
+    {
+      "job": "collab-codex-claude-one_task-abs-module-cache-flags-20260813-123649",
+      "trial": "abs-module-cache-flags__gaigege",
+      "role": "reviewer",
+      "turns": 1,
+      "initEvents": 202,
+      "initEventsWithTools": 1,
+      "initEventsWithEmptyTools": 201,
+      "terminalStatus": "success",
+      "reward": 1
+    }
+  ],
+  "minimalReplay": {
+    "sdkMessages": [
+      "system/init",
+      "system/status",
+      "system/hook_progress",
+      "result/success"
+    ],
+    "expectedInitEvents": 1,
+    "actualInitEvents": 3
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "verifiedAt": "2026-08-13",
+  "cligentVersion": "0.20.0",
+  "job": "kimi-one_task-abs-module-cache-flags-20260813-145951",
+  "trial": "abs-module-cache-flags__nwZetQu",
+  "adapter": "kimi",
+  "model": "kimi-code/k3",
+  "outcome": "completed",
+  "deliverable": true,
+  "turns": 1,
+  "terminalUsage": {
+    "tokenAvailability": "unavailable",
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "toolUses": 45
+  },
+  "summaryUsage": {
+    "tokenAvailability": "unavailable",
+    "inputTokens": null,
+    "outputTokens": null,
+    "toolUses": 45
+  },
+  "atifFinalMetrics": {
+    "totalPromptTokens": null,
+    "totalCompletionTokens": null,
+    "tokenAvailability": "unavailable"
+  },
+  "toolEvents": {
+    "uses": 45,
+    "uniqueUses": 45,
+    "results": 45,
+    "uniqueResults": 45,
+    "usesWithoutResult": 0,
+    "resultsWithoutUse": 0
+  },
+  "verifier": {
+    "reward": 1,
+    "tests": 23,
+    "passed": 23,
+    "failed": 0
+  }
+}

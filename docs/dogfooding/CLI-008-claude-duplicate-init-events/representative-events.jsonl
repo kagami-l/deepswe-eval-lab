@@ -1,0 +1,3 @@
+{"label":"modify-a1","type":"init","agent":"claude-code","payload":{"model":"claude-sonnet-5","cwd":"/app","tools":["Bash","Edit","Read","Write"]},"note":"representative real initialization; tool list shortened"}
+{"label":"modify-a1","type":"init","agent":"claude-code","payload":{"model":"claude-sonnet-5","cwd":"/app","tools":[]},"note":"representative duplicate emitted for a non-init SDK system message"}
+{"label":"review-1-a1","type":"init","agent":"claude-code","payload":{"model":"claude-sonnet-5","cwd":"/tmp/deep-swe-agent-work/review-1-a1","tools":[]},"note":"same symptom in an independent collaboration reviewer turn"}

@@ -10,13 +10,14 @@
 
 | ID | 标题 | 组件 | 严重程度 | 状态 | 首次发现 |
 |---|---|---|---|---|---|
-| CLI-001 | OpenCode 工具事件丢失参数和结果，并重复计数 | OpenCode adapter | High | Released | 2026-08-03 |
+| CLI-001 | OpenCode 工具事件丢失参数和结果，并重复计数 | OpenCode adapter | High | Verified | 2026-08-03 |
 | CLI-002 | Codex 命令执行和 MCP 调用未转换成工具事件 | Codex adapter | High | Released | 2026-08-03 |
-| CLI-003 | Kimi 未提供 token usage 时被报告为真实零值 | Kimi adapter / usage schema | Medium | Released | 2026-08-03 |
-| CLI-004 | OpenCode auto 权限遗漏 external_directory，导致 headless run 无限等待 | OpenCode adapter / permissions | Critical | Released | 2026-08-04 |
-| CLI-005 | OpenCode 工具事件后不再产生 terminal event，adapter 无限等待 SSE | OpenCode adapter / lifecycle | Critical | Released | 2026-08-04 |
-| CLI-006 | OpenCode 把用户 prompt 回放成 assistant `text` 事件，调用方无法与模型输出区分 | OpenCode adapter / message role | High | Released | 2026-08-06 |
-| CLI-007 | OpenCode reasoning 增量被标记为 `text_delta`，与 `thinking` 重复且无类型判别 | OpenCode adapter / 事件语义 | Medium | Released | 2026-08-06 |
+| CLI-003 | Kimi 未提供 token usage 时被报告为真实零值 | Kimi adapter / usage schema | Medium | Verified | 2026-08-03 |
+| CLI-004 | OpenCode auto 权限遗漏 external_directory，导致 headless run 无限等待 | OpenCode adapter / permissions | Critical | Verified | 2026-08-04 |
+| CLI-005 | OpenCode 工具事件后不再产生 terminal event，adapter 无限等待 SSE | OpenCode adapter / lifecycle | Critical | Verified | 2026-08-04 |
+| CLI-006 | OpenCode 把用户 prompt 回放成 assistant `text` 事件，调用方无法与模型输出区分 | OpenCode adapter / message role | High | Verified | 2026-08-06 |
+| CLI-007 | OpenCode reasoning 增量被标记为 `text_delta`，与 `thinking` 重复且无类型判别 | OpenCode adapter / 事件语义 | Medium | Verified | 2026-08-06 |
+| CLI-008 | Claude 非初始化 system 消息被重复映射为 `init` | Claude Code adapter / 事件语义 | Medium | Open | 2026-08-13 |
 
 ## 状态约定
 
@@ -38,8 +39,16 @@
   - OpenCode CLI `1.18.10`
   - `@opencode-ai/sdk` `1.18.10`
 - 严重程度：`High`
-- 状态：`Released`（cligent `0.18.0`，等待真实运行验收）
+- 状态：`Verified`（cligent `0.20.0`，2026-08-13 真实运行验收）
 - 证据目录：[`CLI-001-opencode-tool-events/`](./CLI-001-opencode-tool-events/)
+
+### cligent 0.20.0 真实运行验收
+
+2026-08-13 的 OpenCode smoke job 成功完成并通过 verifier。统一事件中 93 个
+`tool_use` 与 93 个 `tool_result` 的 ID 全部唯一且一一对应，没有缺失、孤立结果或重复
+计数；`done.usage.toolUses=53/40` 分别准确对应两个 attempt 的唯一调用数。验收产物见
+[`events.jsonl`](../../jobs/opencode-one_task-abs-module-cache-flags-20260813-120825/abs-module-cache-flags__2gJUhM7/agent/system/events.jsonl)
+和 [`summary.json`](../../jobs/opencode-one_task-abs-module-cache-flags-20260813-120825/abs-module-cache-flags__2gJUhM7/agent/system/summary.json)。
 
 ### 背景
 
@@ -345,8 +354,19 @@ ThreadItem 类型补齐 fixture，并增加一次真实运行验收。
   - Kimi Code CLI `0.30.0`
   - 模型 `kimi-code/k3`
 - 严重程度：`Medium`
-- 状态：`Released`（cligent `0.20.0`，等待真实运行验收）
+- 状态：`Verified`（cligent `0.20.0`，2026-08-13 真实运行验收）
 - 证据目录：[`CLI-003-kimi-unknown-token-usage/`](./CLI-003-kimi-unknown-token-usage/)
+
+### cligent 0.20.0 真实运行验收
+
+2026-08-13 Kimi smoke 使用 `kimi-code/k3` 单次成功完成，45 个 `tool_use` 与 45 个
+`tool_result` 全部唯一且一一对应，最终 verifier 23/23 通过。Kimi 未提供 token accounting
+时，cligent terminal event 明确报告 `tokenAvailability=unavailable`；deep-swe summary、ATIF
+和 token 报告都将 input/output token 保持为 unknown/null，同时保留 `toolUses=45`，没有再
+将占位零纳入可信 token 汇总。验收摘要见
+[`verification-0.20.0.json`](./CLI-003-kimi-unknown-token-usage/verification-0.20.0.json)，
+原始产物见 [`events.jsonl`](../../jobs/kimi-one_task-abs-module-cache-flags-20260813-145951/abs-module-cache-flags__nwZetQu/agent/system/events.jsonl)
+和 [`summary.json`](../../jobs/kimi-one_task-abs-module-cache-flags-20260813-145951/abs-module-cache-flags__nwZetQu/agent/system/summary.json)。
 
 ### 现象
 
@@ -429,8 +449,15 @@ if (!usage) return { inputTokens: 0, outputTokens: 0, toolUses }
   - OpenCode CLI `1.18.10`
   - `@opencode-ai/sdk` `1.18.10`
 - 严重程度：`Critical`
-- 状态：`Released`（cligent `0.20.0`，等待真实运行验收）
+- 状态：`Verified`（cligent `0.20.0`，2026-08-13 真实运行验收）
 - 证据目录：[`CLI-004-opencode-auto-permission-hang/`](./CLI-004-opencode-auto-permission-hang/)
+
+### cligent 0.20.0 真实运行验收
+
+同一 OpenCode smoke job 实际触发 5 次 workspace 外 `/tmp` 访问，全部产生自动化
+`opencode:permission_decision(decision=once)` 并继续执行；没有产生交互式
+`permission_request`，最终第二个 attempt 成功且 verifier 23/23 通过。事件证据见
+[`events.jsonl`](../../jobs/opencode-one_task-abs-module-cache-flags-20260813-120825/abs-module-cache-flags__2gJUhM7/agent/system/events.jsonl)。
 
 ### 背景与期望
 
@@ -574,8 +601,17 @@ OpenCode headless runner 收到任何残留 `permission_request` 时应中止当
   - OpenCode CLI `1.18.10`
   - `@opencode-ai/sdk` `1.18.10`
 - 严重程度：`Critical`
-- 状态：`Released`（cligent `0.20.0`，等待真实运行验收）
+- 状态：`Verified`（cligent `0.20.0`，2026-08-13 真实运行验收）
 - 证据目录：[`CLI-005-opencode-session-silence/`](./CLI-005-opencode-session-silence/)
+
+### cligent 0.20.0 真实运行验收
+
+同一 smoke job 的首个 attempt 真实复现 session 静默。cligent 在约 300 秒后产生
+`OPENCODE_INACTIVITY_STATUS_QUERY_FAILED`，随后立即给出 terminal `done(status=error)`；
+没有等待 deep-swe 900 秒外层 watchdog 或总 deadline。编排器随后启动第二个 attempt 并
+成功完成，证明上游 inactivity 路径已经有界终止且调用方可恢复。证据见
+[`events.jsonl`](../../jobs/opencode-one_task-abs-module-cache-flags-20260813-120825/abs-module-cache-flags__2gJUhM7/agent/system/events.jsonl)
+和 [`orchestrator-trace.jsonl`](../../jobs/opencode-one_task-abs-module-cache-flags-20260813-120825/abs-module-cache-flags__2gJUhM7/agent/system/orchestrator-trace.jsonl)。
 
 ### 背景与期望
 
@@ -669,8 +705,16 @@ Agent event 时，先保存进程、Git working tree 和最后事件快照，再
   - `@opencode-ai/sdk` `1.18.13`
   - 模型 `deepseek/deepseek-v4-flash`
 - 严重程度：`High`
-- 状态：`Released`（cligent `0.20.0`，等待真实运行验收）
+- 状态：`Verified`（cligent `0.20.0`，2026-08-13 真实运行验收）
 - 证据目录：[`CLI-006-opencode-prompt-echo/`](./CLI-006-opencode-prompt-echo/)
+
+### cligent 0.20.0 真实运行验收
+
+2026-08-13 OpenCode smoke 的两个 attempt 都没有用户 prompt 回放形成的 `text`，也没有
+调用方历史 workaround 的 `runtime:prompt_echo`。assistant 输出通过 `text_delta` 正常重建，
+最终 patch 通过 verifier 23/23。证据见
+[`events.jsonl`](../../jobs/opencode-one_task-abs-module-cache-flags-20260813-120825/abs-module-cache-flags__2gJUhM7/agent/system/events.jsonl)
+和 [`trajectory.json`](../../jobs/opencode-one_task-abs-module-cache-flags-20260813-120825/abs-module-cache-flags__2gJUhM7/agent/system/trajectory.json)。
 
 ### 背景与期望
 
@@ -782,8 +826,16 @@ issue 进入 `Released`，待真实任务 smoke 验收。
   - `@opencode-ai/sdk` `1.18.13`
   - 模型 `deepseek/deepseek-v4-flash`
 - 严重程度：`Medium`
-- 状态：`Released`（cligent `0.20.0`，等待真实运行验收）
+- 状态：`Verified`（cligent `0.20.0`，2026-08-13 真实运行验收）
 - 证据目录：[`CLI-007-opencode-reasoning-deltas/`](./CLI-007-opencode-reasoning-deltas/)
+
+### cligent 0.20.0 真实运行验收
+
+2026-08-13 OpenCode smoke 产生 52 个 `thinking` 和 811 个 assistant `text_delta`；抽取的
+非微小 chunk 没有跨类型精确重复，`text_delta` 按序重建出两个 attempt 的 293/2774 字符
+assistant 输出，ATIF 中 reasoning 与 agent message 未互相污染，最终 verifier 23/23 通过。
+证据见 [`events.jsonl`](../../jobs/opencode-one_task-abs-module-cache-flags-20260813-120825/abs-module-cache-flags__2gJUhM7/agent/system/events.jsonl)
+和 [`trajectory.json`](../../jobs/opencode-one_task-abs-module-cache-flags-20260813-120825/abs-module-cache-flags__2gJUhM7/agent/system/trajectory.json)。
 
 ### 背景与期望
 
@@ -883,3 +935,92 @@ cligent `0.18.0` 的 OpenCode adapter 有两条独立的增量路径：
 
 - cligent OpenCode adapter：`packages/cligent/src/adapters/opencode.ts`（以 cligent 仓库实际路径为准）
 - OpenCode SDK Part / Event 类型：`@opencode-ai/sdk/dist/gen/types.gen.d.ts`
+
+---
+
+## CLI-008：Claude 非初始化 system 消息被重复映射为 `init`
+
+### 基本信息
+
+- 组件：`@sublang/cligent` Claude Code adapter / 统一事件语义
+- dogfooding 环境：
+  - cligent `0.20.0`
+  - `@anthropic-ai/claude-agent-sdk` `0.3.220`
+  - 模型 `claude-sonnet-5`
+- 严重程度：`Medium`
+- 状态：`Open`
+- 证据目录：[`CLI-008-claude-duplicate-init-events/`](./CLI-008-claude-duplicate-init-events/)
+
+### 现象
+
+2026-08-13 两次真实 Claude turn 都只启动一次且成功结束，但统一事件流出现大量重复
+`init`：
+
+| Run / role | `init` 总数 | 真正携带工具清单 | `tools=[]` 重复事件 |
+|---|---:|---:|---:|
+| Claude single modifier | 356 | 1 | 355 |
+| Codex + Claude collab reviewer | 202 | 1 | 201 |
+
+重复事件的 payload 只有配置回退值，形如：
+
+```json
+{"type":"init","agent":"claude-code","payload":{"model":"claude-sonnet-5","cwd":"/app","tools":[]}}
+```
+
+两个 job 都正常完成、token usage 为 `reported`、verifier 23/23 通过，因此该问题当前不阻断
+执行；但它把进度/status/hook 等 SDK system 消息错误表示成会话初始化，显著增加日志与
+trajectory 输入噪声，也让调用方无法把 `init` 当成一次 turn 的稳定握手事件。
+
+统计和最小事件见：
+
+- [`init-event-stats.json`](./CLI-008-claude-duplicate-init-events/init-event-stats.json)
+- [`representative-events.jsonl`](./CLI-008-claude-duplicate-init-events/representative-events.jsonl)
+
+### 最小复现与定位结论
+
+用 mock SDK stream 依次输入一个 `system/init`、一个 `system/status`、一个
+`system/hook_progress` 和 terminal result，cligent `0.20.0` 稳定输出 3 个统一 `init`；
+断言“一个 turn 只有一个 init”会失败。
+
+Claude Agent SDK `0.3.220` 中多种消息共享 `type: "system"`，并由 `subtype` 区分，例如
+`init`、`status`、`hook_started`、`hook_progress`、`hook_response`、`api_retry` 和
+`compact_boundary`。cligent Claude adapter 当前只判断：
+
+```ts
+if (messageType === "system") {
+  yield createEvent("init", ...)
+}
+```
+
+它没有要求 `subtype === "init"`。非初始化 system 消息通常没有 `model/cwd/tools`，于是
+adapter 用运行配置回填 model/cwd，并将缺失 tools 映射为 `[]`，形成真实运行中观察到的
+重复 payload。该结论已由最小 replay 和两份独立真实事件流交叉确认；现有产物没有保存
+转换前 raw SDK stream，所以各 subtype 在 355/201 条中的具体分布仍未知。
+
+### 建议处理方式
+
+1. 只有 `type=system && subtype=init` 才生成统一 `init`。
+2. 对有统一语义价值的其他 system subtype 使用独立事件或明确的 adapter 扩展事件，例如
+   `claude:status`、`claude:hook_progress`、`claude:api_retry`；其余可以有意忽略。
+3. 不要把缺字段的非 init system 消息通过配置回退伪装成有效初始化。
+4. 若 SDK 异常重复真正的 `system/init`，按 session/turn 去重，或至少保留可观察的重复诊断。
+
+### 建议的回归测试
+
+1. `system/init` 产生且只产生一个统一 `init`，完整保留 model/cwd/tools。
+2. `system/status`、hook、retry、compact 等 subtype 不产生 `init`。
+3. 多个非 init system 消息夹在工具调用之间，不改变 `toolUses`、terminal status 或 usage。
+4. 同一 SDK init 被重复发送时，统一 `init` 不重复。
+5. fresh run 和 resume run 都保持每 turn 初始化语义稳定。
+
+### 验收标准
+
+- 一次 Claude adapter turn 正常情况下只有一个统一 `init`。
+- 非初始化 system 消息不再伪装为 `init(tools=[])`。
+- 若保留 status/hook/retry 信息，调用方可按独立事件类型无歧义消费。
+- 真实长 turn 的事件量不再随 SDK system progress 数量线性增加 `init`。
+
+### 相关源码
+
+- cligent Claude adapter：`packages/cligent/src/adapters/claude-code.ts`
+- Claude Agent SDK message union：`@anthropic-ai/claude-agent-sdk/sdk.d.ts`
