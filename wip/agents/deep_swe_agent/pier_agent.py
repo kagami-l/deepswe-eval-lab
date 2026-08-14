@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import re
@@ -562,11 +563,16 @@ class DeepSweAgent(BaseInstalledAgent):
             await self._cleanup_credentials(environment)
 
     async def _cleanup_credentials(self, environment: BaseEnvironment) -> None:
+        command = f"rm -rf {REMOTE_SECRETS} {REMOTE_HOME}"
         try:
-            await self.exec_as_agent(
-                environment,
-                command=f"rm -rf {REMOTE_SECRETS} {REMOTE_HOME}",
-            )
+            await self.exec_as_agent(environment, command=command)
+            return
+        except Exception:
+            # Lingering runtime children may still write into REMOTE_HOME
+            # right after exit; wait briefly and retry once.
+            await asyncio.sleep(2)
+        try:
+            await self.exec_as_agent(environment, command=command)
         except Exception:
             self.logger.warning(
                 "Failed to clean up injected credentials", exc_info=True

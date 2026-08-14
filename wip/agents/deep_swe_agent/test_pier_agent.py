@@ -6,6 +6,7 @@ import tomllib
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 from pier.models.agent.context import AgentContext
 
@@ -94,6 +95,18 @@ class _Environment:
     async def upload_file(self, source: Path, target: str) -> None:
         self.uploads.append((source, target))
         self.uploaded_contents[target] = source.read_text()
+
+
+class _FlakyExecEnvironment(_Environment):
+    def __init__(self, return_codes: list[int]) -> None:
+        super().__init__()
+        self.return_codes = return_codes
+        self.exec_commands: list[str] = []
+
+    async def exec(self, **kwargs):
+        self.exec_commands.append(kwargs.get("command", ""))
+        code = self.return_codes.pop(0) if self.return_codes else 0
+        return SimpleNamespace(return_code=code, stdout="", stderr="")
 
 
 class PierAgentTests(unittest.IsolatedAsyncioTestCase):
@@ -293,6 +306,31 @@ class PierAgentTests(unittest.IsolatedAsyncioTestCase):
                 env["OPENCODE_CONFIG_DIR"],
                 "/tmp/deep-swe-agent-secrets/opencode-config/opencode",
             )
+
+    async def test_cleanup_retries_once_and_succeeds_without_warning(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            instance = agent(Path(directory), plan())
+            environment = _FlakyExecEnvironment([1, 0])
+            with mock.patch(
+                "wip.agents.deep_swe_agent.pier_agent.asyncio.sleep"
+            ) as sleep:
+                with self.assertNoLogs(instance.logger, level="WARNING"):
+                    await instance._cleanup_credentials(environment)
+            sleep.assert_awaited_once_with(2)
+            self.assertEqual(len(environment.exec_commands), 2)
+
+    async def test_cleanup_warns_without_raising_when_retry_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            instance = agent(Path(directory), plan())
+            environment = _FlakyExecEnvironment([1, 1])
+            with mock.patch(
+                "wip.agents.deep_swe_agent.pier_agent.asyncio.sleep"
+            ) as sleep:
+                with self.assertLogs(instance.logger, level="WARNING") as logs:
+                    await instance._cleanup_credentials(environment)
+            sleep.assert_awaited_once_with(2)
+            self.assertEqual(len(environment.exec_commands), 2)
+            self.assertIn("Failed to clean up injected credentials", logs.output[0])
 
     def test_atif_combines_roles_in_one_valid_trajectory(self) -> None:
         events = [

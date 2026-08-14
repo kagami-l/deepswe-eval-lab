@@ -96,14 +96,16 @@
 | luna 互补 c→o / o→c | 39 / 38 | 3 / 1 | 2 / 0 |
 | opus-sol A | 20 | 3 | 3 |
 | opus-sol B 第一轮 / 第二轮 | 20 / 20 | 2 / 1 | 0 / 1 |
-| **合计** | **195** | **12** | **8** |
+| opus-sol B [candidates 扫描轮](collab-codex-claude-complementary-opus-sol-xhigh-candidates-18-tasks-20260813-215326.md)（2026-08-14 增补） | 36 | 1 | 1 |
+| **合计** | **231** | **13** | **9** |
 
 三条规律至今零反例：
 
-1. **修好 12 例全部是补齐式**（本实验 6 例 initial F2P：107/108 ×3、28/31、69/72、
-   89/91）,路线级失败（≈0 F2P 或大缺口）在任何 reviewer 下零捕获。
-2. **修坏 8 例全部发生在 reviewer 弱格子**（flash 2、sol 3、codex 0、opus 1）——
-   第二轮 scc 案例把 opus 从"零破坏"修正为"低破坏",但位置仍分毫不差落在弱格子。
+1. **修好 13 例全部是广义补齐式**（本实验 7 例；candidates 轮的 bandit 案例是首例
+   "修复 initial 的 P2P 存量破坏"而非补 F2P 缺口,仍属小缺口 + findings 可指出的
+   同型）,路线级失败（≈0 F2P 或大缺口）在任何 reviewer 下零捕获。
+2. **修坏 9 例全部发生在 reviewer 弱格子**（flash 2、sol 3、codex 0、opus 2——
+   opus 的两次都在 scc,合并 harm 2/28 ≈ 7%）。
 3. **capture 与 harm 正相关于审查强度**：激进 reviewer（sol,85% revise）两头最高,
    克制 reviewer（opus,50–60% revise）两头最低;不存在"高 capture + 低 harm"的
    免费午餐配置。
