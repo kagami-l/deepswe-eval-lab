@@ -15,6 +15,11 @@ B 方向（sol 改,opus 审）在 [opus/sol 互补候选池](../deepswe-opus-sol
 [第二轮](collab-codex-claude-complementary-opus-sol-xhigh-10-tasks-20260811-190656.md),
 合并语境见[实验总结](complementary-opus-sol-xhigh-collab-summary.md)。
 
+> 后续：[candidates 扫描第二轮](collab-codex-claude-complementary-opus-sol-xhigh-candidates-18-tasks-20260814-100738.md)
+> （2026-08-14,同配置扩样至 n=4）修订了本文的两项逐题结论——**ink 改判为高波动**
+> （合并 initial 2/4,撤销"预警兑现"）,happy-dom 拒收强化并列为"方向失效"。
+> 逐题引用以合并口径为准。
+
 原始工件：
 
 - [job result](../../../jobs/collab-codex-claude-complementary-opus-sol-xhigh-candidates-18-tasks-20260813-215326/result.json)

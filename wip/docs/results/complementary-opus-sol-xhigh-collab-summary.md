@@ -97,15 +97,23 @@
 | opus-sol A | 20 | 3 | 3 |
 | opus-sol B 第一轮 / 第二轮 | 20 / 20 | 2 / 1 | 0 / 1 |
 | opus-sol B [candidates 扫描轮](collab-codex-claude-complementary-opus-sol-xhigh-candidates-18-tasks-20260813-215326.md)（2026-08-14 增补） | 36 | 1 | 1 |
-| **合计** | **231** | **13** | **9** |
+| opus-sol B [candidates 第二轮](collab-codex-claude-complementary-opus-sol-xhigh-candidates-18-tasks-20260814-100738.md)（2026-08-14 增补） | 36 | 4 | 2 |
+| **合计** | **267** | **17** | **11** |
 
 三条规律至今零反例：
 
-1. **修好 13 例全部是广义补齐式**（本实验 7 例；candidates 轮的 bandit 案例是首例
-   "修复 initial 的 P2P 存量破坏"而非补 F2P 缺口,仍属小缺口 + findings 可指出的
-   同型）,路线级失败（≈0 F2P 或大缺口）在任何 reviewer 下零捕获。
-2. **修坏 9 例全部发生在 reviewer 弱格子**（flash 2、sol 3、codex 0、opus 2——
-   opus 的两次都在 scc,合并 harm 2/28 ≈ 7%）。
+1. **修好 17 例全部是广义补齐式**（candidates 两轮新增 5 例,初始缺口最大的是
+   onedump 76/82;bandit `mcvgbyY` 案例是首例"修复 initial 的 P2P 存量破坏"）,
+   路线级失败（≈0 F2P 或大缺口）在任何 reviewer 下零捕获。opus reviewer 在
+   **验证过的强格子**的真跨模型 capture 累计 4 例（psm、participle、dasel、
+   onedump）。
+2. **修坏 11 例中 0 例发生在验证过的 reviewer 强格子**（精确化表述,2026-08-14）:
+   9 例在验证过的 reviewer 弱格子（flash 2、sol 3、codex 0、opus 2——scc ×2）,
+   2 例（happy-dom ×2,candidates 第二轮）发生在**方向未证实/已失效**的任务上——
+   该题的"opus 强"标签本就因家族不佐证被拒收,内部 sol initial 3/4 进一步否定,
+   reviewer 在无真实优势的任务上强行 revise 导致破坏,机制与规则本义一致。
+   格子归属自此以验证过的方向为准,方向失效任务（bandit、happy-dom、abs-module）
+   不参与格子读数。
 3. **capture 与 harm 正相关于审查强度**：激进 reviewer（sol,85% revise）两头最高,
    克制 reviewer（opus,50–60% revise）两头最低;不存在"高 capture + 低 harm"的
    免费午餐配置。
