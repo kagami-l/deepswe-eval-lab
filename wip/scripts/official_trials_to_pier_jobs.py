@@ -50,7 +50,11 @@ def build_trial_result(row: dict, artifact_uri_prefix: str) -> TrialResult:
             rewards[k] = row[k]
 
     exception_info = None
-    if row.get("exception"):
+    # Pier excludes every exception_info from its non-errored view. Official
+    # scoring can retain agent timeouts and nonzero exits, so follow its flags.
+    if row.get("exception") and (
+        row.get("errored") or not row.get("included_in_score")
+    ):
         exception_info = ExceptionInfo.model_validate(row["exception"])
 
     return TrialResult(
@@ -87,6 +91,7 @@ def build_trial_result(row: dict, artifact_uri_prefix: str) -> TrialResult:
                 "official_error_category": row.get("error_category"),
                 "official_included_in_score": row.get("included_in_score"),
                 "official_config": row.get("config"),
+                "official_exception": row.get("exception"),
             },
         ),
         verifier_result=VerifierResult(rewards=rewards) if rewards else None,

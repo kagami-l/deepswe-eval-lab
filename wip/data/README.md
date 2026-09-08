@@ -4,12 +4,12 @@
 
 ## `official-v1.1/`
 
-下载自 DeepSWE 官网 `https://deepswe.datacurve.ai/artifacts/v1.1/`，当前快照下载于 2026-08-07，对应官方 2026-08-06 生成的数据（52 个 config、23,490 次 rollout）。官方仍在向 v1.1 追加新 config，本地快照与远端最新版的差异见下方「官方数据更新记录」。完整性校验见 `SHA256SUMS`。
+下载自 DeepSWE 官网 `https://deepswe.datacurve.ai/artifacts/v1.1/`，当前快照下载于 2026-09-08，榜单内的 `generated_at` 为 2026-09-03T22:24:37.984682+00:00，远端 `trials.json` 的 `last-modified` 为 2026-09-07T16:15:48Z（70 个 config、31,617 次 rollout、113 个任务）。官方会追加配置，也可能替换或移除历史 rollout，具体差异见下方「官方数据更新记录」。完整性校验见 `SHA256SUMS`。
 
 | 文件 | 含义 | 是否进入主筛选 |
 | --- | --- | --- |
 | `tasks.json` | 113 个任务的 ID、语言、仓库、base commit、prompt 长度等元数据 | 是 |
-| `trials.json` | 23,490 次 rollout 的系统配置、通过/错误、分项分数、成本、tokens、steps 和工件状态 | 是，核心输入 |
+| `trials.json` | 31,617 次 rollout 的系统配置、通过/错误、分项分数、成本、tokens、steps 和工件状态 | 是，核心输入 |
 | `v1-delta.json` | 同一批共享 rollout 在 v1 和 v1.1 评分下的 task/config 差异 | 是，用于标记评分敏感题 |
 | `leaderboard-live.json` | 官网 configuration 级榜单及 pass@k、置信区间、成本等汇总 | 否，用于交叉核验 |
 | `release.json` | trajectory、patch、agent log、verifier 输出的公开下载 URL 模板 | 否，用于后续人工审计 |
@@ -18,19 +18,27 @@
 
 ### 官方数据更新记录
 
-官方对 v1.1 的每次更新都只追加新 config 的 rollout，已有 rollout 与指标从未被改动；实际变动的文件只有 `trials.json` 和 `leaderboard-live.json`（`tasks.json`、`v1-delta.json`、`release.json` 自 2026-07-25 起未变）。
+截至 2026-08-08 的核对只发现新增 config；2026-09-08 核对则发现历史 rollout 被替换或移除，不能再假设更新只追加。本次变动文件为 `trials.json`、`leaderboard-live.json`、`v1-delta.json`；`tasks.json` 和 `release.json` 与上一快照逐字节一致。
 
 | 官方生成时间 | configs | rollouts | 变化 | 本地快照 |
 | --- | --- | --- | --- | --- |
 | 2026-07-25 | 50 | 22,586 | 初始下载版本 | 已被替换 |
-| 2026-08-06 | 52 | 23,490 | 新增 `mini_swe_agent_deepseek_v4_flash_max`、`mini_swe_agent_qwen3_8_max_xhigh` | **当前快照** |
-| 2026-08-07 | 53 | 23,942 | 新增 `mini_swe_agent_muse_spark_1_2_xhigh`（muse-spark-1.2，xhigh，pass@1 ≈ 0.549） | 暂未更新（2026-08-08 核对，近期对比不涉及该模型） |
+| 2026-08-06 | 52 | 23,490 | 新增 `mini_swe_agent_deepseek_v4_flash_max`、`mini_swe_agent_qwen3_8_max_xhigh` | 已被替换 |
+| 2026-08-07 | 53 | 23,942 | 新增 `mini_swe_agent_muse_spark_1_2_xhigh`（muse-spark-1.2，xhigh，pass@1 ≈ 0.549） | 当时未更新，现已随最新快照同步 |
+| 2026-09-03（文件发布于 09-07） | 70 | 31,617 | 相对 08-06 新增 19 个 config、移除 1 个 config，另替换 2 个已有 config 的全部 rollout | **当前快照（2026-09-08 下载）** |
+
+本次相对 2026-08-06 快照的核对结果：
+
+- 新增配置：`deepseek-v4-pro [max]`、`gemini-3-5-flash [high]`、`gemini-3-7-flash [low/medium/high]`、`gemini-3-8-flash [medium/high]`、`glm-5-3 [max]`、`glm-5-3-flash [max]`、`gpt-6-astra [low/medium/high/xhigh/max]`、`grok-4-6 [low/medium/high/xhigh]`、`muse-spark-1-2 [xhigh]`，均使用 `mini-swe-agent`。
+- 移除 `mini_swe_agent_gemini_3_5_flash_medium` 的 452 次 rollout；`mini_swe_agent_gemini_3_1_pro_preview_high` 和 `mini_swe_agent_gemini_3_6_flash_high` 各有 452 次旧 rollout 被同数量的新 trial 替换。按 `trial_name` 对比，共新增 9,483 条、移除 1,356 条，净增 8,127 条；保留的 22,134 条记录内容完全一致。
+- 榜单为已有配置补充 `mean_cache_tokens`，并更新上述两个被替换配置的指标。`v1-delta.json` 的共享配置从 10 个变为 9 个，移除了 `gemini-3-5-flash [medium]`，任务级 delta 和 pooled 汇总随之变化。
+- 已全量重建 `official-v1.1-jobs/`，避免保留被撤下的配置和旧 trial；70 个配置的有效 rollout 数、通过数及 pass@1 均与最新官方榜单一致。
 
 后续更新参考：
 
-- 检查远端是否有新版本，无需下载大文件：`curl -sI https://deepswe.datacurve.ai/artifacts/v1.1/trials.json` 看 `last-modified`/`content-length`，或将各文件的 `etag` 与本地 `md5 -q <file>` 对比（S3 单段上传的 etag 即内容 md5）；具体新增了哪些 config 可只下载 66KB 的 `leaderboard-live.json` 与本地 diff。
-- `trials.json` 的 rows 按 task 分组存储，新 config 的行穿插在全文件各处，无法用 Range 请求做增量下载，更新必须重下完整文件（约 39MB）。
-- 更新流程：替换 `official-v1.1/` 下变动的文件 → 重新生成 `SHA256SUMS` → 重跑 `official_trials_to_pier_jobs.py`（可用 `--config` 只转换新增 config，追加进 `official-v1.1-jobs/`，不必 `--clean` 全量重建）→ 同步本表和文中的 config/rollout 数字。
+- 检查远端是否有新版本，无需下载大文件：`curl -sI https://deepswe.datacurve.ai/artifacts/v1.1/trials.json` 看 `last-modified`/`content-length`，或将各文件的 `etag` 与本地 `md5 -q <file>` 对比（仅适用于已确认 etag 为内容 MD5 的响应）；具体配置和指标变化可先下载约 95 KB 的 `leaderboard-live.json` 与本地 diff。文件发布时间与榜单 `generated_at` 应分别记录。
+- `trials.json` 的 rows 按 task 分组存储，新 config 的行穿插在全文件各处，无法用 Range 请求做增量下载，更新必须重下完整文件（当前约 51 MB）；可用 `curl --compressed` 压缩传输，保存后仍是完整 JSON。
+- 更新流程：先下载到临时目录，逐文件核查差异，并按 `trial_name` 检查新增、移除和变更 → 替换 `official-v1.1/` 下变动的文件 → 重新生成 `SHA256SUMS` → 重跑 `official_trials_to_pier_jobs.py` → 同步本表和文中的 config/rollout 数字。只有确认纯追加新 config 时，才可用 `--config` 增量转换；若存在替换或移除，需全量重建（`--clean` 会清空整个输出目录），并核对配置集合、trial 数量和有效通过率。
 
 ### 用 pier view 查看官方数据
 
@@ -46,11 +54,13 @@ uv run python scripts/official_trials_to_pier_jobs.py --clean
 uv run pier view data/official-v1.1-jobs --jobs
 ```
 
-被官方排除的 trial（provider/verifier/网络错误）带有 `exception_info`，在 viewer 中勾选 "exclude errored" 后通过率口径与官方 leaderboard 一致。
+被官方排除的 trial（provider/verifier/网络错误）带有 `exception_info`，在 viewer 中勾选 "exclude errored" 后通过率口径与官方 leaderboard 一致。官方仍计入评分的 agent timeout / 非零退出记录不设置 `exception_info`，保留官方 reward；原始异常统一保存在 `agent_result.metadata.official_exception`，供审计使用。2026-09-08 同步时修正了转换脚本此前会误排除这类记录的问题，当前快照共涉及 117 条。
 
 ## `selection/`
 
 由 `wip/scripts/select_discriminative_tasks.py` 生成。每一层同时保存 CSV 和 JSON，后层只包含通过前层和本层条件的任务：
+
+此目录保留 2026-07-29 生成的历史筛选结果，输入为 2026-07-25 的 50 个 config、22,586 次 rollout，详见 `manifest.json` 的输入哈希。本次 2026-09-08 同步仅更新官方快照和 viewer 数据，未重新抽样；下述逐层数量、dev/confirm 运行清单及手工子集仍对应历史筛选口径。若要基于最新快照重新选题，应使用独立的 `--output-dir` 保存，并重新应用本机运行排除。
 
 | 层 | 文件 | 含义 |
 | --- | --- | --- |
