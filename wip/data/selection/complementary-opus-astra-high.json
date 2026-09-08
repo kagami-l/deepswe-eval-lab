@@ -1,0 +1,2259 @@
+{
+  "date": "2026-09-08",
+  "source_snapshot": {
+    "leaderboard_generated_at": "2026-09-03T22:24:37.984682+00:00",
+    "n_configs": 70,
+    "n_trials": 31617,
+    "n_tasks": 113
+  },
+  "input_hashes_sha256": {
+    "official-v1.1/v1-delta.json": "e4c23e5d3580b1d62028c7185e401f60d7cde3c1186ccf8b55659ad7e47572f1",
+    "official-v1.1/trials.json": "82ce1362e3a3e70aef67e3565849e3fea42861ab32900f45052cccb5675d51bf",
+    "official-v1.1/release.json": "0b77963ed8c54ef40c5f744ade178b54bfae2662ed94f9235cee85eb542bdc85",
+    "official-v1.1/leaderboard-live.json": "005cbedb49f988ba3f0d9636300862ad7ace93ce1992b37faf9945fe5b383415",
+    "official-v1.1/tasks.json": "bae967f6472943564c3fc5232fba3c8e0ac465c1be5ccf9dd4895d4ee9df6242",
+    "selection/00_all.json": "47dbd0ae49f3ff76a5c3b94a3787ea66b6ea5ca174a61b585b767a9d2f02067e",
+    "selection/host-excluded.txt": "e2cb52be8a059233730f95365695b7ab457dae5a1d8c8f7cd80c39be422730e3",
+    "selection/05_sample_dev.txt": "5f8471aa1b5130f1824d4c1c1d113c072674084346811187809b8463ef56eaba",
+    "selection/05_sample_confirm.txt": "b3f648ce8ea596053a1a6bd692748f41a8887cd15d795c2594e12a8a53a930bb",
+    "selection/complementary-opus-astra-medium.txt": "c01c5f145fc4a61b8cb2c6b4c627d3032346f12c4a439296d2c5c96592a64009"
+  },
+  "column_order": [
+    "opus_high",
+    "astra_high"
+  ],
+  "configs": [
+    "mini_swe_agent_claude_opus_5_high",
+    "mini_swe_agent_gpt_6_astra_high"
+  ],
+  "rules": {
+    "source": "deep-swe",
+    "eval_scope": "full",
+    "included_in_score": true,
+    "errored": false,
+    "pass_statistic": "passed boolean; all eligible trials count in denominator",
+    "strong_min": 0.75,
+    "weak_max": 0.25,
+    "minimum_effective_repeats_per_target_config": 3,
+    "family_weak_max": 0.5,
+    "family_strong_rate_strictly_above_weak": true,
+    "efforts": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ],
+    "exclude_host_tasks": true,
+    "exclude_confirm_tasks": false,
+    "scoring_sensitive_absolute_delta": 0.1,
+    "quality_thresholds": {
+      "minimum_model_coverage": 27,
+      "minimum_effective_repeats_per_config": 3,
+      "maximum_error_rate": 0.05,
+      "maximum_verifier_timeouts": 1
+    },
+    "manual_tiebreak": "A before B before C; Opus A ties use the same quality and diversity decisions as medium; Astra B slots prioritize strong-side 4/4, then family evidence and diversity; reserves remain manually ranked with reasons."
+  },
+  "scan_counts": {
+    "threshold_hits": 20,
+    "opus": 11,
+    "astra": 9,
+    "family_supported": 19,
+    "family_supported_opus": 10,
+    "family_supported_astra": 9
+  },
+  "selected_task_ids": [
+    "wazero-multi-module-snapshots",
+    "ts-pattern-match-each",
+    "python-statemachine-state-data-scoping",
+    "helm-array-merge-strategies",
+    "testem-bail-on-test-failure",
+    "httpx-streaming-json-iteration",
+    "bandit-interprocedural-taint-checks",
+    "oxvg-structural-selector-preservation",
+    "scc-bounded-memory-spilling",
+    "csstree-shorthand-expansion-compression"
+  ],
+  "candidate_task_ids": [
+    "wazero-multi-module-snapshots",
+    "ts-pattern-match-each",
+    "python-statemachine-state-data-scoping",
+    "helm-array-merge-strategies",
+    "testem-bail-on-test-failure",
+    "participle-grammar-conflict-analysis",
+    "pest-character-class-coalescing",
+    "koota-pair-relation-tracking",
+    "happy-dom-deterministic-intersectionobserver",
+    "onedump-dump-encryption-pipeline",
+    "httpx-streaming-json-iteration",
+    "bandit-interprocedural-taint-checks",
+    "oxvg-structural-selector-preservation",
+    "scc-bounded-memory-spilling",
+    "csstree-shorthand-expansion-compression",
+    "koota-deferred-mutation-buffer",
+    "optique-conditional-option-dependencies",
+    "awilix-async-container-initialization",
+    "superjson-error-stack-serialization"
+  ],
+  "selected_summary": {
+    "opus_high": [
+      23,
+      40
+    ],
+    "astra_high": [
+      20,
+      40
+    ],
+    "empirical_task_oracle": [
+      40,
+      40
+    ],
+    "grades": {
+      "A": 7,
+      "B": 3
+    },
+    "languages": {
+      "go": 3,
+      "typescript": 1,
+      "python": 3,
+      "javascript": 2,
+      "rust": 1
+    },
+    "n_repositories": 10
+  },
+  "comparison_to_medium": {
+    "shared_task_ids": [
+      "wazero-multi-module-snapshots",
+      "ts-pattern-match-each",
+      "python-statemachine-state-data-scoping",
+      "helm-array-merge-strategies",
+      "testem-bail-on-test-failure",
+      "httpx-streaming-json-iteration",
+      "bandit-interprocedural-taint-checks",
+      "scc-bounded-memory-spilling"
+    ],
+    "added_task_ids": [
+      "oxvg-structural-selector-preservation",
+      "csstree-shorthand-expansion-compression"
+    ],
+    "removed_task_ids": [
+      "koota-deferred-mutation-buffer",
+      "optique-conditional-option-dependencies"
+    ],
+    "cross_pool_counts": {
+      "medium": {
+        "opus_high": [
+          21,
+          40
+        ],
+        "astra_medium": [
+          20,
+          40
+        ],
+        "astra_high": [
+          18,
+          40
+        ],
+        "oracle_with_astra_medium": [
+          40,
+          40
+        ],
+        "oracle_with_astra_high": [
+          38,
+          40
+        ]
+      },
+      "high": {
+        "opus_high": [
+          23,
+          40
+        ],
+        "astra_medium": [
+          17,
+          40
+        ],
+        "astra_high": [
+          20,
+          40
+        ],
+        "oracle_with_astra_medium": [
+          37,
+          40
+        ],
+        "oracle_with_astra_high": [
+          40,
+          40
+        ]
+      }
+    }
+  },
+  "candidates": [
+    {
+      "task": "participle-grammar-conflict-analysis",
+      "direction": "opus",
+      "grade": "A",
+      "cells": [
+        [
+          4,
+          4
+        ],
+        [
+          0,
+          4
+        ]
+      ],
+      "family": [
+        [
+          19,
+          20
+        ],
+        [
+          0,
+          20
+        ]
+      ],
+      "family_ok": true,
+      "family_gap": 0.95,
+      "other_efforts": [
+        [
+          15,
+          16
+        ],
+        [
+          0,
+          16
+        ]
+      ],
+      "delta": -0.1225,
+      "language": "go",
+      "repository": "alecthomas/participle",
+      "quality": {
+        "error_rate": 0.014285714285714285,
+        "total_trials": 280,
+        "excluded_trials": 4,
+        "verifier_timeouts": 0,
+        "minimum_effective_repeats": 2,
+        "model_coverage": 28,
+        "config_coverage": 70,
+        "historical_stable": false,
+        "current_stable": false,
+        "layer_01_exclusion_reasons": [
+          "minimum_effective_repeats"
+        ]
+      },
+      "host": false,
+      "dev": false,
+      "confirm": false,
+      "effort_cells": {
+        "claude-opus-5": {
+          "low": [
+            3,
+            4
+          ],
+          "medium": [
+            4,
+            4
+          ],
+          "high": [
+            4,
+            4
+          ],
+          "xhigh": [
+            4,
+            4
+          ],
+          "max": [
+            4,
+            4
+          ]
+        },
+        "gpt-6-astra": {
+          "low": [
+            0,
+            4
+          ],
+          "medium": [
+            0,
+            4
+          ],
+          "high": [
+            0,
+            4
+          ],
+          "xhigh": [
+            0,
+            4
+          ],
+          "max": [
+            0,
+            4
+          ]
+        }
+      },
+      "selected": false,
+      "decision": "Opus 首位替补；与 wazero 家族计数相同，但同时带稳定性和评分敏感标记"
+    },
+    {
+      "task": "wazero-multi-module-snapshots",
+      "direction": "opus",
+      "grade": "A",
+      "cells": [
+        [
+          4,
+          4
+        ],
+        [
+          0,
+          4
+        ]
+      ],
+      "family": [
+        [
+          19,
+          20
+        ],
+        [
+          0,
+          20
+        ]
+      ],
+      "family_ok": true,
+      "family_gap": 0.95,
+      "other_efforts": [
+        [
+          15,
+          16
+        ],
+        [
+          0,
+          16
+        ]
+      ],
+      "delta": 0.0114,
+      "language": "go",
+      "repository": "wazero/wazero",
+      "quality": {
+        "error_rate": 0.007142857142857143,
+        "total_trials": 280,
+        "excluded_trials": 2,
+        "verifier_timeouts": 0,
+        "minimum_effective_repeats": 2,
+        "model_coverage": 28,
+        "config_coverage": 70,
+        "historical_stable": false,
+        "current_stable": false,
+        "layer_01_exclusion_reasons": [
+          "minimum_effective_repeats"
+        ]
+      },
+      "host": false,
+      "dev": false,
+      "confirm": false,
+      "effort_cells": {
+        "claude-opus-5": {
+          "low": [
+            3,
+            4
+          ],
+          "medium": [
+            4,
+            4
+          ],
+          "high": [
+            4,
+            4
+          ],
+          "xhigh": [
+            4,
+            4
+          ],
+          "max": [
+            4,
+            4
+          ]
+        },
+        "gpt-6-astra": {
+          "low": [
+            0,
+            4
+          ],
+          "medium": [
+            0,
+            4
+          ],
+          "high": [
+            0,
+            4
+          ],
+          "xhigh": [
+            0,
+            4
+          ],
+          "max": [
+            0,
+            4
+          ]
+        }
+      },
+      "selected": true,
+      "decision": "入选第 1 题"
+    },
+    {
+      "task": "ts-pattern-match-each",
+      "direction": "opus",
+      "grade": "A",
+      "cells": [
+        [
+          4,
+          4
+        ],
+        [
+          0,
+          4
+        ]
+      ],
+      "family": [
+        [
+          17,
+          20
+        ],
+        [
+          0,
+          20
+        ]
+      ],
+      "family_ok": true,
+      "family_gap": 0.85,
+      "other_efforts": [
+        [
+          13,
+          16
+        ],
+        [
+          0,
+          16
+        ]
+      ],
+      "delta": -0.0556,
+      "language": "typescript",
+      "repository": "gvergnaud/ts-pattern",
+      "quality": {
+        "error_rate": 0.0,
+        "total_trials": 280,
+        "excluded_trials": 0,
+        "verifier_timeouts": 0,
+        "minimum_effective_repeats": 4,
+        "model_coverage": 28,
+        "config_coverage": 70,
+        "historical_stable": true,
+        "current_stable": true,
+        "layer_01_exclusion_reasons": []
+      },
+      "host": false,
+      "dev": false,
+      "confirm": false,
+      "effort_cells": {
+        "claude-opus-5": {
+          "low": [
+            3,
+            4
+          ],
+          "medium": [
+            4,
+            4
+          ],
+          "high": [
+            4,
+            4
+          ],
+          "xhigh": [
+            2,
+            4
+          ],
+          "max": [
+            4,
+            4
+          ]
+        },
+        "gpt-6-astra": {
+          "low": [
+            0,
+            4
+          ],
+          "medium": [
+            0,
+            4
+          ],
+          "high": [
+            0,
+            4
+          ],
+          "xhigh": [
+            0,
+            4
+          ],
+          "max": [
+            0,
+            4
+          ]
+        }
+      },
+      "selected": true,
+      "decision": "入选第 2 题"
+    },
+    {
+      "task": "python-statemachine-state-data-scoping",
+      "direction": "opus",
+      "grade": "A",
+      "cells": [
+        [
+          4,
+          4
+        ],
+        [
+          0,
+          4
+        ]
+      ],
+      "family": [
+        [
+          16,
+          20
+        ],
+        [
+          0,
+          20
+        ]
+      ],
+      "family_ok": true,
+      "family_gap": 0.8,
+      "other_efforts": [
+        [
+          12,
+          16
+        ],
+        [
+          0,
+          16
+        ]
+      ],
+      "delta": -0.0833,
+      "language": "python",
+      "repository": "fgmacedo/python-statemachine",
+      "quality": {
+        "error_rate": 0.0,
+        "total_trials": 280,
+        "excluded_trials": 0,
+        "verifier_timeouts": 0,
+        "minimum_effective_repeats": 4,
+        "model_coverage": 28,
+        "config_coverage": 70,
+        "historical_stable": true,
+        "current_stable": true,
+        "layer_01_exclusion_reasons": []
+      },
+      "host": false,
+      "dev": false,
+      "confirm": false,
+      "effort_cells": {
+        "claude-opus-5": {
+          "low": [
+            0,
+            4
+          ],
+          "medium": [
+            4,
+            4
+          ],
+          "high": [
+            4,
+            4
+          ],
+          "xhigh": [
+            4,
+            4
+          ],
+          "max": [
+            4,
+            4
+          ]
+        },
+        "gpt-6-astra": {
+          "low": [
+            0,
+            4
+          ],
+          "medium": [
+            0,
+            4
+          ],
+          "high": [
+            0,
+            4
+          ],
+          "xhigh": [
+            0,
+            4
+          ],
+          "max": [
+            0,
+            4
+          ]
+        }
+      },
+      "selected": true,
+      "decision": "入选第 3 题"
+    },
+    {
+      "task": "helm-array-merge-strategies",
+      "direction": "opus",
+      "grade": "A",
+      "cells": [
+        [
+          4,
+          4
+        ],
+        [
+          0,
+          4
+        ]
+      ],
+      "family": [
+        [
+          14,
+          20
+        ],
+        [
+          0,
+          20
+        ]
+      ],
+      "family_ok": true,
+      "family_gap": 0.7,
+      "other_efforts": [
+        [
+          10,
+          16
+        ],
+        [
+          0,
+          16
+        ]
+      ],
+      "delta": 0.1667,
+      "language": "go",
+      "repository": "helm/helm",
+      "quality": {
+        "error_rate": 0.0035714285714285713,
+        "total_trials": 280,
+        "excluded_trials": 1,
+        "verifier_timeouts": 0,
+        "minimum_effective_repeats": 3,
+        "model_coverage": 28,
+        "config_coverage": 70,
+        "historical_stable": true,
+        "current_stable": true,
+        "layer_01_exclusion_reasons": []
+      },
+      "host": false,
+      "dev": false,
+      "confirm": false,
+      "effort_cells": {
+        "claude-opus-5": {
+          "low": [
+            1,
+            4
+          ],
+          "medium": [
+            3,
+            4
+          ],
+          "high": [
+            4,
+            4
+          ],
+          "xhigh": [
+            4,
+            4
+          ],
+          "max": [
+            2,
+            4
+          ]
+        },
+        "gpt-6-astra": {
+          "low": [
+            0,
+            4
+          ],
+          "medium": [
+            0,
+            4
+          ],
+          "high": [
+            0,
+            4
+          ],
+          "xhigh": [
+            0,
+            4
+          ],
+          "max": [
+            0,
+            4
+          ]
+        }
+      },
+      "selected": true,
+      "decision": "入选第 4 题"
+    },
+    {
+      "task": "testem-bail-on-test-failure",
+      "direction": "opus",
+      "grade": "A",
+      "cells": [
+        [
+          4,
+          4
+        ],
+        [
+          0,
+          4
+        ]
+      ],
+      "family": [
+        [
+          13,
+          20
+        ],
+        [
+          0,
+          20
+        ]
+      ],
+      "family_ok": true,
+      "family_gap": 0.65,
+      "other_efforts": [
+        [
+          9,
+          16
+        ],
+        [
+          0,
+          16
+        ]
+      ],
+      "delta": -0.1111,
+      "language": "javascript",
+      "repository": "testem/testem",
+      "quality": {
+        "error_rate": 0.007142857142857143,
+        "total_trials": 280,
+        "excluded_trials": 2,
+        "verifier_timeouts": 0,
+        "minimum_effective_repeats": 3,
+        "model_coverage": 28,
+        "config_coverage": 70,
+        "historical_stable": true,
+        "current_stable": true,
+        "layer_01_exclusion_reasons": []
+      },
+      "host": false,
+      "dev": false,
+      "confirm": false,
+      "effort_cells": {
+        "claude-opus-5": {
+          "low": [
+            1,
+            4
+          ],
+          "medium": [
+            3,
+            4
+          ],
+          "high": [
+            4,
+            4
+          ],
+          "xhigh": [
+            3,
+            4
+          ],
+          "max": [
+            2,
+            4
+          ]
+        },
+        "gpt-6-astra": {
+          "low": [
+            0,
+            4
+          ],
+          "medium": [
+            0,
+            4
+          ],
+          "high": [
+            0,
+            4
+          ],
+          "xhigh": [
+            0,
+            4
+          ],
+          "max": [
+            0,
+            4
+          ]
+        }
+      },
+      "selected": true,
+      "decision": "入选第 5 题"
+    },
+    {
+      "task": "pest-character-class-coalescing",
+      "direction": "opus",
+      "grade": "B",
+      "cells": [
+        [
+          3,
+          4
+        ],
+        [
+          0,
+          4
+        ]
+      ],
+      "family": [
+        [
+          18,
+          20
+        ],
+        [
+          0,
+          20
+        ]
+      ],
+      "family_ok": true,
+      "family_gap": 0.9,
+      "other_efforts": [
+        [
+          15,
+          16
+        ],
+        [
+          0,
+          16
+        ]
+      ],
+      "delta": 0.0556,
+      "language": "rust",
+      "repository": "pest-parser/pest",
+      "quality": {
+        "error_rate": 0.0,
+        "total_trials": 280,
+        "excluded_trials": 0,
+        "verifier_timeouts": 0,
+        "minimum_effective_repeats": 4,
+        "model_coverage": 28,
+        "config_coverage": 70,
+        "historical_stable": true,
+        "current_stable": true,
+        "layer_01_exclusion_reasons": []
+      },
+      "host": false,
+      "dev": false,
+      "confirm": false,
+      "effort_cells": {
+        "claude-opus-5": {
+          "low": [
+            4,
+            4
+          ],
+          "medium": [
+            3,
+            4
+          ],
+          "high": [
+            3,
+            4
+          ],
+          "xhigh": [
+            4,
+            4
+          ],
+          "max": [
+            4,
+            4
+          ]
+        },
+        "gpt-6-astra": {
+          "low": [
+            0,
+            4
+          ],
+          "medium": [
+            0,
+            4
+          ],
+          "high": [
+            0,
+            4
+          ],
+          "xhigh": [
+            0,
+            4
+          ],
+          "max": [
+            0,
+            4
+          ]
+        }
+      },
+      "selected": false,
+      "decision": "Opus 次位替补；家族 18/20 vs 0/20，目标强侧只有 3/4，排在 A 档之后"
+    },
+    {
+      "task": "happy-dom-deterministic-intersectionobserver",
+      "direction": "opus",
+      "grade": "B",
+      "cells": [
+        [
+          3,
+          4
+        ],
+        [
+          0,
+          4
+        ]
+      ],
+      "family": [
+        [
+          11,
+          20
+        ],
+        [
+          0,
+          20
+        ]
+      ],
+      "family_ok": true,
+      "family_gap": 0.55,
+      "other_efforts": [
+        [
+          8,
+          16
+        ],
+        [
+          0,
+          16
+        ]
+      ],
+      "delta": -0.0833,
+      "language": "typescript",
+      "repository": "capricorn86/happy-dom",
+      "quality": {
+        "error_rate": 0.007142857142857143,
+        "total_trials": 280,
+        "excluded_trials": 2,
+        "verifier_timeouts": 0,
+        "minimum_effective_repeats": 3,
+        "model_coverage": 28,
+        "config_coverage": 70,
+        "historical_stable": true,
+        "current_stable": true,
+        "layer_01_exclusion_reasons": []
+      },
+      "host": false,
+      "dev": false,
+      "confirm": false,
+      "effort_cells": {
+        "claude-opus-5": {
+          "low": [
+            2,
+            4
+          ],
+          "medium": [
+            0,
+            4
+          ],
+          "high": [
+            3,
+            4
+          ],
+          "xhigh": [
+            4,
+            4
+          ],
+          "max": [
+            2,
+            4
+          ]
+        },
+        "gpt-6-astra": {
+          "low": [
+            0,
+            4
+          ],
+          "medium": [
+            0,
+            4
+          ],
+          "high": [
+            0,
+            4
+          ],
+          "xhigh": [
+            0,
+            4
+          ],
+          "max": [
+            0,
+            4
+          ]
+        }
+      },
+      "selected": false,
+      "decision": "Opus 第四替补；目标强侧 3/4，Opus 家族仅 11/20，其他四档为 8/16"
+    },
+    {
+      "task": "koota-pair-relation-tracking",
+      "direction": "opus",
+      "grade": "B",
+      "cells": [
+        [
+          4,
+          4
+        ],
+        [
+          1,
+          4
+        ]
+      ],
+      "family": [
+        [
+          14,
+          20
+        ],
+        [
+          3,
+          20
+        ]
+      ],
+      "family_ok": true,
+      "family_gap": 0.5499999999999999,
+      "other_efforts": [
+        [
+          10,
+          16
+        ],
+        [
+          2,
+          16
+        ]
+      ],
+      "delta": -0.0278,
+      "language": "typescript",
+      "repository": "pmndrs/koota",
+      "quality": {
+        "error_rate": 0.0,
+        "total_trials": 280,
+        "excluded_trials": 0,
+        "verifier_timeouts": 0,
+        "minimum_effective_repeats": 4,
+        "model_coverage": 28,
+        "config_coverage": 70,
+        "historical_stable": true,
+        "current_stable": true,
+        "layer_01_exclusion_reasons": []
+      },
+      "host": false,
+      "dev": false,
+      "confirm": false,
+      "effort_cells": {
+        "claude-opus-5": {
+          "low": [
+            1,
+            4
+          ],
+          "medium": [
+            3,
+            4
+          ],
+          "high": [
+            4,
+            4
+          ],
+          "xhigh": [
+            3,
+            4
+          ],
+          "max": [
+            3,
+            4
+          ]
+        },
+        "gpt-6-astra": {
+          "low": [
+            0,
+            4
+          ],
+          "medium": [
+            2,
+            4
+          ],
+          "high": [
+            1,
+            4
+          ],
+          "xhigh": [
+            0,
+            4
+          ],
+          "max": [
+            0,
+            4
+          ]
+        }
+      },
+      "selected": false,
+      "decision": "Opus 第三替补；4/4 vs 1/4，家族 14/20 vs 3/20；强侧满格，但家族差距小于 pest"
+    },
+    {
+      "task": "onedump-dump-encryption-pipeline",
+      "direction": "opus",
+      "grade": "B",
+      "cells": [
+        [
+          3,
+          4
+        ],
+        [
+          0,
+          4
+        ]
+      ],
+      "family": [
+        [
+          13,
+          20
+        ],
+        [
+          8,
+          20
+        ]
+      ],
+      "family_ok": true,
+      "family_gap": 0.25,
+      "other_efforts": [
+        [
+          10,
+          16
+        ],
+        [
+          8,
+          16
+        ]
+      ],
+      "delta": 0.0,
+      "language": "go",
+      "repository": "liweiyi88/onedump",
+      "quality": {
+        "error_rate": 0.0,
+        "total_trials": 279,
+        "excluded_trials": 0,
+        "verifier_timeouts": 0,
+        "minimum_effective_repeats": 3,
+        "model_coverage": 28,
+        "config_coverage": 70,
+        "historical_stable": true,
+        "current_stable": true,
+        "layer_01_exclusion_reasons": []
+      },
+      "host": false,
+      "dev": false,
+      "confirm": false,
+      "effort_cells": {
+        "claude-opus-5": {
+          "low": [
+            2,
+            4
+          ],
+          "medium": [
+            3,
+            4
+          ],
+          "high": [
+            3,
+            4
+          ],
+          "xhigh": [
+            1,
+            4
+          ],
+          "max": [
+            4,
+            4
+          ]
+        },
+        "gpt-6-astra": {
+          "low": [
+            4,
+            4
+          ],
+          "medium": [
+            3,
+            4
+          ],
+          "high": [
+            0,
+            4
+          ],
+          "xhigh": [
+            0,
+            4
+          ],
+          "max": [
+            1,
+            4
+          ]
+        }
+      },
+      "selected": false,
+      "decision": "Opus 第五替补；目标强侧 3/4，家族差距较小（13/20 vs 8/20）"
+    },
+    {
+      "task": "kea-atomic-signal-selectors",
+      "direction": "opus",
+      "grade": "C",
+      "cells": [
+        [
+          3,
+          4
+        ],
+        [
+          1,
+          4
+        ]
+      ],
+      "family": [
+        [
+          12,
+          20
+        ],
+        [
+          13,
+          20
+        ]
+      ],
+      "family_ok": false,
+      "family_gap": -0.050000000000000044,
+      "other_efforts": [
+        [
+          9,
+          16
+        ],
+        [
+          12,
+          16
+        ]
+      ],
+      "delta": -0.0909,
+      "language": "typescript",
+      "repository": "keajs/kea",
+      "quality": {
+        "error_rate": 0.014285714285714285,
+        "total_trials": 280,
+        "excluded_trials": 4,
+        "verifier_timeouts": 0,
+        "minimum_effective_repeats": 3,
+        "model_coverage": 28,
+        "config_coverage": 70,
+        "historical_stable": true,
+        "current_stable": true,
+        "layer_01_exclusion_reasons": []
+      },
+      "host": false,
+      "dev": false,
+      "confirm": false,
+      "effort_cells": {
+        "claude-opus-5": {
+          "low": [
+            2,
+            4
+          ],
+          "medium": [
+            1,
+            4
+          ],
+          "high": [
+            3,
+            4
+          ],
+          "xhigh": [
+            3,
+            4
+          ],
+          "max": [
+            3,
+            4
+          ]
+        },
+        "gpt-6-astra": {
+          "low": [
+            2,
+            4
+          ],
+          "medium": [
+            4,
+            4
+          ],
+          "high": [
+            1,
+            4
+          ],
+          "xhigh": [
+            2,
+            4
+          ],
+          "max": [
+            4,
+            4
+          ]
+        }
+      },
+      "selected": false,
+      "decision": "排除：Astra 弱侧家族 13/20 > 50%，且高于 Opus 家族 12/20；其他四档方向也相反"
+    },
+    {
+      "task": "httpx-streaming-json-iteration",
+      "direction": "astra",
+      "grade": "A",
+      "cells": [
+        [
+          0,
+          4
+        ],
+        [
+          4,
+          4
+        ]
+      ],
+      "family": [
+        [
+          2,
+          20
+        ],
+        [
+          20,
+          20
+        ]
+      ],
+      "family_ok": true,
+      "family_gap": 0.9,
+      "other_efforts": [
+        [
+          2,
+          16
+        ],
+        [
+          16,
+          16
+        ]
+      ],
+      "delta": -0.0556,
+      "language": "python",
+      "repository": "encode/httpx",
+      "quality": {
+        "error_rate": 0.0,
+        "total_trials": 280,
+        "excluded_trials": 0,
+        "verifier_timeouts": 0,
+        "minimum_effective_repeats": 4,
+        "model_coverage": 28,
+        "config_coverage": 70,
+        "historical_stable": true,
+        "current_stable": true,
+        "layer_01_exclusion_reasons": []
+      },
+      "host": false,
+      "dev": false,
+      "confirm": false,
+      "effort_cells": {
+        "claude-opus-5": {
+          "low": [
+            1,
+            4
+          ],
+          "medium": [
+            1,
+            4
+          ],
+          "high": [
+            0,
+            4
+          ],
+          "xhigh": [
+            0,
+            4
+          ],
+          "max": [
+            0,
+            4
+          ]
+        },
+        "gpt-6-astra": {
+          "low": [
+            4,
+            4
+          ],
+          "medium": [
+            4,
+            4
+          ],
+          "high": [
+            4,
+            4
+          ],
+          "xhigh": [
+            4,
+            4
+          ],
+          "max": [
+            4,
+            4
+          ]
+        }
+      },
+      "selected": true,
+      "decision": "入选第 6 题"
+    },
+    {
+      "task": "bandit-interprocedural-taint-checks",
+      "direction": "astra",
+      "grade": "A",
+      "cells": [
+        [
+          0,
+          4
+        ],
+        [
+          4,
+          4
+        ]
+      ],
+      "family": [
+        [
+          5,
+          20
+        ],
+        [
+          19,
+          20
+        ]
+      ],
+      "family_ok": true,
+      "family_gap": 0.7,
+      "other_efforts": [
+        [
+          5,
+          16
+        ],
+        [
+          15,
+          16
+        ]
+      ],
+      "delta": -0.1111,
+      "language": "python",
+      "repository": "PyCQA/bandit",
+      "quality": {
+        "error_rate": 0.007142857142857143,
+        "total_trials": 280,
+        "excluded_trials": 2,
+        "verifier_timeouts": 0,
+        "minimum_effective_repeats": 3,
+        "model_coverage": 28,
+        "config_coverage": 70,
+        "historical_stable": true,
+        "current_stable": true,
+        "layer_01_exclusion_reasons": []
+      },
+      "host": false,
+      "dev": false,
+      "confirm": false,
+      "effort_cells": {
+        "claude-opus-5": {
+          "low": [
+            1,
+            4
+          ],
+          "medium": [
+            0,
+            4
+          ],
+          "high": [
+            0,
+            4
+          ],
+          "xhigh": [
+            3,
+            4
+          ],
+          "max": [
+            1,
+            4
+          ]
+        },
+        "gpt-6-astra": {
+          "low": [
+            3,
+            4
+          ],
+          "medium": [
+            4,
+            4
+          ],
+          "high": [
+            4,
+            4
+          ],
+          "xhigh": [
+            4,
+            4
+          ],
+          "max": [
+            4,
+            4
+          ]
+        }
+      },
+      "selected": true,
+      "decision": "入选第 7 题"
+    },
+    {
+      "task": "koota-deferred-mutation-buffer",
+      "direction": "astra",
+      "grade": "B",
+      "cells": [
+        [
+          0,
+          4
+        ],
+        [
+          3,
+          4
+        ]
+      ],
+      "family": [
+        [
+          1,
+          20
+        ],
+        [
+          19,
+          20
+        ]
+      ],
+      "family_ok": true,
+      "family_gap": 0.8999999999999999,
+      "other_efforts": [
+        [
+          1,
+          16
+        ],
+        [
+          16,
+          16
+        ]
+      ],
+      "delta": -0.0444,
+      "language": "typescript",
+      "repository": "pmndrs/koota",
+      "quality": {
+        "error_rate": 0.010714285714285714,
+        "total_trials": 280,
+        "excluded_trials": 3,
+        "verifier_timeouts": 0,
+        "minimum_effective_repeats": 3,
+        "model_coverage": 28,
+        "config_coverage": 70,
+        "historical_stable": true,
+        "current_stable": true,
+        "layer_01_exclusion_reasons": []
+      },
+      "host": false,
+      "dev": false,
+      "confirm": false,
+      "effort_cells": {
+        "claude-opus-5": {
+          "low": [
+            0,
+            4
+          ],
+          "medium": [
+            0,
+            4
+          ],
+          "high": [
+            0,
+            4
+          ],
+          "xhigh": [
+            0,
+            4
+          ],
+          "max": [
+            1,
+            4
+          ]
+        },
+        "gpt-6-astra": {
+          "low": [
+            4,
+            4
+          ],
+          "medium": [
+            4,
+            4
+          ],
+          "high": [
+            3,
+            4
+          ],
+          "xhigh": [
+            4,
+            4
+          ],
+          "max": [
+            4,
+            4
+          ]
+        }
+      },
+      "selected": false,
+      "decision": "Astra 首位替补；家族极强（19/20 vs 1/20），但 high 为 3/4；主池优先选强侧 4/4 的 B 档"
+    },
+    {
+      "task": "oxvg-structural-selector-preservation",
+      "direction": "astra",
+      "grade": "B",
+      "cells": [
+        [
+          1,
+          4
+        ],
+        [
+          4,
+          4
+        ]
+      ],
+      "family": [
+        [
+          2,
+          20
+        ],
+        [
+          18,
+          20
+        ]
+      ],
+      "family_ok": true,
+      "family_gap": 0.8,
+      "other_efforts": [
+        [
+          1,
+          16
+        ],
+        [
+          14,
+          16
+        ]
+      ],
+      "delta": -0.0278,
+      "language": "rust",
+      "repository": "noahbald/oxvg",
+      "quality": {
+        "error_rate": 0.007168458781362007,
+        "total_trials": 279,
+        "excluded_trials": 2,
+        "verifier_timeouts": 0,
+        "minimum_effective_repeats": 3,
+        "model_coverage": 28,
+        "config_coverage": 70,
+        "historical_stable": true,
+        "current_stable": true,
+        "layer_01_exclusion_reasons": []
+      },
+      "host": false,
+      "dev": false,
+      "confirm": false,
+      "effort_cells": {
+        "claude-opus-5": {
+          "low": [
+            0,
+            4
+          ],
+          "medium": [
+            0,
+            4
+          ],
+          "high": [
+            1,
+            4
+          ],
+          "xhigh": [
+            0,
+            4
+          ],
+          "max": [
+            1,
+            4
+          ]
+        },
+        "gpt-6-astra": {
+          "low": [
+            3,
+            4
+          ],
+          "medium": [
+            3,
+            4
+          ],
+          "high": [
+            4,
+            4
+          ],
+          "xhigh": [
+            4,
+            4
+          ],
+          "max": [
+            4,
+            4
+          ]
+        }
+      },
+      "selected": true,
+      "decision": "入选第 8 题"
+    },
+    {
+      "task": "scc-bounded-memory-spilling",
+      "direction": "astra",
+      "grade": "B",
+      "cells": [
+        [
+          1,
+          4
+        ],
+        [
+          4,
+          4
+        ]
+      ],
+      "family": [
+        [
+          7,
+          20
+        ],
+        [
+          20,
+          20
+        ]
+      ],
+      "family_ok": true,
+      "family_gap": 0.65,
+      "other_efforts": [
+        [
+          6,
+          16
+        ],
+        [
+          16,
+          16
+        ]
+      ],
+      "delta": 0.1389,
+      "language": "go",
+      "repository": "boyter/scc",
+      "quality": {
+        "error_rate": 0.007142857142857143,
+        "total_trials": 280,
+        "excluded_trials": 2,
+        "verifier_timeouts": 0,
+        "minimum_effective_repeats": 3,
+        "model_coverage": 28,
+        "config_coverage": 70,
+        "historical_stable": true,
+        "current_stable": true,
+        "layer_01_exclusion_reasons": []
+      },
+      "host": false,
+      "dev": false,
+      "confirm": false,
+      "effort_cells": {
+        "claude-opus-5": {
+          "low": [
+            0,
+            4
+          ],
+          "medium": [
+            1,
+            4
+          ],
+          "high": [
+            1,
+            4
+          ],
+          "xhigh": [
+            3,
+            4
+          ],
+          "max": [
+            2,
+            4
+          ]
+        },
+        "gpt-6-astra": {
+          "low": [
+            4,
+            4
+          ],
+          "medium": [
+            4,
+            4
+          ],
+          "high": [
+            4,
+            4
+          ],
+          "xhigh": [
+            4,
+            4
+          ],
+          "max": [
+            4,
+            4
+          ]
+        }
+      },
+      "selected": true,
+      "decision": "入选第 9 题"
+    },
+    {
+      "task": "csstree-shorthand-expansion-compression",
+      "direction": "astra",
+      "grade": "B",
+      "cells": [
+        [
+          1,
+          4
+        ],
+        [
+          4,
+          4
+        ]
+      ],
+      "family": [
+        [
+          2,
+          20
+        ],
+        [
+          13,
+          20
+        ]
+      ],
+      "family_ok": true,
+      "family_gap": 0.55,
+      "other_efforts": [
+        [
+          1,
+          16
+        ],
+        [
+          9,
+          16
+        ]
+      ],
+      "delta": 0.0556,
+      "language": "javascript",
+      "repository": "csstree/csstree",
+      "quality": {
+        "error_rate": 0.010714285714285714,
+        "total_trials": 280,
+        "excluded_trials": 3,
+        "verifier_timeouts": 0,
+        "minimum_effective_repeats": 3,
+        "model_coverage": 28,
+        "config_coverage": 70,
+        "historical_stable": true,
+        "current_stable": true,
+        "layer_01_exclusion_reasons": []
+      },
+      "host": false,
+      "dev": false,
+      "confirm": false,
+      "effort_cells": {
+        "claude-opus-5": {
+          "low": [
+            0,
+            4
+          ],
+          "medium": [
+            1,
+            4
+          ],
+          "high": [
+            1,
+            4
+          ],
+          "xhigh": [
+            0,
+            4
+          ],
+          "max": [
+            0,
+            4
+          ]
+        },
+        "gpt-6-astra": {
+          "low": [
+            1,
+            4
+          ],
+          "medium": [
+            2,
+            4
+          ],
+          "high": [
+            4,
+            4
+          ],
+          "xhigh": [
+            2,
+            4
+          ],
+          "max": [
+            4,
+            4
+          ]
+        }
+      },
+      "selected": true,
+      "decision": "入选第 10 题"
+    },
+    {
+      "task": "optique-conditional-option-dependencies",
+      "direction": "astra",
+      "grade": "B",
+      "cells": [
+        [
+          0,
+          4
+        ],
+        [
+          3,
+          4
+        ]
+      ],
+      "family": [
+        [
+          9,
+          20
+        ],
+        [
+          19,
+          20
+        ]
+      ],
+      "family_ok": true,
+      "family_gap": 0.49999999999999994,
+      "other_efforts": [
+        [
+          9,
+          16
+        ],
+        [
+          16,
+          16
+        ]
+      ],
+      "delta": 0.0833,
+      "language": "typescript",
+      "repository": "dahlia/optique",
+      "quality": {
+        "error_rate": 0.0,
+        "total_trials": 280,
+        "excluded_trials": 0,
+        "verifier_timeouts": 0,
+        "minimum_effective_repeats": 4,
+        "model_coverage": 28,
+        "config_coverage": 70,
+        "historical_stable": true,
+        "current_stable": true,
+        "layer_01_exclusion_reasons": []
+      },
+      "host": false,
+      "dev": false,
+      "confirm": false,
+      "effort_cells": {
+        "claude-opus-5": {
+          "low": [
+            2,
+            4
+          ],
+          "medium": [
+            2,
+            4
+          ],
+          "high": [
+            0,
+            4
+          ],
+          "xhigh": [
+            3,
+            4
+          ],
+          "max": [
+            2,
+            4
+          ]
+        },
+        "gpt-6-astra": {
+          "low": [
+            4,
+            4
+          ],
+          "medium": [
+            4,
+            4
+          ],
+          "high": [
+            3,
+            4
+          ],
+          "xhigh": [
+            4,
+            4
+          ],
+          "max": [
+            4,
+            4
+          ]
+        }
+      },
+      "selected": false,
+      "decision": "Astra 次位替补；high 为 3/4，Opus 其他四档 9/16，弱侧证据更依赖 high 档"
+    },
+    {
+      "task": "awilix-async-container-initialization",
+      "direction": "astra",
+      "grade": "B",
+      "cells": [
+        [
+          0,
+          4
+        ],
+        [
+          3,
+          4
+        ]
+      ],
+      "family": [
+        [
+          0,
+          20
+        ],
+        [
+          8,
+          20
+        ]
+      ],
+      "family_ok": true,
+      "family_gap": 0.4,
+      "other_efforts": [
+        [
+          0,
+          16
+        ],
+        [
+          5,
+          16
+        ]
+      ],
+      "delta": 0.0278,
+      "language": "typescript",
+      "repository": "jeffijoe/awilix",
+      "quality": {
+        "error_rate": 0.014285714285714285,
+        "total_trials": 280,
+        "excluded_trials": 4,
+        "verifier_timeouts": 0,
+        "minimum_effective_repeats": 3,
+        "model_coverage": 28,
+        "config_coverage": 70,
+        "historical_stable": true,
+        "current_stable": true,
+        "layer_01_exclusion_reasons": []
+      },
+      "host": false,
+      "dev": false,
+      "confirm": false,
+      "effort_cells": {
+        "claude-opus-5": {
+          "low": [
+            0,
+            4
+          ],
+          "medium": [
+            0,
+            4
+          ],
+          "high": [
+            0,
+            4
+          ],
+          "xhigh": [
+            0,
+            4
+          ],
+          "max": [
+            0,
+            4
+          ]
+        },
+        "gpt-6-astra": {
+          "low": [
+            1,
+            4
+          ],
+          "medium": [
+            2,
+            4
+          ],
+          "high": [
+            3,
+            4
+          ],
+          "xhigh": [
+            2,
+            4
+          ],
+          "max": [
+            0,
+            4
+          ]
+        }
+      },
+      "selected": false,
+      "decision": "Astra 第三替补；high 为 3/4，Astra 家族只有 8/20，其他四档 5/16，effort 依赖明显"
+    },
+    {
+      "task": "superjson-error-stack-serialization",
+      "direction": "astra",
+      "grade": "C",
+      "cells": [
+        [
+          1,
+          4
+        ],
+        [
+          3,
+          4
+        ]
+      ],
+      "family": [
+        [
+          3,
+          20
+        ],
+        [
+          17,
+          20
+        ]
+      ],
+      "family_ok": true,
+      "family_gap": 0.7,
+      "other_efforts": [
+        [
+          2,
+          16
+        ],
+        [
+          14,
+          16
+        ]
+      ],
+      "delta": -0.0108,
+      "language": "typescript",
+      "repository": "flightcontrolhq/superjson",
+      "quality": {
+        "error_rate": 0.017921146953405017,
+        "total_trials": 279,
+        "excluded_trials": 5,
+        "verifier_timeouts": 0,
+        "minimum_effective_repeats": 0,
+        "model_coverage": 28,
+        "config_coverage": 69,
+        "historical_stable": false,
+        "current_stable": false,
+        "layer_01_exclusion_reasons": [
+          "minimum_effective_repeats"
+        ]
+      },
+      "host": false,
+      "dev": false,
+      "confirm": false,
+      "effort_cells": {
+        "claude-opus-5": {
+          "low": [
+            1,
+            4
+          ],
+          "medium": [
+            1,
+            4
+          ],
+          "high": [
+            1,
+            4
+          ],
+          "xhigh": [
+            0,
+            4
+          ],
+          "max": [
+            0,
+            4
+          ]
+        },
+        "gpt-6-astra": {
+          "low": [
+            4,
+            4
+          ],
+          "medium": [
+            4,
+            4
+          ],
+          "high": [
+            3,
+            4
+          ],
+          "xhigh": [
+            3,
+            4
+          ],
+          "max": [
+            3,
+            4
+          ]
+        }
+      },
+      "selected": false,
+      "decision": "Astra 第四替补；high 为 3/4，目标配对降至 C 档，且未过稳定条件"
+    }
+  ]
+}

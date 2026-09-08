@@ -60,7 +60,7 @@ uv run pier view data/official-v1.1-jobs --jobs
 
 由 `wip/scripts/select_discriminative_tasks.py` 生成。每一层同时保存 CSV 和 JSON，后层只包含通过前层和本层条件的任务：
 
-此目录保留 2026-07-29 生成的历史筛选结果，输入为 2026-07-25 的 50 个 config、22,586 次 rollout，详见 `manifest.json` 的输入哈希。本次 2026-09-08 同步仅更新官方快照和 viewer 数据，未重新抽样；下述逐层数量、dev/confirm 运行清单及手工子集仍对应历史筛选口径。若要基于最新快照重新选题，应使用独立的 `--output-dir` 保存，并重新应用本机运行排除。
+此目录保留 2026-07-29 生成的历史筛选结果，输入为 2026-07-25 的 50 个 config、22,586 次 rollout，详见 `manifest.json` 的输入哈希。2026-09-08 官方数据同步未重新运行主线抽样；下述逐层数量及 dev/confirm 运行清单仍对应历史筛选口径。手工互补子集各自使用的数据版本见对应文档，其中同日新增的 Opus/Astra 子集使用最新快照。若要基于最新快照重新运行主线选题，应使用独立的 `--output-dir` 保存，并重新应用本机运行排除。
 
 | 层 | 文件 | 含义 |
 | --- | --- | --- |
@@ -131,6 +131,12 @@ uv run python scripts/select_discriminative_tasks.py \
 `selection/complementary-opus-luna-max.txt` 是为 `claude-opus-5 [high]` 与 `gpt-5-6-luna [max]` 配对准备的 10 题清单（前 5 题 opus 强方向、后 5 题 luna 强方向）。两配置在该池均为 21/40，逐题 oracle 为 38/40。筛选依据、完整候选和替补名单见 [opus/luna 互补子集文档](../docs/deepswe-opus-luna-complementary-subset.md)。
 
 `selection/complementary-opus-v4flash.txt` 是为 `claude-opus-5 [high]` 与 `deepseek-v4-flash [max]` 配对准备的 10 题清单（前 5 题 opus 强方向、后 5 题 v4-flash 强方向）。两配置在该池分别为 21/40、19/40，逐题 oracle 为 38/40。v4-flash 只有单一 config，家族佐证只来自 opus 一侧；筛选依据、完整候选和替补名单见 [opus/v4-flash 互补子集文档](../docs/deepswe-opus-v4flash-complementary-subset.md)。
+
+`selection/complementary-opus-astra-medium.txt` 是为 `claude-opus-5 [high]` 与 `gpt-6-astra [medium]` 配对准备的 10 题清单（前 5 题 opus 强方向、后 5 题 astra 强方向），基于 2026-09-08 最新快照筛选。9 道 A 档、1 道 B 档，10 个不同仓库；两配置分别为 21/40、20/40，逐题经验 oracle 为 40/40。另存 `complementary-opus-astra-medium-candidates.txt`（家族佐证后的 16 题，前 9 题 opus 强、后 7 题 astra 强）和 `complementary-opus-astra-medium.json`（全部 18 道阈值命中题的证据及输入哈希）。筛选依据、质量标记与替补顺序见 [opus/astra 互补子集文档](../docs/deepswe-opus-astra-complementary-subset.md)。
+
+`selection/complementary-opus-astra-high.txt` 是同一快照下 `claude-opus-5 [high]` 与 `gpt-6-astra [high]` 的 10 题配对清单（前 5 题 opus 强、后 5 题 astra 强）。7 道 A 档、3 道 B 档，10 个不同仓库；两配置分别为 23/40、20/40，逐题经验 oracle 为 40/40。与 medium 清单重叠 8 题：以 `oxvg`、`csstree` 替换 `koota-deferred`、`optique`。另存 `complementary-opus-astra-high-candidates.txt`（19 题，前 10 题 opus 强、后 9 题 astra 强）和 `complementary-opus-astra-high.json`（全部 20 道命中题的证据、哈希及两档交叉对照）。筛选依据和替补顺序见 [opus/astra-high 互补子集文档](../docs/deepswe-opus-astra-high-complementary-subset.md)。
+
+`selection/complementary-opus-astra-xhigh.txt` 是同一快照下 `claude-opus-5 [high]` 与 `gpt-6-astra [xhigh]` 的 10 题配对清单（前 5 题 opus 强、后 5 题 astra 强）。9 道 A 档、1 道 B 档，10 个不同仓库；两配置分别为 21/40、20/40，逐题经验 oracle 为 40/40。与 medium 清单重叠 9 题（以 `oxvg` 替换 `scc`），与 high 清单重叠 8 题。另存 `complementary-opus-astra-xhigh-candidates.txt`（20 题，前 12 题 opus 强、后 8 题 astra 强，包含 confirm 任务 `go-critic-doc-link-checker`）和 `complementary-opus-astra-xhigh.json`（全部候选的证据、哈希及三档交叉对照）。推荐 10 题不含 confirm 任务；筛选依据与替补顺序见 [opus/astra-xhigh 互补子集文档](../docs/deepswe-opus-astra-xhigh-complementary-subset.md)。
 
 ## 对后续 agent-system 评测的解释
 
