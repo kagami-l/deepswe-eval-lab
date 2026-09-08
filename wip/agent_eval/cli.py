@@ -34,93 +34,320 @@ DEFAULT_RUNTIME_TARGET = "/opt/deep-swe-agent-runtime"
 MAX_JOB_NAME_LENGTH = 200
 
 
+_EPILOG = """\
+subcommands:
+  runtime prepare   build or verify the shared Agent runtime image
+  eval              plan and launch a single-Agent or collab evaluation via pier run
+  score-patches     re-score the frozen stage patches of a finished collab job
+
+run from the wip/ directory, for example:
+  uv run python scripts/run_agent_eval.py runtime prepare
+  uv run python scripts/run_agent_eval.py eval --task <task> --agent codex --dry-run
+  uv run python scripts/run_agent_eval.py eval \\
+      --task-list data/selection/05_sample_dev.txt \\
+      --agent collab --modifier kimi --reviewer codex
+  uv run python scripts/run_agent_eval.py score-patches --job-path ../jobs/<job-name>
+
+environment:
+  PIER_BIN             default for --pier-bin
+  KIMI_AUTH_HOME_PATH  Kimi login home checked before a live kimi eval
+                       (default: ~/.kimi-code)
+  wip/scripts/.env     gitignored credentials auto-loaded by run_agent_eval.py,
+                       e.g. CLAUDE_CODE_OAUTH_TOKEN; exported variables win
+"""
+
+_PREPARE_DESCRIPTION = """\
+Build or verify the shared Agent runtime image.
+
+Fingerprints wip/config/runtime-manifest.json and the runtime build inputs it
+references, then resolves the default image deep-swe/agent-runtime:<digest>.
+A missing image is built. An existing image whose manifest digest or platform
+does not match is an error unless --rebuild is given.
+"""
+
+_EVAL_DESCRIPTION = """\
+Run a single-Agent or collab DeepSWE evaluation through pier.
+
+Resolves the selected tasks and Agent profiles into an execution plan, prepares
+the shared runtime image, writes a run manifest to
+<jobs-dir>/.agent-eval-manifests/<job-name>.json and launches `pier run`.
+Single mode takes one profile via --agent. Collab mode (--agent collab) runs a
+modifier/reviewer review loop and requires --modifier and --reviewer.
+With --dry-run only the plan and the redacted pier command are printed.
+"""
+
+_SCORE_DESCRIPTION = """\
+Post-hoc score the stage patches of a finished collab job.
+
+Replays every frozen stage patch of each collab trial through pier's direct
+verifier so per-stage rewards can be compared. No model is invoked. Trials
+whose execution plan is not a collab topology are reported as ineligible.
+"""
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Run the unified DeepSWE single/collab evaluation baseline."
+        description="Run the unified DeepSWE single/collab evaluation baseline.",
+        epilog=_EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    runtime = subparsers.add_parser("runtime", help="Manage the shared runtime")
+    runtime = subparsers.add_parser(
+        "runtime",
+        help="Manage the shared Agent runtime image",
+        description="Manage the shared Agent runtime image used by every eval.",
+    )
     runtime_subcommands = runtime.add_subparsers(dest="runtime_command", required=True)
     prepare = runtime_subcommands.add_parser(
-        "prepare", help="Build or verify the runtime"
+        "prepare",
+        help="Build or verify the shared runtime image",
+        description=_PREPARE_DESCRIPTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    _add_runtime_args(prepare)
-    prepare.add_argument("--dry-run", action="store_true")
+    _add_runtime_args(prepare, include_target=False)
+    prepare.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Only inspect the local image and report whether prepare would build it",
+    )
 
-    evaluate = subparsers.add_parser("eval", help="Run a DeepSWE evaluation")
-    evaluate.add_argument("--task", action="append", default=[])
-    evaluate.add_argument("--task-list", action="append", type=Path, default=[])
-    evaluate.add_argument("--tasks-dir", type=Path, default=DEFAULT_TASKS_DIR)
-    evaluate.add_argument("--profiles", type=Path, default=DEFAULT_PROFILES)
-    evaluate.add_argument("--agent", required=True)
-    evaluate.add_argument("--modifier")
-    evaluate.add_argument("--reviewer")
-    evaluate.add_argument("--model")
-    evaluate.add_argument("--effort")
-    evaluate.add_argument("--modifier-model")
-    evaluate.add_argument("--modifier-effort")
-    evaluate.add_argument("--reviewer-model")
-    evaluate.add_argument("--reviewer-effort")
-    evaluate.add_argument("--allow-unverified", action="store_true")
-    evaluate.add_argument("--max-reviews", type=int)
-    evaluate.add_argument("--max-agent-attempts", type=int, default=2)
-    evaluate.add_argument(
+    evaluate = subparsers.add_parser(
+        "eval",
+        help="Run a single-Agent or collab DeepSWE evaluation through pier",
+        description=_EVAL_DESCRIPTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    tasks = evaluate.add_argument_group("task selection")
+    tasks.add_argument(
+        "--task",
+        action="append",
+        default=[],
+        metavar="NAME",
+        help="Task directory name under --tasks-dir; repeatable. "
+        "At least one --task or --task-list is required",
+    )
+    tasks.add_argument(
+        "--task-list",
+        action="append",
+        type=Path,
+        default=[],
+        metavar="PATH",
+        help="Text file with one task name per line (blank lines and # comments are "
+        "ignored); repeatable",
+    )
+    tasks.add_argument(
+        "--tasks-dir",
+        type=Path,
+        default=DEFAULT_TASKS_DIR,
+        metavar="PATH",
+        help="DeepSWE tasks directory (default: <repo>/tasks)",
+    )
+
+    roles = evaluate.add_argument_group("agent roles")
+    roles.add_argument(
+        "--profiles",
+        type=Path,
+        default=DEFAULT_PROFILES,
+        metavar="PATH",
+        help="Agent profile registry JSON (default: wip/config/agent-profiles.json)",
+    )
+    roles.add_argument(
+        "--agent",
+        required=True,
+        metavar="PROFILE|collab",
+        help="Profile name for single mode (e.g. claude, codex, kimi, opencode) or "
+        "'collab' for the modifier/reviewer review loop",
+    )
+    roles.add_argument(
+        "--modifier",
+        metavar="PROFILE",
+        help="Collab only: profile that writes patches (required with --agent collab)",
+    )
+    roles.add_argument(
+        "--reviewer",
+        metavar="PROFILE",
+        help="Collab only: profile that reviews patches (required with --agent collab)",
+    )
+    roles.add_argument("--model", help="Single mode only: override the profile model")
+    roles.add_argument(
+        "--effort", help="Single mode only: override the profile reasoning effort"
+    )
+    roles.add_argument(
+        "--modifier-model",
+        metavar="MODEL",
+        help="Collab only: override the modifier profile model",
+    )
+    roles.add_argument(
+        "--modifier-effort",
+        metavar="EFFORT",
+        help="Collab only: override the modifier profile reasoning effort",
+    )
+    roles.add_argument(
+        "--reviewer-model",
+        metavar="MODEL",
+        help="Collab only: override the reviewer profile model",
+    )
+    roles.add_argument(
+        "--reviewer-effort",
+        metavar="EFFORT",
+        help="Collab only: override the reviewer profile reasoning effort",
+    )
+    roles.add_argument(
+        "--allow-unverified",
+        action="store_true",
+        help="Allow profiles whose status is 'unverified' (currently gemini)",
+    )
+
+    budget = evaluate.add_argument_group("workflow budget")
+    budget.add_argument(
+        "--max-reviews",
+        type=int,
+        metavar="N",
+        help="Collab only: maximum review rounds (default: 3)",
+    )
+    budget.add_argument(
+        "--max-agent-attempts",
+        type=int,
+        default=2,
+        metavar="N",
+        help="Maximum attempts per Agent turn (default: %(default)s)",
+    )
+    budget.add_argument(
         "--reviewer-timeout-seconds",
         type=float,
-        help="Optional collab review-attempt cap; defaults to the remaining workflow time",
+        metavar="SECONDS",
+        help="Collab only: optional review-attempt cap; defaults to the remaining "
+        "workflow time",
     )
-    evaluate.add_argument(
+    budget.add_argument(
         "--revision-timeout-seconds",
         type=float,
-        help="Optional collab revision-attempt cap; defaults to the remaining workflow time",
+        metavar="SECONDS",
+        help="Collab only: optional revision-attempt cap; defaults to the remaining "
+        "workflow time",
     )
-    evaluate.add_argument(
+    budget.add_argument(
         "--event-silence-timeout-seconds",
         type=float,
         default=DEFAULT_EVENT_SILENCE_TIMEOUT_SECONDS,
-        help="Abort a turn after this many seconds without any Agent event",
+        metavar="SECONDS",
+        help="Abort a turn after this many seconds without any Agent event "
+        "(default: %(default)s)",
     )
-    evaluate.add_argument("--min-turn-seconds", type=float, default=120.0)
-    evaluate.add_argument("--strict", action="store_true")
-    evaluate.add_argument("--keep-workspaces", action="store_true")
-    evaluate.add_argument(
-        "--cleanup-reserve-seconds", type=float, default=DEFAULT_CLEANUP_RESERVE_SECONDS
+    budget.add_argument(
+        "--min-turn-seconds",
+        type=float,
+        default=120.0,
+        metavar="SECONDS",
+        help="Skip a turn when fewer than this many seconds remain in the workflow "
+        "budget (default: %(default)s)",
     )
-    evaluate.add_argument("--agent-timeout-multiplier", type=float, default=1.0)
-    evaluate.add_argument("--n-attempts", type=int, default=1)
-    evaluate.add_argument("--n-concurrent", type=int, default=2)
-    evaluate.add_argument("--jobs-dir", type=Path, default=DEFAULT_JOBS_DIR)
-    evaluate.add_argument("--job-name")
-    evaluate.add_argument("--pier-bin", default=os.environ.get("PIER_BIN", "pier"))
-    _add_runtime_args(evaluate)
-    evaluate.add_argument("--rebuild-runtime", action="store_true")
-    evaluate.add_argument("--dry-run", action="store_true")
-    evaluate.add_argument(
+    budget.add_argument(
+        "--cleanup-reserve-seconds",
+        type=float,
+        default=DEFAULT_CLEANUP_RESERVE_SECONDS,
+        metavar="SECONDS",
+        help="Seconds reserved before the hard Agent timeout for cleanup; must be "
+        "smaller than that timeout (default: %(default)s)",
+    )
+    budget.add_argument(
+        "--agent-timeout-multiplier",
+        type=float,
+        default=1.0,
+        metavar="X",
+        help="Multiplier on the tasks' agent.timeout_sec for the hard Agent timeout; "
+        "also forwarded to pier run (default: %(default)s)",
+    )
+    budget.add_argument(
+        "--strict",
+        action="store_true",
+        help="Fail the workflow instead of delivering a degraded checkpoint",
+    )
+    budget.add_argument(
+        "--keep-workspaces",
+        action="store_true",
+        help="Keep the per-review isolated workspace copies for inspection",
+    )
+
+    job = evaluate.add_argument_group("pier job")
+    job.add_argument(
+        "--n-attempts",
+        type=int,
+        default=1,
+        metavar="N",
+        help="Forwarded to pier run --n-attempts (default: %(default)s)",
+    )
+    job.add_argument(
+        "--n-concurrent",
+        type=int,
+        default=2,
+        metavar="N",
+        help="Forwarded to pier run --n-concurrent (default: %(default)s)",
+    )
+    job.add_argument(
+        "--jobs-dir",
+        type=Path,
+        default=DEFAULT_JOBS_DIR,
+        metavar="PATH",
+        help="Pier jobs directory; run manifests go to <jobs-dir>/.agent-eval-manifests "
+        "(default: <repo>/jobs)",
+    )
+    job.add_argument(
+        "--job-name",
+        metavar="NAME",
+        help="Explicit job name using [A-Za-z0-9._-], at most 200 characters "
+        "(default: <agent[-modifier-reviewer]>-<scope>-<timestamp>)",
+    )
+    job.add_argument(
+        "--pier-bin",
+        default=os.environ.get("PIER_BIN", "pier"),
+        metavar="PATH",
+        help="pier executable (default: $PIER_BIN or 'pier')",
+    )
+    job.add_argument(
         "pier_args",
         nargs=argparse.REMAINDER,
-        help="Additional pier run arguments after --",
+        metavar="PIER_ARGS",
+        help="Additional pier run arguments, given after --",
+    )
+
+    runtime_image = evaluate.add_argument_group("runtime image")
+    _add_runtime_args(runtime_image, include_target=True)
+    runtime_image.add_argument(
+        "--rebuild-runtime", action="store_true", help="Alias of --rebuild"
+    )
+    evaluate.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print the execution plan, runtime status and redacted pier command; "
+        "skip building, credential checks and pier run",
     )
 
     score = subparsers.add_parser(
         "score-patches",
         help="Post-hoc score the stage patches of a finished collab job",
+        description=_SCORE_DESCRIPTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     score.add_argument(
         "--job-path",
         type=Path,
         required=True,
-        help="Existing Pier job directory (e.g. jobs/<job-name>)",
+        metavar="PATH",
+        help="Existing Pier job directory of a finished collab job (e.g. ../jobs/<job-name>)",
     )
     score.add_argument(
         "--trial",
+        metavar="GLOB",
         help="Only scan and score trial directories matching this glob",
     )
     score.add_argument(
         "--concurrency",
         type=int,
         default=2,
-        help="Concurrent direct verifier environments (default: 2)",
+        metavar="N",
+        help="Concurrent direct verifier environments (default: %(default)s)",
     )
     score.add_argument(
         "--reuse-final-score",
@@ -132,15 +359,40 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Ignore cached direct scores and re-run applicable verifiers",
     )
-    score.add_argument("--pier-bin", default=os.environ.get("PIER_BIN", "pier"))
+    score.add_argument(
+        "--pier-bin",
+        default=os.environ.get("PIER_BIN", "pier"),
+        metavar="PATH",
+        help="pier executable (default: $PIER_BIN or 'pier')",
+    )
     return parser
 
 
-def _add_runtime_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--runtime-image")
-    parser.add_argument("--runtime-platform", choices=["linux/amd64", "linux/arm64"])
-    parser.add_argument("--runtime-target", default=DEFAULT_RUNTIME_TARGET)
-    parser.add_argument("--rebuild", action="store_true")
+def _add_runtime_args(parser: argparse._ActionsContainer, *, include_target: bool) -> None:
+    parser.add_argument(
+        "--runtime-image",
+        metavar="IMAGE",
+        help="Explicit runtime image reference "
+        "(default: deep-swe/agent-runtime:<manifest digest>)",
+    )
+    parser.add_argument(
+        "--runtime-platform",
+        choices=["linux/amd64", "linux/arm64"],
+        help="Docker platform to build and verify "
+        "(default: the manifest's default_platform, currently linux/amd64)",
+    )
+    if include_target:
+        parser.add_argument(
+            "--runtime-target",
+            default=DEFAULT_RUNTIME_TARGET,
+            metavar="PATH",
+            help="Container mount path of the read-only runtime image (default: %(default)s)",
+        )
+    parser.add_argument(
+        "--rebuild",
+        action="store_true",
+        help="Rebuild the runtime image even when a matching image already exists",
+    )
 
 
 def _safe_job_component(value: str) -> str:

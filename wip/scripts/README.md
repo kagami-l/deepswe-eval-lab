@@ -1,5 +1,25 @@
 # WIP 脚本
 
+除特别说明外，命令都在 `wip/` 目录下执行（先 `uv sync`，见 [`../README.md`](../README.md)）。
+
+## 目录索引
+
+| 文件 | 用途 | 详细文档 |
+|---|---|---|
+| `run_agent_eval.py` | 统一 Agent 评测入口：`runtime prepare`、`eval`、`score-patches` | 下节；[`docs/unified-agent-evaluation-design.md`](../../docs/unified-agent-evaluation-design.md) |
+| `token_usage.py` | 汇总一个 job 的 token 与费用报告 | 本文“Token 消耗报告” |
+| `official_trials_to_pier_jobs.py` | 把官方 DeepSWE v1.1 `trials.json` 转成 `pier view --jobs` 可读的 jobs 目录 | [`../data/README.md`](../data/README.md) |
+| `select_discriminative_tasks.py` | 从官方 v1.1 数据生成分层任务筛选结果和 `data/selection/` 样本 | [`../data/README.md`](../data/README.md) |
+| `run_mini_swe_eval.sh` | 旧基线：用 Pier 运行 mini-swe-agent（官方 trials 的 harness） | 本文末节；[`../docs/mini-swe-shared-runtime.md`](../docs/mini-swe-shared-runtime.md) |
+| `test_*.py` | 上述 Python 脚本的单元测试 | 本文“测试” |
+| `.env` | gitignored 凭据，`run_agent_eval.py` 启动时自动加载（已导出的变量优先） | [`docs/claude-code-oauth-token.md`](../../docs/claude-code-oauth-token.md) |
+
+每个脚本都支持 `--help`；`run_agent_eval.py` 的每个子命令也各自支持 `--help`。
+
+旧基线入口 `run_codex_eval.sh`、`run_kimi_sample_dev.sh`、`run_opencode_eval.sh` 已于
+2026-09-08 移除，等价命令是 `run_agent_eval.py eval --agent codex|kimi|opencode`。它们专属的
+adapter 代码暂时保留，弃用说明见 [`../agents/deprecated.md`](../agents/deprecated.md)。
+
 ## 统一 Agent 评测新基线
 
 single 和固定 review-loop collab 的新实验统一使用：
@@ -37,8 +57,20 @@ uv run python scripts/run_agent_eval.py eval \
 
 完整契约、认证路径、预算语义和验收记录见
 [`docs/unified-agent-evaluation-design.md`](../../docs/unified-agent-evaluation-design.md)。
-下文的 `run_codex_eval.sh`、`run_opencode_eval.sh`、`run_kimi_sample_dev.sh` 和
-mini-swe 入口保留为旧基线/历史参考，不迁移到统一 runtime。
+
+### 事后评分 collab 各阶段 patch
+
+`score-patches` 对已完成的 collab job，用 Pier 的 direct verifier 重新给各阶段冻结的 patch
+打分，不调用任何模型；非 collab 的 trial 会被标记为 ineligible：
+
+```bash
+uv run python scripts/run_agent_eval.py score-patches --job-path ../jobs/<job-name>
+uv run python scripts/run_agent_eval.py score-patches --job-path ../jobs/<job-name> \
+  --trial '<trial-glob>' --reuse-final-score
+```
+
+设计与输出格式见
+[`../docs/collab-paired-checkpoint-verification-design.md`](../docs/collab-paired-checkpoint-verification-design.md)。
 
 ## Token 消耗报告
 
@@ -69,35 +101,22 @@ uv run python scripts/token_usage.py ../jobs/<job-name> --json
 费用分栏。完整角色费用不能冒充整个 job 费用。没有上游费用时保持未知，不按配置模型估价。
 所有原始 records（包括 requests、pricedUnits）保留在 JSON 的 `usageReports` 中。
 
-## 用共享 mini-swe-agent runtime 运行评测
+## 旧基线：用共享 mini-swe-agent runtime 运行评测
 
-`wip/scripts/run_mini_swe_eval.sh` 默认使用只读共享 runtime 镜像。第一次运行
-构建一次固定版本的 runtime，之后不同任务、attempt 和 job 都直接复用，不再
-重复构建 Python 依赖层。设计、兼容回退模式和 Docker 要求见
-`wip/docs/mini-swe-shared-runtime.md`。
-
-## 用 Codex 运行筛选样本
-
-`wip/scripts/run_codex_eval.sh` 会读取任务 ID 列表，将其转换为 Pier 的任务过滤参数，并在 Docker 中运行 Codex 和独立 verifier。默认运行 `05_sample_dev.txt`，每题 1 次、并发 2：
+`run_mini_swe_eval.sh` 是旧基线入口，不迁移到统一 runtime；保留它是因为官方 DeepSWE
+trials 使用的 harness 就是 mini-swe-agent，需要时可用它复现官方基线。脚本在仓库根目录执行，
+默认使用只读共享 runtime 镜像：第一次运行构建一次固定版本的 runtime，之后不同任务、attempt
+和 job 都直接复用，不再重复构建 Python 依赖层。设计、兼容回退模式和 Docker 要求见
+[`../docs/mini-swe-shared-runtime.md`](../docs/mini-swe-shared-runtime.md)。
 
 ```bash
-wip/scripts/run_codex_eval.sh
+# 在仓库根目录执行
+wip/scripts/run_mini_swe_eval.sh --dry-run
 ```
 
-先校验输入并查看最终命令：
+## 测试
 
 ```bash
-wip/scripts/run_codex_eval.sh --dry-run
+uv run python -m unittest discover -s scripts -p 'test_*.py'
+uv run ruff check scripts
 ```
-
-指定其他任务列表或运行配置：
-
-```bash
-wip/scripts/run_codex_eval.sh \
-  --task-list wip/data/selection/05_sample_confirm.txt \
-  --codex-version 0.146.0 \
-  --model openai/gpt-5.6-sol \
-  --job-name codex-confirm-k4
-```
-
-脚本默认使用宿主机 `codex login` 生成的 `~/.codex/auth.json`。同一任务和同一 Codex 安装配置会复用 Docker 构建缓存；不要为常规评测追加 `--force-build`。

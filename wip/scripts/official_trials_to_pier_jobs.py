@@ -3,7 +3,7 @@
 Reads the exported ``trials.json`` from https://deepswe.datacurve.ai/data/v1.1
 and materializes one pier job directory per model config (harness + model +
 reasoning effort), each containing per-trial ``result.json`` files built with
-pier's own pydantic models. The output folder can then be served with::
+pier's own pydantic models. The output folder can then be served with:
 
     pier view <out-dir> --jobs
 
@@ -149,7 +149,9 @@ def write_job(job_dir: Path, config_name: str, rows: list[dict], uri_prefix: str
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument(
         "--trials",
         type=Path,

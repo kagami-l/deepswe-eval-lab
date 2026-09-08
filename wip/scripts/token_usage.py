@@ -5,8 +5,6 @@ Only usageSchema=2 with one usageReports slot per turn is accepted. Native
 input/output totals include cache/reasoning subsets. Partial reports are observed
 subtotals, not complete totals. Costs come exclusively from terminal cost reports;
 model records explain those totals and are never added to them again.
-
-Usage: python scripts/token_usage.py ../jobs/<job-name> [--json]
 """
 from __future__ import annotations
 
@@ -444,7 +442,9 @@ def print_report(report: dict[str, Any]) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("job_dir", type=Path, help="Pier job directory")
     parser.add_argument("--json", action="store_true", help="emit structured report JSON")
     args = parser.parse_args(argv)

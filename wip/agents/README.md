@@ -1,7 +1,8 @@
 # Pier 的 Kimi Code Agent 适配器
 
-> 本文描述旧的 Kimi 专用 Pier adapter。统一 Agent 评测新基线使用
-> `wip/agents/deep_swe_agent/` 和 `wip/scripts/run_agent_eval.py`；见
+> 本 adapter 已弃用：它专属的批量入口 `wip/scripts/run_kimi_sample_dev.sh` 已于 2026-09-08
+> 移除，代码仅保留作记录，见 [`deprecated.md`](deprecated.md)。统一 Agent 评测新基线使用
+> `wip/agents/deep_swe_agent/` 和 `wip/scripts/run_agent_eval.py`（`eval --agent kimi`）；见
 > [`docs/unified-agent-evaluation-design.md`](../../docs/unified-agent-evaluation-design.md)。
 
 `KimiCodeAgent` 用于在 Pier 中运行 Moonshot AI 官方的
@@ -50,14 +51,9 @@ export KIMI_MODEL_MAX_CONTEXT_SIZE=1048576
 
 `KIMI_MODEL_NAME` 默认是 `k3`，只有使用其他模型时才需要显式设置。
 
-批量运行脚本也可以从 `wip/scripts/.env` 中读取 API Key：
-
-```dotenv
-KIMI_MODEL_API_KEY='你的 API Key'
-```
-
-宿主环境中已经存在的 `KIMI_MODEL_API_KEY` 优先于 `.env`。仓库的
-`.gitignore` 已忽略 `.env`，不要强制提交密钥文件。
+`wip/scripts/.env`（已被 `.gitignore` 忽略）可以保存该 Key，但只有
+`run_agent_eval.py` 会自动加载它；手动执行下面的 `pier run` 前需要自行
+`export`。不要强制提交密钥文件。
 
 不要把真实 API Key 写进源码、任务配置或 Dockerfile。以下命令使用
 `${KIMI_MODEL_API_KEY}`，由 Pier 在运行时从宿主机环境中读取。
@@ -83,61 +79,21 @@ pier run \
 `--model kimi-code/k3` 是写入 Pier 结果和轨迹的模型标识；真正传给 Kimi Code
 的模型名称由 `KIMI_MODEL_NAME` 决定。建议两者保持对应，方便后续分析评测结果。
 
-## 运行 `05_sample_dev.txt` 中的全部任务
+## 批量运行任务列表
 
-推荐使用已经封装好的启动脚本。它会读取
-`wip/data/selection/05_sample_dev.txt`、校验任务目录和必需环境变量，并组装
-Pier 的全部参数：
-
-```bash
-cd /Users/kgm/Projects/merico/deep-swe
-
-wip/scripts/run_kimi_sample_dev.sh
-```
-
-指定其他任务列表：
+原批量入口 `wip/scripts/run_kimi_sample_dev.sh` 已于 2026-09-08 移除。批量评测请使用
+统一入口，它会读取任务列表、校验任务目录、准备共享 runtime 并组装 `pier run`：
 
 ```bash
-wip/scripts/run_kimi_sample_dev.sh \
-  --task-list wip/data/selection/05_sample_confirm.txt
+cd wip
+uv run python scripts/run_agent_eval.py eval \
+  --task-list data/selection/05_sample_dev.txt --agent kimi --dry-run
 ```
 
-先检查最终命令但不运行评测：
-
-```bash
-wip/scripts/run_kimi_sample_dev.sh --dry-run
-```
-
-通过参数调整并发数和每个 trial 的尝试次数：
-
-```bash
-wip/scripts/run_kimi_sample_dev.sh \
-  --n-concurrent 4 \
-  --n-attempts 2
-```
-
-脚本默认生成包含 agent、模型、样本名和时间的 Job 名称，例如：
-
-```text
-kimi-code-k3-05_sample_dev-20260729-183000
-```
-
-也可以显式指定：
-
-```bash
-wip/scripts/run_kimi_sample_dev.sh \
-  --job-name kimi-code-k3-dev-baseline
-```
-
-额外参数会原样传给 `pier run`：
-
-```bash
-wip/scripts/run_kimi_sample_dev.sh --debug
-```
-
-`--n-concurrent` 默认是 2，`--n-attempts` 默认是 1。可以根据 API 限流、
-Docker 资源和预算调整。首次运行时需要为各任务构建派生镜像，建议先用单个
-任务验证配置，再启动完整任务集。使用 `--help` 可以查看脚本支持的全部参数。
+统一入口使用 `kimi login` 的登录目录（`KIMI_AUTH_HOME_PATH`，默认 `~/.kimi-code`），
+不读取 `KIMI_MODEL_API_KEY`；全部参数见
+`uv run python scripts/run_agent_eval.py eval --help`。本文其余部分只描述旧 adapter 的
+单任务 `pier run` 用法。
 
 ## 安装与缓存机制
 

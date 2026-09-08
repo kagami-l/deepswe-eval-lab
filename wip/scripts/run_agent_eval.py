@@ -22,6 +22,13 @@ Run these examples from the repository's ``wip`` directory::
     uv run python scripts/run_agent_eval.py eval \
         --task-list data/selection/05_sample_dev.txt \
         --agent opencode --n-concurrent 2
+
+    # Re-score the frozen stage patches of a finished collab job.
+    uv run python scripts/run_agent_eval.py score-patches \
+        --job-path ../jobs/<job-name>
+
+Every subcommand accepts ``--help`` (for example ``eval --help``) and lists
+all of its options with defaults.
 """
 
 from __future__ import annotations

@@ -22,6 +22,7 @@ Python 脚本、测试和工具统一通过项目环境运行：
 ```bash
 uv run python scripts/run_agent_eval.py --help
 uv run python -m unittest discover -s agent_eval -t .. -p 'test_*.py'
+uv run python -m unittest discover -s scripts -p 'test_*.py'
 uv run ruff check .
 ```
 

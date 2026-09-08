@@ -129,7 +129,7 @@ CODEX_FORCE_AUTH_JSON=1 KIMI_FORCE_AUTH_HOME=1 pier run \
 常用 pier 选项：`--n-concurrent N`（并发 trial 数）、`--n-attempts K`、
 `--agent-setup-timeout-multiplier`（首次在线安装依赖较慢时放大 360s setup
 超时）、`--agent-timeout-multiplier`。批量正式实验建议用 Pier job config
-固化配置（参考 `wip/scripts/run_kimi_sample_dev.sh` 的做法）。
+固化配置（可参考 `wip/scripts/run_agent_eval.py eval` 把执行计划写入 `jobs/.agent-eval-manifests/<job-name>.json` 的做法）。
 
 ## `--ak` 参数
 

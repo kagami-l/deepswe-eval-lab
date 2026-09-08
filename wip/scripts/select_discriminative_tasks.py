@@ -71,7 +71,12 @@ def parse_args() -> argparse.Namespace:
         default=12,
         help="tasks in each disjoint dev/confirm sample (default: 12)",
     )
-    parser.add_argument("--seed", type=int, default=20260729)
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=20260729,
+        help="random seed for the dev/confirm sampling (default: %(default)s)",
+    )
     parser.add_argument(
         "--exclude-model",
         action="append",
