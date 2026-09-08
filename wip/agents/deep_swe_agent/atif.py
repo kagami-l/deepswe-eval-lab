@@ -19,6 +19,8 @@ from pier.models.trajectories import (
     Trajectory,
 )
 
+from wip.agents.usage import event_accounting
+
 
 @dataclass
 class _Turn:
@@ -93,9 +95,7 @@ def _turns(events: list[dict[str, Any]]) -> list[_Turn]:
         elif event_type == "thinking" and isinstance(payload.get("summary"), str):
             turn.thinking.append(payload["summary"])
         elif event_type == "tool_use":
-            call_id = str(
-                payload.get("toolUseId") or f"{label}-tool-{len(turn.tool_calls)}"
-            )
+            call_id = str(payload.get("toolUseId") or f"{label}-tool-{len(turn.tool_calls)}")
             arguments = payload.get("input")
             turn.tool_calls.append(
                 ToolCall(
@@ -126,32 +126,23 @@ def _turns(events: list[dict[str, Any]]) -> list[_Turn]:
                 turn.text.append(payload["result"])
             usage = payload.get("usage")
             if isinstance(usage, dict):
-                token_availability = (
-                    "reported"
-                    if usage.get("tokenAvailability") == "reported"
-                    else "unavailable"
-                )
+                accounting = event_accounting(usage)
                 turn.metrics = Metrics(
-                    prompt_tokens=(
-                        int(usage.get("inputTokens") or 0)
-                        if token_availability == "reported"
-                        else None
-                    ),
-                    completion_tokens=(
-                        int(usage.get("outputTokens") or 0)
-                        if token_availability == "reported"
-                        else None
-                    ),
-                    cost_usd=(
-                        float(usage["totalCostUsd"])
-                        if usage.get("totalCostUsd") is not None
-                        else None
-                    ),
+                    prompt_tokens=accounting["input"],
+                    completion_tokens=accounting["output"],
+                    cached_tokens=(usage.get("tokens") or {})
+                    .get("totals", {})
+                    .get("input", {})
+                    .get("cacheRead"),
+                    cost_usd=accounting["cost"],
                     extra={
-                        "token_availability": token_availability,
+                        "token_availability": accounting["availability"],
+                        "token_coverage": accounting["coverage"],
                         "tool_uses": int(usage.get("toolUses") or 0),
+                        "usage": usage,
                     },
                 )
+
     return ordered
 
 
@@ -196,6 +187,10 @@ def events_to_trajectory(
         )
 
     agent_steps = [step for step in steps if step.source == "agent"]
+    has_scoped_tokens = any(
+        step.metrics and step.metrics.extra.get("token_coverage") in ("complete", "partial")
+        for step in agent_steps
+    )
     token_availability = (
         "reported"
         if agent_steps
@@ -203,6 +198,7 @@ def events_to_trajectory(
             step.metrics is not None
             and isinstance(step.metrics.extra, dict)
             and step.metrics.extra.get("token_availability") == "reported"
+            and (step.metrics.extra.get("token_coverage") == "complete" or not has_scoped_tokens)
             for step in agent_steps
         )
         else "unavailable"
@@ -225,9 +221,7 @@ def events_to_trajectory(
     roles = summary.get("roles") if isinstance(summary, dict) else None
     modifier = roles.get("modifier") if isinstance(roles, dict) else None
     default_model = modifier.get("actualModel") if isinstance(modifier, dict) else None
-    session_id = next(
-        (turn.session_id for turn in parsed if turn.session_id), "unknown"
-    )
+    session_id = next((turn.session_id for turn in parsed if turn.session_id), "unknown")
     return Trajectory(
         schema_version="ATIF-v1.7",
         session_id=session_id,
@@ -241,9 +235,55 @@ def events_to_trajectory(
         final_metrics=FinalMetrics(
             total_prompt_tokens=prompt_tokens,
             total_completion_tokens=completion_tokens,
-            total_cost_usd=sum(costs) if costs else None,
+            total_cached_tokens=(
+                sum(step.metrics.cached_tokens for step in agent_steps)
+                if token_availability == "reported"
+                and all(step.metrics.cached_tokens is not None for step in agent_steps)
+                else None
+            ),
+            total_cost_usd=sum(costs) if costs and len(costs) == len(agent_steps) else None,
             total_steps=len(agent_steps),
-            extra={"token_availability": token_availability},
+            extra={
+                "token_availability": token_availability,
+                "token_coverage": (
+                    "complete"
+                    if agent_steps
+                    and all(
+                        step.metrics and step.metrics.extra.get("token_coverage") == "complete"
+                        for step in agent_steps
+                    )
+                    else "partial"
+                    if any(
+                        step.metrics
+                        and step.metrics.extra.get("token_coverage") in ("complete", "partial")
+                        for step in agent_steps
+                    )
+                    else "unknown"
+                    if token_availability == "reported"
+                    else "unavailable"
+                ),
+                "observed_prompt_tokens": sum(
+                    step.metrics.prompt_tokens or 0 for step in agent_steps if step.metrics
+                )
+                if any(
+                    step.metrics and step.metrics.prompt_tokens is not None for step in agent_steps
+                )
+                else None,
+                "observed_completion_tokens": sum(
+                    step.metrics.completion_tokens or 0 for step in agent_steps if step.metrics
+                )
+                if any(
+                    step.metrics and step.metrics.completion_tokens is not None
+                    for step in agent_steps
+                )
+                else None,
+                "observed_cost_usd": sum(costs) if costs else None,
+                "cost_coverage": "complete"
+                if costs and len(costs) == len(agent_steps)
+                else "partial"
+                if costs
+                else "unavailable",
+            },
         ),
         extra={
             "workflow": summary.get("workflow") if isinstance(summary, dict) else None,

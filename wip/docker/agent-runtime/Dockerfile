@@ -2,9 +2,9 @@ ARG NODE_IMAGE=node:22-bookworm-slim
 FROM ${NODE_IMAGE} AS builder
 
 ARG RUNTIME_MANIFEST_DIGEST=unknown
-ARG GEMINI_VERSION=0.53.1
-ARG KIMI_VERSION=0.31.1
-ARG OPENCODE_VERSION=1.18.13
+ARG GEMINI_VERSION=0.57.0
+ARG KIMI_VERSION=0.39.1
+ARG OPENCODE_VERSION=1.18.25
 ARG RIPGREP_VERSION=15.1.0
 ARG RIPGREP_AMD64_SHA256=1c9297be4a084eea7ecaedf93eb03d058d6faae29bbc57ecdaf5063921491599
 ARG RIPGREP_ARM64_SHA256=2b661c6ef508e902f388e9098d9c4c5aca72c87b55922d94abdba830b4dc885e
@@ -76,15 +76,13 @@ RUN --mount=type=cache,target=/root/.npm,sharing=locked \
     chmod 0555 "${RUNTIME_DIR}/bin/node" && \
     "${RUNTIME_DIR}/bin/kimi" --help 2>&1 | grep -q acp && \
     "${RUNTIME_DIR}/bin/opencode" --version && \
-    "${RUNTIME_DIR}/bin/gemini" --version && \
-    cd "${RUNTIME_DIR}" && \
-    "${RUNTIME_DIR}/bin/node" --input-type=module \
-      -e "await import('@sublang/cligent'); console.log('cligent-ok')"
+    "${RUNTIME_DIR}/bin/gemini" --version
 
 COPY wip/agents/deep_swe_agent/runtime/tsconfig.json ./tsconfig.json
 COPY wip/agents/deep_swe_agent/runtime/src ./src
 
-RUN npm run build && npm prune --omit=dev --no-audit --no-fund
+RUN npm run build && npm prune --omit=dev --no-audit --no-fund && \
+    node ./scripts/check-runtime-readiness.mjs
 
 COPY wip/config/runtime-manifest.json ${RUNTIME_DIR}/runtime-manifest.json
 

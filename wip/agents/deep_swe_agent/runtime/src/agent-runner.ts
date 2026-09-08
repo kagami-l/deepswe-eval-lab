@@ -9,6 +9,10 @@
  * no permission policy because its ACP adapter rejects capability policies.
  */
 
+import type { DonePayload } from '@sublang/cligent';
+import { normalizeUsage, type Accounting } from './usage.js';
+
+
 import { appendFileSync } from 'node:fs';
 
 import type { AdapterName, RoleConfig } from './collaboration-engine.js';
@@ -37,10 +41,10 @@ export interface TurnRequest {
   label: string;
 }
 
-export interface TurnUsage {
+export interface TurnUsage extends Accounting {
   tokenAvailability: 'reported' | 'unavailable';
-  inputTokens: number;
-  outputTokens: number;
+  inputTokens: number | null;
+  outputTokens: number | null;
   toolUses: number;
   costUsd: number | null;
 }
@@ -54,6 +58,7 @@ export interface TurnResult {
   usage: TurnUsage | null;
   durationMs: number;
   error: string | null;
+  errorCode?: string;
   /** Provider-resolved model reported by the adapter's init event. */
   actualModel: string | null;
 }
@@ -194,6 +199,7 @@ export class CligentRunner implements AgentRunner {
     let doneResult: string | undefined;
     let usage: TurnUsage | null = null;
     let errorMessage: string | null = null;
+    let errorCode: string | undefined;
     let actualModel: string | null = null;
 
     const claimAbort = (reason: string, kind: TimeoutKind | null): boolean => {
@@ -380,36 +386,16 @@ export class CligentRunner implements AgentRunner {
           startAbortCleanup('permission_request');
           break;
         } else if (type === 'error') {
-          const payload = event.payload as { message?: string } | undefined;
+          const payload = event.payload as { message?: string; code?: string } | undefined;
           if (abortReason === null) {
             errorMessage = payload?.message ?? 'unknown adapter error';
+            errorCode = payload?.code;
           }
         } else if (type === 'done') {
-          const payload = event.payload as {
-            status?: string;
-            result?: string;
-            usage?: {
-              tokenAvailability?: 'reported' | 'unavailable';
-              inputTokens?: number;
-              outputTokens?: number;
-              toolUses?: number;
-              totalCostUsd?: number;
-            };
-          };
+          const payload = event.payload as DonePayload;
           doneStatus = payload.status ?? 'error';
           doneResult = payload.result;
-          if (payload.usage) {
-            usage = {
-              tokenAvailability:
-                payload.usage.tokenAvailability === 'reported'
-                  ? 'reported'
-                  : 'unavailable',
-              inputTokens: payload.usage.inputTokens ?? 0,
-              outputTokens: payload.usage.outputTokens ?? 0,
-              toolUses: payload.usage.toolUses ?? 0,
-              costUsd: payload.usage.totalCostUsd ?? null,
-            };
-          }
+          if (payload.usage) usage = normalizeUsage(payload.usage);
         }
       }
     } catch (err) {
@@ -435,6 +421,7 @@ export class CligentRunner implements AgentRunner {
       usage,
       durationMs,
       error: errorMessage,
+      ...(errorCode ? { errorCode } : {}),
       actualModel,
     };
   }

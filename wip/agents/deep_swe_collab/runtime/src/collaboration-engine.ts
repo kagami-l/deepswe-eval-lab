@@ -7,6 +7,9 @@
  * (docs/archive/collab-agent-design.md section 5).
  */
 
+import type { Accounting } from './usage.js';
+
+
 export type AdapterName = 'claude' | 'codex' | 'kimi';
 
 export interface RoleConfig {
@@ -58,7 +61,7 @@ export type DegradedReason =
   | 'timeout'
   | 'infrastructure';
 
-export interface RoleUsage {
+export interface RoleUsage extends Accounting {
   tokenAvailability: 'reported' | 'unavailable';
   inputTokens: number | null;
   outputTokens: number | null;

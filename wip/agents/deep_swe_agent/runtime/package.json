@@ -9,11 +9,11 @@
     "test": "npm run build && node --test dist/*.test.js"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.220",
-    "@openai/codex": "0.146.0",
-    "@openai/codex-sdk": "0.146.0",
-    "@opencode-ai/sdk": "1.18.13",
-    "@sublang/cligent": "0.20.0"
+    "@anthropic-ai/claude-agent-sdk": "0.3.251",
+    "@openai/codex": "0.151.0",
+    "@openai/codex-sdk": "0.151.0",
+    "@opencode-ai/sdk": "1.18.25",
+    "@sublang/cligent": "0.26.0"
   },
   "devDependencies": {
     "@types/node": "25.0.3",

@@ -1,5 +1,8 @@
 /** Deterministic one-turn workflow for the unified single-Agent baseline. */
 
+import { accumulateUsage } from './usage.js';
+
+
 import { appendFileSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -57,39 +60,7 @@ export class SingleWorkflowEngine implements CollaborationEngine {
     if (this.actualModel === null && result.actualModel !== null) {
       this.actualModel = result.actualModel;
     }
-    const previousTurns = this.usage.turns;
-    this.usage.turns += 1;
-    this.usage.wallMs += result.durationMs;
-    if (result.usage === null) {
-      this.usage.tokenAvailability = 'unavailable';
-      this.usage.inputTokens = null;
-      this.usage.outputTokens = null;
-      return;
-    }
-    if (
-      result.usage.tokenAvailability === 'reported' &&
-      previousTurns === 0
-    ) {
-      this.usage.tokenAvailability = 'reported';
-      this.usage.inputTokens = result.usage.inputTokens;
-      this.usage.outputTokens = result.usage.outputTokens;
-    } else if (
-      result.usage.tokenAvailability === 'reported' &&
-      this.usage.tokenAvailability === 'reported' &&
-      this.usage.inputTokens !== null &&
-      this.usage.outputTokens !== null
-    ) {
-      this.usage.inputTokens += result.usage.inputTokens;
-      this.usage.outputTokens += result.usage.outputTokens;
-    } else {
-      this.usage.tokenAvailability = 'unavailable';
-      this.usage.inputTokens = null;
-      this.usage.outputTokens = null;
-    }
-    this.usage.toolUses += result.usage.toolUses;
-    if (result.usage.costUsd !== null) {
-      this.usage.costUsd = (this.usage.costUsd ?? 0) + result.usage.costUsd;
-    }
+    accumulateUsage(this.usage, result.usage, result.durationMs);
   }
 
   async run(): Promise<CollaborationResult> {
@@ -170,6 +141,7 @@ export class SingleWorkflowEngine implements CollaborationEngine {
         durationMs: result.durationMs,
         usage: result.usage,
         error: result.error,
+        errorCode: result.errorCode,
       });
       if (!result.ok) {
         failure = result.timedOut ? 'timeout' : 'modifier_failed';

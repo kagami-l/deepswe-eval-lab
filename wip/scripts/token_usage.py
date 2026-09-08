@@ -10,19 +10,12 @@ per-role source of truth) plus the trial/job ``result.json``, and prints:
 4. passed-vs-failed trial comparison and the Pier job-level mixed-semantics
    figure for reference.
 
-Caveats printed with the report: input tokens are NOT comparable across
-adapters; unavailable accounting remains unknown rather than becoming zero.
-No layer of the job records
-splits cached vs uncached tokens
-(cligent flattens provider usage to three fields; pier's ``n_cache_tokens``
-is never fed). Magnitude-based inference of what ``inputTokens`` contains,
-per adapter (2026-08 records):
-
-- codex: INCLUDES cache reads (cumulative full-context per call);
-- claude: INCLUDES cache read/creation (same cumulative shape);
-- opencode/deepseek: EXCLUDES cache hits (miss-only, ~100x smaller).
-
-Output tokens carry no cache concept and are comparable across adapters.
+Current summaries preserve inclusive input/output totals, cache/reasoning subsets,
+coverage and per-invocation cligent reports. Partial accounting is an observed
+subtotal, not a complete job total. Upstream cost and its provenance are retained;
+new-schema usage without an upstream cost is not priced from an assumed model or
+missing cache dimensions. Historical flat summaries retain their explicit,
+labelled API-rate estimate for backwards compatibility.
 
 Usage (from the ``wip`` directory)::
 
@@ -124,6 +117,34 @@ def _model_price(
 def _usage_cost(
     usage: dict[str, Any], model: str, pricing: dict[str, Any]
 ) -> dict[str, Any] | None:
+    if usage.get("usageSchema") == 2:
+        reports = usage.get("usageReports") or []
+        costs = [
+            report["cost"] for report in reports if isinstance(report, dict) and report.get("cost")
+        ]
+        if not costs:
+            return None
+        models = sorted(
+            {
+                record["model"]
+                for report in reports
+                if isinstance(report, dict)
+                for record in (report.get("tokens") or {}).get("records", [])
+                if isinstance(record.get("model"), str)
+            }
+        )
+        return {
+            "model": ", ".join(models) if models else None,
+            "models": models,
+            "inputUsd": None,
+            "cacheUsd": None,
+            "outputUsd": None,
+            "totalUsd": sum(cost["amount"] for cost in costs),
+            "estimated": any(cost["source"] != "provider-reported" for cost in costs),
+            "sources": sorted({cost["source"] for cost in costs}),
+            "coverage": "complete" if len(costs) == len(reports) else "partial",
+            "breakdownUsd": {"in": None, "cache": None, "out": None},
+        }
     if usage.get("tokenAvailability") != "reported":
         return None
     if not all(isinstance(usage.get(key), int) for key in TOKEN_USAGE_KEYS):
@@ -209,14 +230,10 @@ def _trial_rows(job_dir: Path) -> tuple[list[dict[str, Any]], list[str]]:
             role_usage = {
                 "tokenAvailability": token_availability,
                 "inputTokens": (
-                    int(spec.get("inputTokens") or 0)
-                    if token_availability == "reported"
-                    else None
+                    int(spec.get("inputTokens") or 0) if token_availability == "reported" else None
                 ),
                 "outputTokens": (
-                    int(spec.get("outputTokens") or 0)
-                    if token_availability == "reported"
-                    else None
+                    int(spec.get("outputTokens") or 0) if token_availability == "reported" else None
                 ),
                 "toolUses": int(spec.get("toolUses") or 0),
                 "turns": turns,
@@ -225,6 +242,16 @@ def _trial_rows(job_dir: Path) -> tuple[list[dict[str, Any]], list[str]]:
             for key in OPTIONAL_USAGE_KEYS:
                 if key in spec and spec[key] is not None:
                     role_usage[key] = spec[key] or 0
+            for key in (
+                "usageSchema",
+                "tokens",
+                "tokenCoverage",
+                "costCoverage",
+                "usageReports",
+                "costUsd",
+            ):
+                if key in spec:
+                    role_usage[key] = spec[key]
             row["usage"][role] = role_usage
         rows.append(row)
     return rows, skipped
@@ -266,6 +293,37 @@ def _totals(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
         else:
             bucket["inputTokens"] = bucket["reportedInputTokens"]
             bucket["outputTokens"] = bucket["reportedOutputTokens"]
+    for role, bucket in totals.items():
+        specs = [row["usage"][role] for row in rows if role in row["usage"]]
+        if any(spec.get("usageSchema") == 2 for spec in specs):
+            bucket["usageSchema"] = 2
+            bucket["usageReports"] = [
+                report
+                for spec in specs
+                for report in (spec.get("usageReports") or [None] * spec["turns"])
+            ]
+            observed = [
+                report["tokens"]
+                for report in bucket["usageReports"]
+                if isinstance(report, dict) and report.get("tokens")
+            ]
+            bucket["tokenCoverage"] = (
+                "complete"
+                if len(observed) == len(bucket["usageReports"])
+                and all(report["coverage"] == "complete" for report in observed)
+                else "partial"
+                if observed
+                else "unavailable"
+            )
+            # Observed subtotals survive even when another turn has no accounting.
+            bucket["observedInputTokens"] = (
+                sum(report["totals"]["input"]["total"] for report in observed) if observed else None
+            )
+            bucket["observedOutputTokens"] = (
+                sum(report["totals"]["output"]["total"] for report in observed)
+                if observed
+                else None
+            )
     return totals
 
 
@@ -287,8 +345,8 @@ def _fmt(value: float) -> str:
     return f"{value:,.0f}"
 
 
-def _fmt_usd(value: float) -> str:
-    return f"${value:,.6f}"
+def _fmt_usd(value: float | None) -> str:
+    return "n/a" if value is None else f"${value:,.6f}"
 
 
 def build_report(job_dir: Path, pricing_path: Path = DEFAULT_PRICING_PATH) -> dict[str, Any]:
@@ -321,20 +379,24 @@ def build_report(job_dir: Path, pricing_path: Path = DEFAULT_PRICING_PATH) -> di
                 [
                     r["usage"][role]["inputTokens"]
                     for r in rows
-                    if role in r["usage"]
-                    and r["usage"][role]["tokenAvailability"] == "reported"
+                    if role in r["usage"] and r["usage"][role]["tokenAvailability"] == "reported"
                 ]
             ),
             "outputTokens": _stats(
                 [
                     r["usage"][role]["outputTokens"]
                     for r in rows
-                    if role in r["usage"]
-                    and r["usage"][role]["tokenAvailability"] == "reported"
+                    if role in r["usage"] and r["usage"][role]["tokenAvailability"] == "reported"
                 ]
             ),
             "wallMs": _stats([r["usage"][role]["wallMs"] for r in rows if role in r["usage"]]),
-            "costInUsd": _stats([r["costs"][role]["inputUsd"] for r in rows if role in r["costs"]]),
+            "costInUsd": _stats(
+                [
+                    r["costs"][role]["inputUsd"]
+                    for r in rows
+                    if role in r["costs"] and r["costs"][role]["inputUsd"] is not None
+                ]
+            ),
             "costCacheUsd": _stats(
                 [
                     r["costs"][role]["cacheUsd"]
@@ -343,7 +405,11 @@ def build_report(job_dir: Path, pricing_path: Path = DEFAULT_PRICING_PATH) -> di
                 ]
             ),
             "costOutUsd": _stats(
-                [r["costs"][role]["outputUsd"] for r in rows if role in r["costs"]]
+                [
+                    r["costs"][role]["outputUsd"]
+                    for r in rows
+                    if role in r["costs"] and r["costs"][role]["outputUsd"] is not None
+                ]
             ),
             "costTotalUsd": _stats(
                 [r["costs"][role]["totalUsd"] for r in rows if role in r["costs"]]
@@ -357,8 +423,7 @@ def build_report(job_dir: Path, pricing_path: Path = DEFAULT_PRICING_PATH) -> di
             reported = [
                 r["usage"][role]
                 for r in subset
-                if role in r["usage"]
-                and r["usage"][role]["tokenAvailability"] == "reported"
+                if role in r["usage"] and r["usage"][role]["tokenAvailability"] == "reported"
             ]
             values = [usage["inputTokens"] for usage in reported]
             outs = [usage["outputTokens"] for usage in reported]
@@ -392,14 +457,24 @@ def build_report(job_dir: Path, pricing_path: Path = DEFAULT_PRICING_PATH) -> di
             "unpricedRoles": [
                 role
                 for role in totals
-                if _model_price(models.get(role, "?"), pricing) is None
+                if (
+                    role not in costs
+                    if totals[role].get("usageSchema") == 2
+                    else _model_price(models.get(role, "?"), pricing) is None
+                )
             ],
             "unavailableTokenRoles": [
-                role
-                for role, usage in totals.items()
-                if usage["tokenAvailability"] != "reported"
+                role for role, usage in totals.items() if usage["tokenAvailability"] != "reported"
+            ],
+            "partialTokenRoles": [
+                role for role, usage in totals.items() if usage.get("tokenCoverage") == "partial"
+            ],
+            "partialCostRoles": [
+                role for role, cost in costs.items() if cost.get("coverage") == "partial"
             ],
             "estimateBasis": (
+                "New-schema costs come only from upstream reports with their source and coverage; "
+                "no model/cache price is inferred. Historical flat summaries: "
                 "cacheTokens, when present, are priced as cached input and subtracted from "
                 "inputTokens; otherwise cache cost is null and all aggregate inputTokens use "
                 "the base input rate. Per-request long-context tiers are not applied."
@@ -423,7 +498,7 @@ def print_report(report: dict[str, Any]) -> None:
     rows = report["trials"]
 
     def name(role: str) -> str:
-        return f"{role} ({labels.get(role, '?')})"
+        return f"{role} (configured: {labels.get(role, '?')})"
 
     print(f"# Token usage — {report['jobDir']}")
     print(f"trials with usage: {len(rows)}", end="")
@@ -431,7 +506,7 @@ def print_report(report: dict[str, Any]) -> None:
         print(f"; skipped: {', '.join(report['skippedTrials'])}", end="")
     print("\n")
 
-    print("## Job totals per model")
+    print("## Job totals per role")
     for role, t in report["totals"].items():
         wall_h = t["wallMs"] / 3_600_000
         cost = report["costs"].get(role)
@@ -444,14 +519,10 @@ def print_report(report: dict[str, Any]) -> None:
             else "  cost n/a"
         )
         input_text = (
-            _fmt(t["inputTokens"])
-            if t["tokenAvailability"] == "reported"
-            else "unavailable"
+            _fmt(t["inputTokens"]) if t["tokenAvailability"] == "reported" else "unavailable"
         )
         output_text = (
-            _fmt(t["outputTokens"])
-            if t["tokenAvailability"] == "reported"
-            else "unavailable"
+            _fmt(t["outputTokens"]) if t["tokenAvailability"] == "reported" else "unavailable"
         )
         availability_text = (
             f"  token trials reported {t['reportedTokenTrials']}"
@@ -460,8 +531,15 @@ def print_report(report: dict[str, Any]) -> None:
         print(
             f"  {name(role):48s} in {input_text:>15s}  out {output_text:>11s}"
             f"{cost_text}  toolUses {t['toolUses']:>5d}  turns {t['turns']:>3d}"
+            f"  token coverage {t.get('tokenCoverage', 'legacy unknown')}"
+            f"  cost coverage {(cost or {}).get('coverage', 'legacy estimate')}"
             f"  wall {wall_h:.1f}h{availability_text}"
         )
+        if t.get("usageSchema") == 2:
+            print(
+                f"    observed subtotal: in {t.get('observedInputTokens')} out {t.get('observedOutputTokens')}; "
+                f"cost sources {', '.join((cost or {}).get('sources', [])) or 'unavailable'}"
+            )
     pier = report["pierJobLevel"]
     if pier.get("inputTokens") is not None:
         print(
@@ -485,10 +563,7 @@ def print_report(report: dict[str, Any]) -> None:
         for role in roles:
             spec = row["usage"].get(role)
             if spec and spec["tokenAvailability"] == "reported":
-                line += (
-                    f" {_fmt(spec['inputTokens']):>14s}"
-                    f" {_fmt(spec['outputTokens']):>12s}"
-                )
+                line += f" {_fmt(spec['inputTokens']):>14s}" f" {_fmt(spec['outputTokens']):>12s}"
             elif spec:
                 line += f" {'unavailable':>14s} {'unavailable':>12s}"
             else:
@@ -503,6 +578,16 @@ def print_report(report: dict[str, Any]) -> None:
             else:
                 line += f" {'n/a':>14s} {'':>14s} {'':>14s} {'':>14s}"
         print(line)
+
+        if any(spec.get("usageSchema") == 2 for spec in row["usage"].values()):
+            print(
+                "    coverage: "
+                + "; ".join(
+                    f"{role} tokens={spec.get('tokenCoverage', 'legacy unknown')} "
+                    f"cost={(row['costs'].get(role) or {}).get('coverage', 'unavailable')}"
+                    for role, spec in row["usage"].items()
+                )
+            )
 
     print("\n## Per-trial distribution stats")
     for role, metrics in report["stats"].items():
@@ -542,17 +627,12 @@ def print_report(report: dict[str, Any]) -> None:
             )
 
     print(
-        "\nCaveats: input tokens are not comparable across adapters; no record"
-        " layer splits cached vs uncached. Magnitude-based inference: codex and"
-        " claude inputTokens INCLUDE cache reads (cumulative full-context);"
-        " opencode/deepseek EXCLUDES cache hits (miss-only, ~100x smaller"
-        " numbers). Output tokens have no cache concept and are comparable."
-        " Cost is an API-rate estimate, not the actual charge for login-based"
-        " adapters. cacheTokens is priced separately when recorded; otherwise"
-        " cache cost is blank and all aggregate inputs use the standard"
-        " short-context base rate. Per-request context splits are unavailable."
-        " Unavailable or legacy-undiscriminated token accounting remains"
-        " unknown; toolUses, turns, and wall time are still aggregated."
+        "\nCaveats: new-schema input/output totals include reported cache/reasoning subsets."
+        " Partial coverage is an observed subtotal, not complete spend. Missing details remain unknown."
+        " Upstream costs retain their sources (including agent-estimate); these are not necessarily bills."
+        " New usage without a cost report is not priced using an assumed role model or cache split."
+        " Historical flat summaries use a labelled API-rate estimate with standard short-context rates;"
+        " missing cache details are not reconstructed. Tool uses, turns and wall time remain independent."
     )
 
 

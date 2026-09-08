@@ -27,6 +27,8 @@ from pier.models.agent.install import AgentInstallSpec, InstallStep
 from pier.models.agent.network import NetworkAllowlist
 from pier.utils.env import parse_bool_env_value
 
+from wip.agents.usage import complete_summary_cost, complete_summary_tokens
+
 RUNTIME_DIR = "/opt/collab-runtime"
 OUTPUT_DIR = "/logs/agent/collab"
 WORK_DIR = "/tmp/deepswe-collab"
@@ -88,11 +90,11 @@ def _validated_version(name: str, value: Any) -> str:
 class DeepSweCollabAgent(BaseInstalledAgent):
     """Run the modify → review → revise collaboration as one Pier agent."""
 
-    DEFAULT_CLIGENT_VERSION = "0.20.0"
-    DEFAULT_KIMI_CODE_VERSION = "0.31.1"
-    # cligent's own tested SDK versions (its devDependencies).
-    CLAUDE_SDK_VERSION = "0.3.220"
-    CODEX_SDK_VERSION = "0.146.0"
+    DEFAULT_CLIGENT_VERSION = "0.26.0"
+    DEFAULT_KIMI_CODE_VERSION = "0.39.1"
+    # Pinned compatible SDKs; upgrading cligent does not require moving these.
+    CLAUDE_SDK_VERSION = "0.3.251"
+    CODEX_SDK_VERSION = "0.151.0"
 
     def __init__(
         self,
@@ -300,7 +302,7 @@ npm cache clean --force
     def _resolve_kimi_auth_home(self) -> Path | None:
         """Which host Kimi Code home to inject, if any.
 
-        cligent drives Kimi Code over ACP, which requires the OAuth
+        This harness drives Kimi Code over ACP using the OAuth
         credential created by `kimi login` (`credentials/kimi-code.json`):
           - KIMI_AUTH_HOME_PATH=<dir> → use that Kimi Code home;
           - KIMI_FORCE_AUTH_HOME=<truthy> → use ~/.kimi-code;
@@ -383,8 +385,8 @@ npm cache clean --force
         """Reconstruct an owner-only Kimi Code home in the container from the
         host login (config.toml + credentials/), following cligent's own CI
         harness. Without an injected home, only KIMI_MODEL_* provider config
-        is passed through — note ACP mode still expects a `kimi login`
-        credential."""
+        is passed through; this harness still requires a `kimi login`
+        credential at startup."""
         env["KIMI_CODE_HOME"] = REMOTE_KIMI_HOME
         env.setdefault("KIMI_DISABLE_TELEMETRY", "1")
         env.setdefault("KIMI_CODE_NO_AUTO_UPDATE", "1")
@@ -439,7 +441,7 @@ npm cache clean --force
             missing.append(
                 "kimi: host auth via KIMI_FORCE_AUTH_HOME=1 / KIMI_AUTH_HOME_PATH "
                 "(a `kimi login` OAuth credential; KIMI_MODEL_* alone is not "
-                "sufficient for ACP)"
+                "supported by this harness)"
             )
         if missing:
             raise ValueError(
@@ -585,6 +587,8 @@ npm cache clean --force
         usage = result.get("usage")
         roles = ("modifier", "reviewer")
         if isinstance(usage, dict):
+            context.n_input_tokens = None
+            context.n_output_tokens = None
             role_usage = [
                 usage.get(role)
                 for role in roles
@@ -596,7 +600,7 @@ npm cache clean --force
                 return sum(int(usage.get(role, {}).get(field) or 0) for role in roles)
 
             if role_usage and all(
-                value.get("tokenAvailability") == "reported"
+                complete_summary_tokens(value)
                 for value in role_usage
             ):
                 context.n_input_tokens = total("inputTokens")
@@ -607,8 +611,12 @@ npm cache clean --force
                 for role in roles
                 if usage.get(role, {}).get("costUsd") is not None
             ]
-            if costs:
-                context.cost_usd = float(sum(costs))
+            context.cost_usd = (
+                float(sum(costs)) if costs and role_usage and (
+                    all(value.get("usageSchema") != 2 for value in role_usage)
+                    or all(complete_summary_cost(value) for value in role_usage)
+                ) else None
+            )
         context.metadata = {
             "collab": {
                 "engine": summary.get("engine"),

@@ -87,8 +87,8 @@ class InstallSpecTests(unittest.TestCase):
             agent = make_agent(Path(directory))
             spec = agent.install_spec()
             self.assertEqual(spec.agent_name, "deep-swe-collab")
-            self.assertEqual(spec.version, "0.20.0")
-            self.assertIn('"@sublang/cligent": "0.20.0"', spec.steps[1].run)
+            self.assertEqual(spec.version, "0.26.0")
+            self.assertIn('"@sublang/cligent": "0.26.0"', spec.steps[1].run)
             self.assertIn(RUNTIME_DIR, spec.steps[1].run)
             self.assertNotIn("test-openai", json.dumps(spec.model_dump()))
             self.assertEqual(spec.fingerprint(), agent.install_spec().fingerprint())
@@ -103,7 +103,7 @@ class InstallSpecTests(unittest.TestCase):
                 reviewer_adapter="kimi",
                 extra_env={"OPENAI_API_KEY": "k", "KIMI_MODEL_API_KEY": "k"},
             ).install_spec()
-            self.assertIn("@moonshot-ai/kimi-code@0.31.1", kimi.steps[1].run)
+            self.assertIn("@moonshot-ai/kimi-code@0.39.1", kimi.steps[1].run)
             # Guards against the legacy Python kimi-cli shadowing the binary.
             self.assertIn("grep -q acp", kimi.steps[1].run)
 
@@ -124,7 +124,7 @@ class ValidationTests(unittest.TestCase):
     def test_unsafe_versions_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaises(ValueError):
-                make_agent(Path(directory), cligent_version="0.20.0; rm -rf /")
+                make_agent(Path(directory), cligent_version="0.26.0; rm -rf /")
             with self.assertRaises(ValueError):
                 make_agent(Path(directory), kimi_code_version="$(curl evil)")
 

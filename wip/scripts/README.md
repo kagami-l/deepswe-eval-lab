@@ -46,22 +46,23 @@ mini-swe 入口保留为旧基线/历史参考，不迁移到统一 runtime。
 trial 级明细、分布统计（mean/median/p90/min/max）、通过与失败 trial 的均值对比,
 以及 Pier job 级混合口径参照。数据源是各 trial `summary.json` 的 `result.usage`
 （唯一分角色可信来源）；兼容 single/collab 拓扑,容忍缺 usage 的 trial（列入 skipped）。
-只有 `tokenAvailability=reported` 的 token 才进入总量和成本；unavailable 或旧版缺少判别字段
-的 token 保持 unknown，`toolUses`、turns 和 wall time 仍独立汇总。
+当前 runtime 使用 cligent 0.26.0。`usageSchema=2` 保存每轮 `usageReports`、聚合
+`tokens` 和 `tokenCoverage`，input total 已含缓存读写，output total 已含 reasoning。
+`partial` 是已观测的小计，不代表完整调用树；存在未报告轮次时顶层 input/output
+保持 unknown，嵌套 tokens 和报告中的 observed subtotal 仍保留已知用量。
+`toolUses`、turns 和 wall time 独立汇总，真实测得的 0 与未知值不同。
 
 ```bash
 # 在 wip/ 目录下执行
-uv run python scripts/token_usage.py ../jobs/<job-name>          # 人读格式
-uv run python scripts/token_usage.py ../jobs/<job-name> --json   # 机器格式
+uv run python scripts/token_usage.py ../jobs/<job-name>
+uv run python scripts/token_usage.py ../jobs/<job-name> --json
 ```
 
-口径注意：input tokens 跨 adapter 语义不同,只宜同模型纵向对比；登录订阅制 adapter
-的 cost 为 null；缺失或中断的 token accounting 记为 unavailable，而不是 0。所有记录层（summary usage、events.jsonl、pier
-`n_cache_tokens`）都**不区分 cached / uncached**,cligent 落盘前已拍平。按量级推断
-（2026-08 记录）：codex 与 claude 的 inputTokens **含** cache 读取（逐次调用全上下文
-累计口径）,opencode/deepseek **不含** cache 命中（miss-only,数字小约两个数量级）;
-两类口径互不可比,也都不能直接乘单价折算成本。output tokens 无缓存概念,跨 adapter
-可比。
+新版费用来自上游 `cost`，保留 `source` 和完整/部分覆盖范围；agent-estimate 并非实际
+账单。多模型记录保存在 `usageReports`，不会按角色配置的主模型统一计价。上游不提供
+费用时保持未知，不根据缺失缓存细项或模型信息推算。旧版 flat summary 仍可读取，
+并保留明确标注的历史 API 单价估算。Pier/ATIF 的完整总量字段不填入 partial 小计，
+详细已观测值及来源保存在 metadata/extra 中。
 
 ## 用共享 mini-swe-agent runtime 运行评测
 

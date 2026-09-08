@@ -722,6 +722,22 @@ infrastructure_failed
 底层 CLI 原始输出可以作为 round 调试附件，但分析脚本不得依赖 adapter 专属文件名。
 缺失 usage/cost 时记录 `null` 和原因，不能伪造为 0。
 
+2026-09-08 起 runtime 使用 npm `@sublang/cligent@0.26.0`，OpenCode SDK/CLI
+配套固定为 `1.18.25`。角色 usage 的 `usageSchema=2` 保留每轮 `usageReports`
+（包括无 terminal report 的 null 槽位）、聚合 `tokens` 和 `tokenCoverage`。
+`tokens.totals` 是包含缓存读写和 reasoning 的总数，细项不能重复相加；缺少细项
+表示未报告。`partial` 表示已知范围的小计，不能宣称完整调用树用量。
+
+顶层 `tokenAvailability/inputTokens/outputTokens` 继续作为统计投影；任何轮次
+缺少 token 报告则顶层数字为 null，但已观测的 nested tokens 仍保留，coverage
+为 partial。`costUsd` 为已观测费用之和，并通过 `costCoverage` 区分完整/部分/未知；
+费用的 source、各模型 records 和原始维度保留在 `usageReports`。没有上游费用时
+保持未知，不按请求的主模型或假定缓存比例给新版报告补算费用。
+
+Pier 和 ATIF 的完整总量字段只接受完整范围；partial 小计及来源留在 metadata/extra。
+历史 flat 事件与 summary 仍可读取，不能据此补造已丢失的覆盖范围。取消和超时兜底
+继续保留；`SESSION_RESUME_REJECTED` 透传到 turn/attempt 的 errorCode，不新增自动恢复策略。
+
 ## 17. Runtime 和 run manifest
 
 ### 17.1 Runtime manifest
@@ -734,6 +750,10 @@ infrastructure_failed
 - 五种 Agent CLI/SDK 版本。
 - orchestrator bundle digest。
 - Docker platform。
+
+2026-09-08 的 runtime 0.6.0 固定版本、选择依据和验证结果见
+[SDK 升级实施记录](./reviews/20260908-agent-sdk-upgrade.md)。镜像构建在移除开发依赖后
+检查五个 cligent adapter 的可用性及实际版本；该检查不调用模型或验证登录态。
 
 ### 17.2 Run manifest
 

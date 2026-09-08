@@ -10,6 +10,9 @@
  * recorded) instead of discarding the work; `strict` restores fail-hard.
  */
 
+import { accumulateUsage } from './usage.js';
+
+
 import { appendFileSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -21,7 +24,6 @@ import {
   type TimeoutKind,
   type TurnRequest,
   type TurnResult,
-  type TurnUsage,
 } from './agent-runner.js';
 import {
   emptyRoleUsage,
@@ -31,7 +33,6 @@ import {
   type CollaborationResult,
   type DegradedReason,
   type Outcome,
-  type RoleUsage,
 } from './collaboration-engine.js';
 import { GitWorkspace } from './git-workspace.js';
 import {
@@ -129,38 +130,7 @@ export class DirectCollaborationEngine implements CollaborationEngine {
     if (result.actualModel !== null && this.actualModels[role] === null) {
       this.actualModels[role] = result.actualModel;
     }
-    const bucket: RoleUsage = this.usage[role];
-    const previousTurns = bucket.turns;
-    bucket.turns += 1;
-    bucket.wallMs += result.durationMs;
-    const usage: TurnUsage | null = result.usage;
-    if (!usage) {
-      bucket.tokenAvailability = 'unavailable';
-      bucket.inputTokens = null;
-      bucket.outputTokens = null;
-      return;
-    }
-    if (usage.tokenAvailability === 'reported' && previousTurns === 0) {
-      bucket.tokenAvailability = 'reported';
-      bucket.inputTokens = usage.inputTokens;
-      bucket.outputTokens = usage.outputTokens;
-    } else if (
-      usage.tokenAvailability === 'reported' &&
-      bucket.tokenAvailability === 'reported' &&
-      bucket.inputTokens !== null &&
-      bucket.outputTokens !== null
-    ) {
-      bucket.inputTokens += usage.inputTokens;
-      bucket.outputTokens += usage.outputTokens;
-    } else {
-      bucket.tokenAvailability = 'unavailable';
-      bucket.inputTokens = null;
-      bucket.outputTokens = null;
-    }
-    bucket.toolUses += usage.toolUses;
-    if (usage.costUsd !== null) {
-      bucket.costUsd = (bucket.costUsd ?? 0) + usage.costUsd;
-    }
+    accumulateUsage(this.usage[role], result.usage, result.durationMs);
   }
 
   private async newRoundDir(kind: string): Promise<string> {
@@ -252,6 +222,7 @@ export class DirectCollaborationEngine implements CollaborationEngine {
         durationMs: result.durationMs,
         usage: result.usage,
         error: result.error,
+        errorCode: result.errorCode,
       });
 
       if (!result.ok) {
@@ -376,6 +347,7 @@ export class DirectCollaborationEngine implements CollaborationEngine {
         durationMs: result.durationMs,
         usage: result.usage,
         error: result.error,
+        errorCode: result.errorCode,
       });
 
       if (!result.ok) {

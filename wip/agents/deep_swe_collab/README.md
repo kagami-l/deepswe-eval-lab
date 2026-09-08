@@ -71,8 +71,8 @@ Keychain，不是可拷贝文件。标准做法二选一：
 ### Kimi
 
 cligent 通过新版 Kimi Code CLI 的 `kimi acp`（ACP over stdio）驱动。
-**ACP 模式要求 `kimi login` 产生的 OAuth 凭据**（`credentials/kimi-code.json`），
-因此 Kimi 角色必须走凭据注入，仅有 `KIMI_MODEL_API_KEY` 无法通过启动校验：
+**本项目当前使用 `kimi login` 产生的 OAuth 凭据**（`credentials/kimi-code.json`），
+因此 Kimi 角色必须走凭据注入，仅有 `KIMI_MODEL_API_KEY` 无法通过本项目的启动校验：
 
 | 方式 | 配置 | 说明 |
 |---|---|---|
@@ -80,8 +80,9 @@ cligent 通过新版 Kimi Code CLI 的 `kimi acp`（ACP over stdio）驱动。
 | 指定 Kimi home | `KIMI_AUTH_HOME_PATH=/path/to/kimi-home` | 同上，但用指定目录 |
 
 `KIMI_MODEL_*`（API key / model / base URL）作为**辅助配置**仍会转发进容器，
-但不构成独立凭据；待某个 Kimi Code/cligent 版本确认支持 provider-key ACP
-认证后再放开。
+但本项目尚未接入独立的 provider-key 认证流程。Kimi Code 0.39.1 上游已支持
+配置默认模型凭据或同时提供 `KIMI_MODEL_NAME` 与 `KIMI_MODEL_API_KEY`；
+本次依赖升级保留已验证的 OAuth 注入流程。
 
 > ⚠️ **并发/批量警告**：每个 trial 都会从同一宿主 Kimi home 克隆 OAuth
 > 凭据，而克隆运行可能旋转 refresh credential 使源凭据失效（cligent 文档
@@ -145,8 +146,8 @@ CODEX_FORCE_AUTH_JSON=1 KIMI_FORCE_AUTH_HOME=1 pier run \
 | `total_timeout_seconds` | 5100 | 协作总 deadline（任务 5400s 内留余量） |
 | `strict` | false | degraded 不交付、trial 失败（设计文档 §13） |
 | `keep_workspaces` | false | 保留 review 拷贝目录便于调试 |
-| `cligent_version` | 0.20.0 | npm 锁定版本 |
-| `kimi_code_version` | 0.31.1 | 仅当某角色为 kimi 时安装 `@moonshot-ai/kimi-code` |
+| `cligent_version` | 0.26.0 | npm 锁定版本 |
+| `kimi_code_version` | 0.39.1 | 仅当某角色为 kimi 时安装 `@moonshot-ai/kimi-code` |
 
 ## 产物（`/logs/agent/collab/`）
 

@@ -247,7 +247,7 @@ test('the event file sink preserves OpenCode output deltas', async (t) => {
   }
 });
 
-test('done usage preserves the token availability discriminator', async () => {
+test('done without tokens preserves unknown accounting and independent tool counts', async () => {
   const fakeCligent = {
     async *run(): AsyncGenerator<Record<string, unknown>> {
       yield {
@@ -255,9 +255,6 @@ test('done usage preserves the token availability discriminator', async () => {
         payload: {
           status: 'success',
           usage: {
-            tokenAvailability: 'unavailable',
-            inputTokens: 0,
-            outputTokens: 0,
             toolUses: 7,
           },
         },
@@ -286,9 +283,12 @@ test('done usage preserves the token availability discriminator', async () => {
   );
 
   assert.deepEqual(result.usage, {
+    usageSchema: 2,
+    tokenCoverage: 'unavailable',
+    costCoverage: 'unavailable',
     tokenAvailability: 'unavailable',
-    inputTokens: 0,
-    outputTokens: 0,
+    inputTokens: null,
+    outputTokens: null,
     toolUses: 7,
     costUsd: null,
   });
@@ -480,4 +480,24 @@ test('a local timeout cannot become successful from the adapter terminal status'
   assert.equal(result.ok, false);
   assert.equal(result.timedOut, true);
   assert.equal(result.timeoutKind, 'total_deadline');
+});
+
+test('typed pre-execution resume rejection reaches the host without runner retry', async () => {
+  let calls = 0;
+  const runner = new CligentRunner('modifier', { adapter: 'opencode' });
+  Object.assign(runner, { cligent: {
+    async *run() {
+      calls++;
+      yield { type: 'error', payload: { code: 'SESSION_RESUME_REJECTED', message: 'missing session', recoverable: true } };
+      yield { type: 'done', payload: { status: 'error', usage: { toolUses: 0 } } };
+    },
+  } });
+  const result = await runner.runTurn({
+    prompt: 'test', cwd: '/app', resumeSession: true, timeoutMs: 1000,
+    wallClockTimeoutKind: 'stage_timeout', inactivityTimeoutMs: 1000,
+    diagnosticDir: '/tmp/unused-diagnostics', label: 'resume',
+  }, () => {});
+  assert.equal(result.ok, false);
+  assert.equal(result.errorCode, 'SESSION_RESUME_REJECTED');
+  assert.equal(calls, 1);
 });

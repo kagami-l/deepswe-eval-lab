@@ -20,6 +20,8 @@ from pier.models.agent.network import NetworkAllowlist
 from pier.utils.trajectory_metrics import populate_context_from_final_metrics
 from pier.utils.trajectory_utils import format_trajectory_json
 
+from wip.agents.usage import complete_summary_cost, complete_summary_tokens
+
 from wip.agent_eval.credentials import (
     has_kimi_login_material,
     resolve_kimi_auth_home,
@@ -596,12 +598,14 @@ class DeepSweAgent(BaseInstalledAgent):
         result = summary.get("result") if isinstance(summary, dict) else None
         usage = result.get("usage") if isinstance(result, dict) else None
         if isinstance(usage, dict):
+            context.n_input_tokens = None
+            context.n_output_tokens = None
             role_usage = [value for value in usage.values() if isinstance(value, dict)]
             active_role_usage = [
                 value for value in role_usage if int(value.get("turns") or 0) > 0
             ]
             if active_role_usage and all(
-                value.get("tokenAvailability") == "reported"
+                complete_summary_tokens(value)
                 for value in active_role_usage
             ):
                 context.n_input_tokens = sum(
@@ -618,7 +622,12 @@ class DeepSweAgent(BaseInstalledAgent):
                 for value in role_usage
                 if value.get("costUsd") is not None
             ]
-            context.cost_usd = sum(costs) if costs else None
+            context.cost_usd = (
+                sum(costs) if costs and active_role_usage and (
+                    all(value.get("usageSchema") != 2 for value in active_role_usage)
+                    or all(complete_summary_cost(value) for value in active_role_usage)
+                ) else None
+            )
         context.metadata = {
             "unified_agent_evaluation": {
                 "topology": self.execution_plan.get("topology"),
@@ -660,6 +669,10 @@ class DeepSweAgent(BaseInstalledAgent):
         (system / "trajectory.json").write_text(serialized)
         if trajectory.final_metrics is not None:
             populate_context_from_final_metrics(context, trajectory.final_metrics)
+            # Pier's helper turns None into zero; preserve cligent's unknown scope.
+            context.n_input_tokens = trajectory.final_metrics.total_prompt_tokens
+            context.n_output_tokens = trajectory.final_metrics.total_completion_tokens
+            context.n_cache_tokens = trajectory.final_metrics.total_cached_tokens
             context.n_agent_steps = len(
                 [step for step in trajectory.steps if step.source == "agent"]
             )

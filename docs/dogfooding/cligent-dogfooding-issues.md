@@ -17,7 +17,7 @@
 | CLI-005 | OpenCode 工具事件后不再产生 terminal event，adapter 无限等待 SSE | OpenCode adapter / lifecycle | Critical | Verified | 2026-08-04 |
 | CLI-006 | OpenCode 把用户 prompt 回放成 assistant `text` 事件，调用方无法与模型输出区分 | OpenCode adapter / message role | High | Verified | 2026-08-06 |
 | CLI-007 | OpenCode reasoning 增量被标记为 `text_delta`，与 `thinking` 重复且无类型判别 | OpenCode adapter / 事件语义 | Medium | Verified | 2026-08-06 |
-| CLI-008 | Claude 非初始化 system 消息被重复映射为 `init` | Claude Code adapter / 事件语义 | Medium | Open | 2026-08-13 |
+| CLI-008 | Claude 非初始化 system 消息被重复映射为 `init` | Claude Code adapter / 事件语义 | Medium | Released | 2026-08-13 |
 
 ## 状态约定
 
@@ -948,8 +948,15 @@ cligent `0.18.0` 的 OpenCode adapter 有两条独立的增量路径：
   - `@anthropic-ai/claude-agent-sdk` `0.3.220`
   - 模型 `claude-sonnet-5`
 - 严重程度：`Medium`
-- 状态：`Open`
+- 状态：`Released`
 - 证据目录：[`CLI-008-claude-duplicate-init-events/`](./CLI-008-claude-duplicate-init-events/)
+
+### cligent 0.25.0 升级状态（2026-09-08）
+
+上游 0.21.0 已修复该问题，两个 DeepSWE runtime 已升级至 npm 正式包 0.25.0，随后更新至 0.26.0。
+源码/spec 核验见[升级评估](../reviews/20260908-cligent-0.25.0-upgrade-assessment.md)。
+本次本地回归覆盖新版 usage 与导出协议；尚未运行真实 Claude fresh/resume 验收，
+因此保持 Released，不标记 Verified。当前没有需要撤掉的 Claude init 专用补丁。
 
 ### 现象
 
