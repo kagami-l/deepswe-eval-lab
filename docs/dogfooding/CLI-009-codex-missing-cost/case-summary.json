@@ -1,0 +1,255 @@
+{
+  "issueId": "CLI-009",
+  "date": "2026-09-08",
+  "versions": {
+    "cligent": "0.26.0",
+    "codexSdk": "0.151.0",
+    "codexCli": "0.151.0",
+    "claudeAgentSdk": "0.3.251",
+    "runtime": "0.6.0",
+    "runtimeImage": "deep-swe/agent-runtime:810a05e3fb3ee42c"
+  },
+  "task": "abs-module-cache-flags",
+  "modifier": {
+    "adapter": "codex",
+    "model": "gpt-5.6-luna",
+    "reasoningEffort": "xhigh"
+  },
+  "collabReviewer": {
+    "adapter": "claude-code",
+    "model": "claude-sonnet-5",
+    "reasoningEffort": "high"
+  },
+  "nativeSdkUsageCaptured": false,
+  "samples": [
+    {
+      "mode": "single",
+      "stage": "00-modify",
+      "source": "jobs/sdk-upgrade-smoke-single-one_task-20260908-140305/abs-module-cache-flags__vtU9bwB/agent/system/rounds/00-modify/events.jsonl",
+      "sourceLine": 85,
+      "summaryReport": {
+        "toolUses": 33,
+        "tokens": {
+          "coverage": "partial",
+          "totals": {
+            "input": {
+              "total": 4514087,
+              "uncached": 125991,
+              "cacheRead": 4388096,
+              "cacheWrite": 0
+            },
+            "output": {
+              "total": 32860,
+              "visible": 10642,
+              "reasoning": 22218
+            }
+          }
+        }
+      },
+      "summarySource": "jobs/sdk-upgrade-smoke-single-one_task-20260908-140305/abs-module-cache-flags__vtU9bwB/agent/system/summary.json",
+      "metadata": {
+        "role": "modifier",
+        "attempts": [
+          {
+            "attempt": 1,
+            "status": "success",
+            "timedOut": false,
+            "timeoutKind": null,
+            "durationMs": 885199,
+            "usage": {
+              "usageSchema": 2,
+              "tokenAvailability": "reported",
+              "inputTokens": 4514087,
+              "outputTokens": 32860,
+              "toolUses": 33,
+              "costUsd": null,
+              "tokenCoverage": "partial",
+              "costCoverage": "unavailable",
+              "tokens": {
+                "coverage": "partial",
+                "totals": {
+                  "input": {
+                    "total": 4514087,
+                    "uncached": 125991,
+                    "cacheRead": 4388096,
+                    "cacheWrite": 0
+                  },
+                  "output": {
+                    "total": 32860,
+                    "visible": 10642,
+                    "reasoning": 22218
+                  }
+                }
+              }
+            },
+            "error": null
+          }
+        ],
+        "timeoutKind": null
+      },
+      "sessionId": "01a07f9d-399e-7413-91c5-b1a304716b3c",
+      "terminalStatus": "success",
+      "durationMs": 885179,
+      "usage": {
+        "toolUses": 33,
+        "tokens": {
+          "coverage": "partial",
+          "totals": {
+            "input": {
+              "total": 4514087,
+              "uncached": 125991,
+              "cacheRead": 4388096,
+              "cacheWrite": 0
+            },
+            "output": {
+              "total": 32860,
+              "visible": 10642,
+              "reasoning": 22218
+            }
+          }
+        }
+      },
+      "excerptStartLine": 1,
+      "excerptDoneLine": 2,
+      "summaryMatchesRawUsage": true
+    },
+    {
+      "mode": "collab",
+      "stage": "00-modify",
+      "source": "jobs/sdk-upgrade-smoke-collab-one_task-20260908-140305/abs-module-cache-flags__GEbUkbb/agent/system/rounds/00-modify/events.jsonl",
+      "sourceLine": 125,
+      "summaryReport": {
+        "toolUses": 50,
+        "tokens": {
+          "coverage": "partial",
+          "totals": {
+            "input": {
+              "total": 4024945,
+              "uncached": 138097,
+              "cacheRead": 3886848,
+              "cacheWrite": 0
+            },
+            "output": {
+              "total": 39565,
+              "visible": 12289,
+              "reasoning": 27276
+            }
+          }
+        }
+      },
+      "summarySource": "jobs/sdk-upgrade-smoke-collab-one_task-20260908-140305/abs-module-cache-flags__GEbUkbb/agent/system/summary.json",
+      "metadata": {
+        "role": "modifier",
+        "kind": "modify",
+        "attempts": [
+          {
+            "attempt": 1,
+            "status": "success",
+            "timedOut": false,
+            "timeoutKind": null,
+            "durationMs": 884521,
+            "usage": {
+              "usageSchema": 2,
+              "tokenAvailability": "reported",
+              "inputTokens": 4024945,
+              "outputTokens": 39565,
+              "toolUses": 50,
+              "costUsd": null,
+              "tokenCoverage": "partial",
+              "costCoverage": "unavailable",
+              "tokens": {
+                "coverage": "partial",
+                "totals": {
+                  "input": {
+                    "total": 4024945,
+                    "uncached": 138097,
+                    "cacheRead": 3886848,
+                    "cacheWrite": 0
+                  },
+                  "output": {
+                    "total": 39565,
+                    "visible": 12289,
+                    "reasoning": 27276
+                  }
+                }
+              }
+            },
+            "error": null,
+            "stagedNewFiles": 1
+          }
+        ],
+        "timeoutKind": null
+      },
+      "sessionId": "01a07fac-94c4-70c1-92c8-4b6d55825511",
+      "terminalStatus": "success",
+      "durationMs": 884505,
+      "usage": {
+        "toolUses": 50,
+        "tokens": {
+          "coverage": "partial",
+          "totals": {
+            "input": {
+              "total": 4024945,
+              "uncached": 138097,
+              "cacheRead": 3886848,
+              "cacheWrite": 0
+            },
+            "output": {
+              "total": 39565,
+              "visible": 12289,
+              "reasoning": 27276
+            }
+          }
+        }
+      },
+      "excerptStartLine": 3,
+      "excerptDoneLine": 4,
+      "summaryMatchesRawUsage": true
+    },
+    {
+      "mode": "collab",
+      "stage": "02-revise",
+      "source": "jobs/sdk-upgrade-smoke-collab-one_task-20260908-140305/abs-module-cache-flags__GEbUkbb/agent/system/rounds/02-revise/events.jsonl",
+      "sourceLine": 20,
+      "summaryReport": {
+        "toolUses": 6
+      },
+      "summarySource": "jobs/sdk-upgrade-smoke-collab-one_task-20260908-140305/abs-module-cache-flags__GEbUkbb/agent/system/summary.json",
+      "metadata": {
+        "role": "modifier",
+        "kind": "revise",
+        "attempts": [
+          {
+            "attempt": 1,
+            "status": "success",
+            "timedOut": false,
+            "timeoutKind": null,
+            "durationMs": 274214,
+            "usage": {
+              "usageSchema": 2,
+              "tokenAvailability": "unavailable",
+              "inputTokens": null,
+              "outputTokens": null,
+              "toolUses": 6,
+              "costUsd": null,
+              "tokenCoverage": "unavailable",
+              "costCoverage": "unavailable"
+            },
+            "error": null,
+            "stagedNewFiles": 2
+          }
+        ],
+        "timeoutKind": null
+      },
+      "sessionId": "01a07fac-94c4-70c1-92c8-4b6d55825511",
+      "terminalStatus": "success",
+      "durationMs": 274210,
+      "usage": {
+        "toolUses": 6
+      },
+      "excerptStartLine": 5,
+      "excerptDoneLine": 6,
+      "summaryMatchesRawUsage": true
+    }
+  ]
+}

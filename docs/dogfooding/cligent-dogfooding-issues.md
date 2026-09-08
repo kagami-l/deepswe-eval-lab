@@ -18,6 +18,8 @@
 | CLI-006 | OpenCode 把用户 prompt 回放成 assistant `text` 事件，调用方无法与模型输出区分 | OpenCode adapter / message role | High | Verified | 2026-08-06 |
 | CLI-007 | OpenCode reasoning 增量被标记为 `text_delta`，与 `thinking` 重复且无类型判别 | OpenCode adapter / 事件语义 | Medium | Verified | 2026-08-06 |
 | CLI-008 | Claude 非初始化 system 消息被重复映射为 `init` | Claude Code adapter / 事件语义 | Medium | Released | 2026-08-13 |
+| CLI-009 | Codex 成功 turn 未提供费用报告，无法汇总完整 job cost | Codex adapter / cost accounting | Medium | Open | 2026-09-08 |
+| CLI-010 | Codex 首轮有 token，恢复同一会话后的修订轮缺少 token | Codex adapter / resumed-turn usage | High | Open | 2026-09-08 |
 
 ## 状态约定
 
@@ -1031,3 +1033,140 @@ adapter 用运行配置回填 model/cwd，并将缺失 tools 映射为 `[]`，�
 
 - cligent Claude adapter：`packages/cligent/src/adapters/claude-code.ts`
 - Claude Agent SDK message union：`@anthropic-ai/claude-agent-sdk/sdk.d.ts`
+
+---
+
+## CLI-009：Codex 成功 turn 未提供费用报告，无法汇总完整 job cost
+
+### 基本信息
+
+- 组件：Codex adapter / cost accounting
+- 环境：npm 正式包 cligent `0.26.0`，Codex SDK/CLI `0.151.0`，runtime `0.6.0`
+- modifier：`codex` / `gpt-5.6-luna` / `xhigh`
+- collab reviewer：`claude-code` / `claude-sonnet-5` / `high`，Claude Agent SDK `0.3.251`
+- 严重程度：`Medium`；状态：`Open`（费用缺失已确认，是否属于上游能力限制待确认）
+- 首次发现：2026-09-08
+- 证据目录：[CLI-009-codex-missing-cost](./CLI-009-codex-missing-cost/README.md)
+
+### 现象与影响
+
+对 `wip/one_task.txt` 中的 `abs-module-cache-flags` 分别执行 single 和 collab smoke。
+三个 Codex turn 都成功结束，但统一 `done.payload.usage` 均没有 `cost`：
+
+| Job / 阶段 | 已报告 input / output token | token coverage | toolUses | cost |
+|---|---|---|---|---|
+| single / 首次修改 | 4,514,087 / 32,860 | partial | 33 | 未提供 |
+| collab / 首次修改 | 4,024,945 / 39,565 | partial | 50 | 未提供 |
+| collab / 恢复会话修订 | 未提供 | unavailable | 6 | 未提供 |
+
+表中的 token 是已报告小计，不能将 partial 宣称为完整用量；input 已包含 cacheRead。
+同一 collab job 的 Claude 两轮均报告费用，合计 `2.1691728 USD`，来源为
+`agent-estimate`。该金额仅覆盖 reviewer，不能作为整个 job 的费用，也不是实付账单。
+Codex 的缺失值在 deep-swe 保持 unknown，没有当成零，也没有用旧价格表补算。
+
+这阻碍 single / collab 的成本比较、按角色汇总和预算分析。首次修改轮有 token 但没有
+费用，说明本问题独立于 [CLI-010](#cli-010codex-首轮有-token恢复同一会话后的修订轮缺少-token)。
+
+### 证据与定位边界
+
+- 三个 init/done 原始统一事件及准确来源行号已收录在证据目录；每轮 terminal usage 与
+  deep-swe `summary.result.usage.modifier.usageReports` 逐项相等。
+- deep-swe `wip/agents/deep_swe_agent/runtime/src/agent-runner.ts` 在
+  `normalizeUsage(payload.usage)` 之前执行 `eventSink({ label, ...event })`，
+  因此费用在 cligent 输出边界就已经缺失，并非统计脚本丢弃。
+- 没有保存转换前的原生 Codex SDK stream；现有证据不能证明 SDK 本身提供了费用。
+  本 issue 记录的是费用能力缺口，尚不能断言是 adapter 映射 bug。
+
+### 请求 cligent 开发者确认
+
+1. 此版本 Codex SDK/CLI 是否提供可用的费用字段；若提供，请检查统一 usage 映射是否遗漏。
+2. 若 SDK 不提供费用，请明确 Codex cost 的支持边界，并考虑提供机器可读的缺失原因，
+   让调用方区分“不支持”和“本轮未报告”。
+3. 若 cligent 计划补充估算，应明确标记估算来源及覆盖范围，并考虑模型、cache、reasoning
+   和计费口径；不要将估算伪装成 provider-reported 或实付费用。
+
+### 验收标准
+
+- 若上游提供费用，fresh / resumed turn 都正确保留金额、币种和来源；真实零值与缺失值可区分。
+- 若上游不支持费用，有明确的能力说明或缺失原因；调用方可继续报告 unknown。
+- token 可用但 cost 缺失的情况可独立表达；模型明细费用与顶层费用不会被重复累加。
+- 用本次配置复跑可确认完整 job cost 的覆盖范围，不会将 reviewer 小计误报成全量费用。
+
+---
+
+## CLI-010：Codex 首轮有 token，恢复同一会话后的修订轮缺少 token
+
+### 基本信息
+
+- 组件：Codex adapter / resumed-turn usage
+- 环境：npm 正式包 cligent `0.26.0`，Codex SDK/CLI `0.151.0`，runtime `0.6.0`
+- modifier：`codex` / `gpt-5.6-luna` / `xhigh`
+- reviewer：`claude-code` / `claude-sonnet-5` / `high`，Claude Agent SDK `0.3.251`
+- 严重程度：`High`；状态：`Open`（缺失现象已确认，根因待上游定位）
+- 首次发现：2026-09-08
+- 证据目录：[CLI-010-codex-resume-missing-token](./CLI-010-codex-resume-missing-token/README.md)
+
+### 复现场景与实际结果
+
+本次真实样本的执行顺序是 Codex 修改 → Claude review 要求修订 → Codex 恢复同一会话
+修订 → Claude approve。只有一次该场景的真实样本，尚未证明每次 resume 都会复现。
+
+- Job：`sdk-upgrade-smoke-collab-one_task-20260908-140305`
+- Trial：`abs-module-cache-flags__GEbUkbb`
+- 两轮 Codex 的 session ID 都是 `01a07fac-94c4-70c1-92c8-4b6d55825511`
+- 原始事件位于 trial 的 `agent/system/rounds/{00-modify,02-revise}/events.jsonl`
+
+| 阶段 | 状态 | 耗时 | toolUses | 已报告 input / output token |
+|---|---|---|---|---|
+| 首次修改 | success | 884,505 ms | 50 | 4,024,945 / 39,565，coverage=partial |
+| 恢复会话修订 | success | 274,210 ms | 6 | 未提供 |
+
+修订轮原始结束事件（`02-revise/events.jsonl` 第 20 行）的 usage 为：
+
+```json
+{"toolUses":6}
+```
+
+修订轮每轮恰好一个 init/done，无 timeout 或 error；修订确实产生了不同的 patch。
+独立 single smoke 的首次修改也报告了 token（input `4,514,087`、output `32,860`）。
+两组首次修改都有 token，支持优先排查 resume accounting 的假设，但不能据此证明
+修订轮 SDK 一定提供了有效 usage。
+
+### 已确认的定位边界
+
+1. deep-swe 在转换 usage 之前保存 cligent 统一事件；该事件已无 `tokens`。
+2. 原始 `usage` 与 summary 的对应 `usageReports` 完全一致，排除了这段存储、汇总链路丢字段。
+3. modifier 复用同一 Cligent 实例，并恢复相同 backend session；不是调用方有意另建
+   Cligent 实例后恢复一个未知会话。
+4. 没有保存转换前的原生 Codex SDK `turn.completed.usage`，不能区分 SDK 未提供有效
+   usage 与 cligent 主动省略。因此不能直接定性为 Codex SDK 缺失或 cligent 算错。
+
+### 待验证假设与建议排查
+
+已安装 npm 包的 `dist/adapters/codex.js` 中，`resolveTurnUsage()` 按 `codex-15`
+将 `turn.completed.usage` 视为线程累计快照，基于 `threadUsageBaselines` 做差。
+恢复会话无基线、可选字段集合变化、计数下降导致差值无效等分支会只返回 toolUses；
+无效原始快照还会影响基线。现有统一事件不包含触发原因，无法从本样本选择具体分支。
+
+建议上游优先检查：
+
+1. 捕获首次修改和恢复修订的原生 SDK usage、backend thread ID、基线及实际命中的省略分支。
+2. 验证 Codex SDK/CLI `0.151.0` 的 usage 在 fresh / resume 时究竟是线程累计值还是
+   本轮值，以及恢复会话或上下文压缩后是否重置。若语义不同，不能统一按累计值做差。
+3. 检查基线在相同 adapter / backend thread 间是否持续，以及可选字段变化是否造成整份
+   token 报告被省略；不要为了输出数字将无法归属的累计值当成本轮消耗。
+4. 当无法归属本轮用量时，提供明确的诊断原因，避免调用方只能看到 `{toolUses: 6}`。
+
+### 影响与验收标准
+
+当前只能保留 modifier 首轮的已知小计，无法得到两轮 modifier 或整个 collab job 的完整
+token 总量，进一步影响成本估算和单轮效率比较。缺失不能作为零，也不能复用首轮值填补。
+
+- 用同一实例、同一 backend session 连续运行修改和修订，原生 usage 有效且可归属时，
+  每轮统一 tokens 与原生数据对应，不丢失、不重复累加此前轮次。
+- 回归覆盖 SDK 实际采用的计数语义，以及基线缺失、计数重置、字段变化和原生 usage 缺失。
+- 确实不能计算本轮用量时继续保持 unknown，并给出可定位的原因。
+- 用上述 one_task collab 配置做真实 resume 验收；将原生 usage 与统一事件配对留档。
+
+两条问题共用的运行配置、镜像和 smoke 结果见
+[2026-09-08 SDK smoke 报告](../reviews/20260908-agent-sdk-smoke.md)。
