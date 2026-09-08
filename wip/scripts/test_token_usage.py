@@ -21,202 +21,207 @@ def _write_json(path: Path, value: object) -> None:
     path.write_text(json.dumps(value))
 
 
-class TokenUsageCostTest(unittest.TestCase):
-    def _job(self, root: Path) -> Path:
-        job_dir = root / "job"
-        _write_json(
-            job_dir / "config.json",
-            {
-                "agents": [
-                    {
-                        "kwargs": {
-                            "execution_plan_json": {
-                                "roles": {
-                                    "planner": {"adapter": "codex", "model": "gpt-5-6-sol"},
-                                    "reviewer": {
-                                        "adapter": "claude",
-                                        "model": "claude-opus-4-8",
-                                    },
-                                    "other": {"adapter": "other", "model": "unpriced-model"},
-                                }
-                            }
-                        }
-                    }
-                ]
+class NativeUsagePresentationTest(unittest.TestCase):
+    def _report(self, reports: list | None = None) -> dict:
+        tokens = {
+            "coverage": "partial",
+            "totals": {
+                "input": {"total": 1500, "uncached": 100, "cacheRead": 1400},
+                "output": {"total": 30, "visible": 10, "reasoning": 20},
             },
-        )
-        _write_json(job_dir / "result.json", {"stats": {}})
-        self._trial(
-            job_dir,
-            "trial-a",
-            reward=1,
-            usage={
-                "planner": self._usage(1_000_000, 100_000),
-                "reviewer": self._usage(2_000_000, 200_000, cache_tokens=1_500_000),
-                "other": self._usage(123, 456),
-            },
-        )
-        self._trial(
-            job_dir,
-            "trial-b",
-            reward=0,
-            usage={"planner": self._usage(500_000, 50_000, cache_tokens=0)},
-        )
-        return job_dir
-
-    @staticmethod
-    def _usage(
-        input_tokens: int, output_tokens: int, *, cache_tokens: int | None = None
-    ) -> dict[str, object]:
-        usage = {
-            "tokenAvailability": "reported",
-            "inputTokens": input_tokens,
-            "outputTokens": output_tokens,
-            "toolUses": 1,
-            "turns": 1,
-            "wallMs": 1_000,
         }
-        if cache_tokens is not None:
-            usage["cacheTokens"] = cache_tokens
-        return usage
+        usage = {
+            "usageSchema": 2,
+            "tokenAvailability": "unavailable",
+            "inputTokens": None,
+            "outputTokens": None,
+            "turns": 2,
+            "toolUses": 3,
+            "wallMs": 1000,
+            "tokens": tokens,
+            "tokenCoverage": "partial",
+            "costCoverage": "unavailable",
+            "usageReports": [{"tokens": tokens, "toolUses": 2}, {"toolUses": 1}],
+        }
+        if reports is not None:
+            usage["usageReports"] = reports
+            usage["turns"] = len(reports)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write_json(root / "trial/result.json", {"verifier_result": {"rewards": {"reward": 0}}})
+            _write_json(root / "trial/agent/system/summary.json",
+                        {"result": {"usage": {"modifier": usage}}})
+            return token_usage.build_report(root)
 
-    @staticmethod
-    def _trial(
-        job_dir: Path,
-        name: str,
-        *,
-        reward: int,
-        usage: dict[str, dict[str, object]],
-    ) -> None:
-        trial_dir = job_dir / name
-        _write_json(
-            trial_dir / "result.json",
-            {"verifier_result": {"rewards": {"reward": reward}}},
-        )
-        _write_json(
-            trial_dir / "agent" / "system" / "summary.json",
-            {"result": {"outcome": "ok", "usage": usage}},
-        )
+    def test_missing_native_cost_is_not_labelled_legacy_estimate(self) -> None:
+        output = StringIO()
+        with redirect_stdout(output):
+            token_usage.print_report(self._report())
+        self.assertNotIn("cost coverage legacy estimate", output.getvalue())
 
-    def test_report_calculates_costs_and_matches_aliases(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            report = token_usage.build_report(self._job(Path(temp_dir)))
+    def test_native_cache_and_reasoning_are_visible(self) -> None:
+        output = StringIO()
+        with redirect_stdout(output):
+            token_usage.print_report(self._report())
+        self.assertIn("cacheRead", output.getvalue())
+        self.assertIn("reasoning", output.getvalue())
 
-        self.assertEqual(report["costs"]["planner"]["model"], "gpt-5.6-sol")
-        self.assertEqual(report["costs"]["planner"]["inputUsd"], 7.5)
-        self.assertIsNone(report["costs"]["planner"]["cacheUsd"])
-        self.assertEqual(report["costs"]["planner"]["outputUsd"], 4.5)
-        self.assertEqual(report["costs"]["planner"]["totalUsd"], 12.0)
-        self.assertEqual(report["costs"]["reviewer"]["inputUsd"], 2.5)
-        self.assertEqual(report["costs"]["reviewer"]["cacheUsd"], 0.75)
-        self.assertEqual(report["costs"]["reviewer"]["outputUsd"], 5.0)
-        self.assertEqual(report["costs"]["reviewer"]["totalUsd"], 8.25)
-        self.assertEqual(
-            report["costs"]["reviewer"]["breakdownUsd"],
-            {"in": 2.5, "cache": 0.75, "out": 5.0},
-        )
-        self.assertEqual(report["trials"][0]["costs"]["planner"]["totalUsd"], 8.0)
-        self.assertEqual(report["pricing"]["unpricedRoles"], ["other"])
-        self.assertTrue(report["costs"]["planner"]["estimated"])
-        self.assertEqual(report["stats"]["planner"]["costInUsd"]["mean"], 3.75)
-        self.assertEqual(report["stats"]["planner"]["costCacheUsd"], {})
-        self.assertEqual(report["stats"]["planner"]["costOutUsd"]["mean"], 2.25)
-        self.assertEqual(report["stats"]["planner"]["costTotalUsd"]["mean"], 6.0)
-        self.assertEqual(report["stats"]["reviewer"]["costCacheUsd"]["mean"], 0.75)
+    def test_missing_turn_keeps_observed_subtotal_and_stats(self) -> None:
+        report = self._report()
+        totals = report["totals"]["modifier"]
+        self.assertEqual(totals["tokenReportTurns"], 1)
+        self.assertEqual(totals["missingTokenTurns"], 1)
+        self.assertIsNone(totals["inputTokens"])
+        self.assertEqual(totals["observedInputTokens"], 1500)
+        self.assertEqual(totals["tokenDetails"]["input.cacheRead"]["observed"], 1400)
+        self.assertEqual(report["stats"]["modifier"]["observedInputTokens"]["mean"], 1500)
+        failed = report["passedVsFailed"]["failed"]["modifier"]
+        self.assertEqual(failed["meanObservedInput"], 1500)
+        self.assertIsNone(failed["meanInput"])
 
-    def test_text_report_shows_estimated_cost_and_unpriced_model(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            report = token_usage.build_report(self._job(Path(temp_dir)))
+    def test_cost_only_zero_and_missing_token_details_are_independent(self) -> None:
+        reports = [
+            {"tokens": {
+                "coverage": "complete",
+                "totals": {"input": {"total": 0, "cacheRead": 0}, "output": {"total": 0}},
+            }, "cost": {"amount": 0, "currency": "USD", "source": "provider-reported"}},
+            {"cost": {"amount": 0.5, "currency": "USD", "source": "agent-estimate"}},
+        ]
+        report = self._report(reports)
+        totals = report["totals"]["modifier"]
+        self.assertEqual(totals["observedInputTokens"], 0)
+        self.assertIsNone(totals["inputTokens"])
+        self.assertEqual(totals["tokenDetails"]["input.cacheRead"]["observed"], 0)
+        self.assertEqual(totals["tokenDetails"]["input.cacheRead"]["reportedTurns"], 1)
+        self.assertIsNone(totals["tokenDetails"]["output.reasoning"]["observed"])
+        self.assertEqual(report["jobTotals"]["costUsd"], 0.5)
+        self.assertEqual(report["jobTotals"]["costCoverage"], "complete")
+        cost_only = self._report([reports[1]])
+        self.assertIsNone(cost_only["jobTotals"]["observedInputTokens"])
+        self.assertEqual(cost_only["passedVsFailed"]["failed"]["modifier"]["meanCostUsd"], 0.5)
+
+    def test_multimodel_cost_is_not_added_to_terminal_cost_twice(self) -> None:
+        native = {
+            "tokens": {
+                "coverage": "complete",
+                "totals": {"input": {"total": 100}, "output": {"total": 20}},
+                "records": [
+                    {"model": "main", "tokens": {"input": {"total": 70}, "output": {"total": 12}}},
+                    {"model": "child", "tokens": {"input": {"total": 30}, "output": {"total": 8}}},
+                ],
+            },
+            "cost": {"amount": 0.125, "currency": "USD", "source": "agent-estimate"},
+        }
+        for record in native["tokens"]["records"]:
+            record["cost"] = {"amount": 0.0625, "currency": "USD", "source": "agent-estimate"}
+        report = self._report([native])
+        self.assertEqual(report["jobTotals"]["costUsd"], 0.125)
+        self.assertEqual(report["jobTotals"]["inputTokens"], 100)
+        self.assertEqual(report["jobTotals"]["outputTokens"], 20)
+        self.assertEqual(len(report["totals"]["modifier"]["modelUsage"]), 2)
         output = StringIO()
         with redirect_stdout(output):
             token_usage.print_report(report)
+        self.assertIn("child", output.getvalue())
+        self.assertIn("main", output.getvalue())
 
-        text = output.getvalue()
-        self.assertIn("planner cache$", text)
-        self.assertIn("$0.750000", text)
-        self.assertIn("cost n/a", text)
-        self.assertIn("API-rate estimate", text)
-        self.assertIn("costInUsd", text)
-        self.assertEqual(text.count("costCacheUsd"), 2)
-        self.assertIn("costOutUsd", text)
-        self.assertIn("costTotalUsd", text)
+    def test_missing_optional_detail_is_not_filled_with_zero(self) -> None:
+        first = {"tokens": {
+            "coverage": "complete",
+            "totals": {"input": {"total": 10, "cacheRead": 0}, "output": {"total": 2}},
+        }}
+        second = {"tokens": {
+            "coverage": "complete",
+            "totals": {"input": {"total": 20}, "output": {"total": 3}},
+        }}
+        totals = self._report([first, second])["totals"]["modifier"]
+        self.assertEqual(totals["inputTokens"], 30)
+        self.assertEqual(totals["outputTokens"], 5)
+        self.assertEqual(totals["tokenDetails"]["input.cacheRead"], {
+            "observed": 0, "reportedTurns": 1, "total": None,
+        })
 
-    def test_invalid_pricing_file_is_rejected(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            job_dir = self._job(root)
-            pricing_path = root / "bad-pricing.json"
-            _write_json(pricing_path, {"unitTokens": 1_000_000})
+    def test_missing_terminal_slot_keeps_cost_partial(self) -> None:
+        report = self._report([
+            {"cost": {"amount": 0, "currency": "USD", "source": "account-estimate"}},
+            None,
+        ])
+        totals = report["jobTotals"]
+        self.assertEqual(totals["observedCostUsd"], 0)
+        self.assertIsNone(totals["costUsd"])
+        self.assertEqual(totals["costCoverage"], "partial")
+        self.assertEqual(totals["costSources"], ["account-estimate"])
+        self.assertEqual(totals["missingTokenTurns"], 2)
+        self.assertEqual(totals["missingCostTurns"], 1)
 
-            with self.assertRaisesRegex(ValueError, "invalid model pricing file"):
-                token_usage.build_report(job_dir, pricing_path)
+    def test_rejects_legacy_and_mismatched_turn_slots(self) -> None:
+        for usage, message in [
+            ({"turns": 1, "inputTokens": 100}, "only usageSchema=2"),
+            ({"usageSchema": 2, "turns": 2, "usageReports": [None]}, "one slot per turn"),
+        ]:
+            with self.subTest(usage=usage), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                _write_json(root / "trial/result.json", {})
+                _write_json(root / "trial/agent/system/summary.json", {
+                    "result": {"usage": {"modifier": usage}},
+                })
+                with self.assertRaisesRegex(ValueError, message):
+                    token_usage.build_report(root)
+                with redirect_stdout(StringIO()):
+                    from contextlib import redirect_stderr
+                    with redirect_stderr(StringIO()):
+                        self.assertEqual(token_usage.main([str(root)]), 2)
 
-    def test_unavailable_tokens_remain_unknown_but_tool_uses_are_counted(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            job_dir = self._job(Path(temp_dir))
-            unavailable = self._usage(0, 0)
-            unavailable.update(
-                {
-                    "tokenAvailability": "unavailable",
-                    "inputTokens": None,
-                    "outputTokens": None,
-                    "toolUses": 7,
-                }
-            )
-            self._trial(
-                job_dir,
-                "trial-c",
-                reward=0,
-                usage={"planner": unavailable},
-            )
-            report = token_usage.build_report(job_dir)
+    def test_invalid_native_numbers_fail_instead_of_becoming_zero(self) -> None:
+        for value in [-1, True, "123", float("nan")]:
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "input.total"):
+                self._report([{"tokens": {
+                    "coverage": "complete",
+                    "totals": {"input": {"total": value}, "output": {"total": 0}},
+                }}])
 
-        planner = report["totals"]["planner"]
-        self.assertEqual(planner["tokenAvailability"], "unavailable")
-        self.assertIsNone(planner["inputTokens"])
-        self.assertIsNone(planner["outputTokens"])
-        self.assertEqual(planner["reportedInputTokens"], 1_500_000)
-        self.assertEqual(planner["toolUses"], 9)
-        self.assertEqual(planner["reportedTokenTrials"], 2)
-        self.assertEqual(planner["unavailableTokenTrials"], 1)
-        self.assertNotIn("planner", report["costs"])
-        self.assertNotIn("planner", report["pricing"]["unpricedRoles"])
-        self.assertIn("planner", report["pricing"]["unavailableTokenRoles"])
-        self.assertEqual(report["stats"]["planner"]["inputTokens"]["mean"], 750_000)
+    def test_skipped_trial_prevents_complete_job_claim(self) -> None:
+        report = self._report([
+            {"tokens": {
+                "coverage": "complete",
+                "totals": {"input": {"total": 10}, "output": {"total": 5}},
+            }, "cost": {"amount": 1, "currency": "USD", "source": "provider-reported"}},
+        ])
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write_json(root / "trial/result.json", {})
+            _write_json(root / "trial/agent/system/summary.json", {
+                "result": {"usage": report["trials"][0]["usage"]},
+            })
+            (root / "incomplete").mkdir()
+            (root / "patch-scores").mkdir()
+            new = token_usage.build_report(root)
+        self.assertEqual(new["skippedTrials"], ["incomplete"])
+        self.assertEqual(new["jobTotals"]["observedInputTokens"], 10)
+        self.assertIsNone(new["jobTotals"]["inputTokens"])
+        self.assertEqual(new["jobTotals"]["costCoverage"], "partial")
+        self.assertIsNone(new["jobTotals"]["costUsd"])
 
-    def test_legacy_usage_without_discriminator_is_unavailable(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            job_dir = self._job(Path(temp_dir))
-            legacy = self._usage(123, 45)
-            del legacy["tokenAvailability"]
-            self._trial(
-                job_dir,
-                "trial-c",
-                reward=0,
-                usage={"planner": legacy},
-            )
-            report = token_usage.build_report(job_dir)
-
-        row = next(row for row in report["trials"] if row["trial"] == "trial-c")
-        self.assertEqual(row["usage"]["planner"]["tokenAvailability"], "unavailable")
-        self.assertIsNone(row["usage"]["planner"]["inputTokens"])
-
-    def test_reported_usage_without_token_numbers_is_unavailable(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            job_dir = self._job(Path(temp_dir))
-            malformed = self._usage(123, 45)
-            malformed["inputTokens"] = None
-            self._trial(
-                job_dir,
-                "trial-c",
-                reward=0,
-                usage={"planner": malformed},
-            )
-            report = token_usage.build_report(job_dir)
-
-        row = next(row for row in report["trials"] if row["trial"] == "trial-c")
-        self.assertEqual(row["usage"]["planner"]["tokenAvailability"], "unavailable")
-        self.assertIsNone(row["usage"]["planner"]["inputTokens"])
+    def test_stats_keep_reported_sample_counts_and_unscored_separate(self) -> None:
+        seed = self._report()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name, reward, usage in [
+                ("partial", 0, seed["trials"][0]["usage"]["modifier"]),
+                ("unknown", None, {"usageSchema": 2, "usageReports": [None],
+                                   "turns": 1, "wallMs": 0, "toolUses": 0}),
+            ]:
+                _write_json(root / name / "result.json", {
+                    "verifier_result": {"rewards": {"reward": reward}},
+                })
+                _write_json(root / name / "agent/system/summary.json", {
+                    "result": {"usage": {"modifier": usage}},
+                })
+            report = token_usage.build_report(root)
+        self.assertEqual(report["stats"]["modifier"]["observedInputTokens"]["samples"], 1)
+        self.assertEqual(report["stats"]["modifier"]["observedInputTokens"]["mean"], 1500)
+        self.assertEqual(report["passedVsFailed"]["failed"]["modifier"]["trials"], 1)
+        self.assertEqual(report["passedVsFailed"]["unscored"]["modifier"]["trials"], 1)
 
 
 if __name__ == "__main__":

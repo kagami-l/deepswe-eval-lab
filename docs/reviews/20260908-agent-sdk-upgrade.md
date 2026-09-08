@@ -3,6 +3,10 @@
 日期：2026-09-08。承接 [cligent 0.25.0 迁移](./20260908-cligent-0.25.0-upgrade-assessment.md)。
 本次将供应商 SDK/CLI 更新到 cligent 最新正式版所验证的版本组合。
 
+后续已完成用户指定的两次真实模型 smoke：single 23/23、collab 12/23；执行链路正常，
+Codex resume 用量仍有缺失。详见 [one_task smoke 记录](./20260908-agent-sdk-smoke.md)。
+下方“未调用真实模型”仅描述依赖升级实施阶段。
+
 ## 版本选择
 
 | 组件 | 本次升级前 | 本次固定版本 | 查询时 npm latest |

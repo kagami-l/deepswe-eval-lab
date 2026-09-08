@@ -137,20 +137,18 @@ class UsageUpgradeTests(unittest.TestCase):
             self.assertEqual(cost["models"], ["child", "main"])
             self.assertEqual(cost["sources"], ["agent-estimate"])
             self.assertEqual(cost["coverage"], "partial")
-            self.assertIsNone(cost["inputUsd"])
+            self.assertNotIn("inputUsd", cost)
             with redirect_stdout(StringIO()) as output:
                 print_report(result)
             self.assertIn("cost coverage partial", output.getvalue())
             self.assertIn("observed subtotal", output.getvalue())
 
     def test_new_tokens_without_cost_are_not_priced_as_the_requested_model(self):
-        from wip.scripts.token_usage import _load_pricing, _usage_cost, DEFAULT_PRICING_PATH
+        from wip.scripts.token_usage import _usage_cost
 
         report = copy.deepcopy(REPORT)
         del report["cost"]
-        cost = _usage_cost(
-            summary_usage(report), "gpt-5.6-sol", _load_pricing(DEFAULT_PRICING_PATH)
-        )
+        cost = _usage_cost(summary_usage(report))
         self.assertIsNone(cost)
 
     def test_mixed_historical_and_current_events_do_not_claim_complete_coverage(self):

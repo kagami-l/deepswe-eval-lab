@@ -42,15 +42,20 @@ mini-swe 入口保留为旧基线/历史参考，不迁移到统一 runtime。
 
 ## Token 消耗报告
 
-`token_usage.py` 对一个 job 目录输出按模型（角色）区分的 token 消耗：job 级合计、
-trial 级明细、分布统计（mean/median/p90/min/max）、通过与失败 trial 的均值对比,
-以及 Pier job 级混合口径参照。数据源是各 trial `summary.json` 的 `result.usage`
-（唯一分角色可信来源）；兼容 single/collab 拓扑,容忍缺 usage 的 trial（列入 skipped）。
-当前 runtime 使用 cligent 0.26.0。`usageSchema=2` 保存每轮 `usageReports`、聚合
-`tokens` 和 `tokenCoverage`，input total 已含缓存读写，output total 已含 reasoning。
-`partial` 是已观测的小计，不代表完整调用树；存在未报告轮次时顶层 input/output
-保持 unknown，嵌套 tokens 和报告中的 observed subtotal 仍保留已知用量。
-`toolUses`、turns 和 wall time 独立汇总，真实测得的 0 与未知值不同。
+`token_usage.py` 仅接受当前 cligent 对应的 `usageSchema=2` summary，要求每个 turn
+都有一个 `usageReports` 槽位（没有报告时为 null）。旧 flat 格式明确报错；不读取旧价格表，
+不支持 `--pricing`。single/collab 共用同一入口。
+
+脚本从每轮原始报告重新计算 job、角色、trial 和 turn 用量，忽略 summary 的旧扁平投影。
+文本和 `reportSchemaVersion=2` JSON 区分 `observedInputTokens/observedOutputTokens`
+小计与完整 `inputTokens/outputTokens`；只有所有轮次均为 complete 时后者才有值。
+缓存读写已包含在 input total，reasoning 已包含在 output total，不能再相加。
+文本展示这些细项及报告轮次；细项缺失保持未知，真实零保留为 0。
+
+报告含明确的 complete/partial/missing 轮次、实际模型 records、每轮用量及统计样本数。
+分布和按评分分组的均值使用已观测值，缺失值不按零计算；无评分的 trial 单独列为 unscored。
+缺 result/usage 的 trial 列为 excluded，并使 job 完整总量保持未知。
+`toolUses`、turns 和 wall time 独立汇总。
 
 ```bash
 # 在 wip/ 目录下执行
@@ -58,11 +63,11 @@ uv run python scripts/token_usage.py ../jobs/<job-name>
 uv run python scripts/token_usage.py ../jobs/<job-name> --json
 ```
 
-新版费用来自上游 `cost`，保留 `source` 和完整/部分覆盖范围；agent-estimate 并非实际
-账单。多模型记录保存在 `usageReports`，不会按角色配置的主模型统一计价。上游不提供
-费用时保持未知，不根据缺失缓存细项或模型信息推算。旧版 flat summary 仍可读取，
-并保留明确标注的历史 API 单价估算。Pier/ATIF 的完整总量字段不填入 partial 小计，
-详细已观测值及来源保存在 metadata/extra 中。
+费用仅来自每轮上游 `cost`，保留 provider-reported、agent-estimate 或 account-estimate
+来源。`observedCostUsd` 是已报告小计，`costUsd` 仅在完整覆盖时有值；费用覆盖与 token
+覆盖独立计算。模型 records 的费用已包含在本轮费用中，不再重复相加，也不构造 input/cache/output
+费用分栏。完整角色费用不能冒充整个 job 费用。没有上游费用时保持未知，不按配置模型估价。
+所有原始 records（包括 requests、pricedUnits）保留在 JSON 的 `usageReports` 中。
 
 ## 用共享 mini-swe-agent runtime 运行评测
 
