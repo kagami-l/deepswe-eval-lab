@@ -138,6 +138,12 @@ uv run python scripts/select_discriminative_tasks.py \
 
 `selection/complementary-opus-astra-xhigh.txt` 是同一快照下 `claude-opus-5 [high]` 与 `gpt-6-astra [xhigh]` 的 10 题配对清单（前 5 题 opus 强、后 5 题 astra 强）。9 道 A 档、1 道 B 档，10 个不同仓库；两配置分别为 21/40、20/40，逐题经验 oracle 为 40/40。与 medium 清单重叠 9 题（以 `oxvg` 替换 `scc`），与 high 清单重叠 8 题。另存 `complementary-opus-astra-xhigh-candidates.txt`（20 题，前 12 题 opus 强、后 8 题 astra 强，包含 confirm 任务 `go-critic-doc-link-checker`）和 `complementary-opus-astra-xhigh.json`（全部候选的证据、哈希及三档交叉对照）。推荐 10 题不含 confirm 任务；筛选依据与替补顺序见 [opus/astra-xhigh 互补子集文档](../docs/deepswe-opus-astra-xhigh-complementary-subset.md)。
 
+### 共同低分集合（2026-09-08）
+
+`selection/joint-low-opus-astra-{medium,xhigh}.txt` 分别保存 `claude-opus-5 [high]` 与 Astra 对应档位的共同低分任务：两侧官方总分/通过率均 ≤ 25%，各至少 3 次有效重复，扣除本机排除任务后保留全部命中。medium 为 13 题，xhigh 为 12 题；各自的 `-zero-pass.txt` 保存两侧均零通过的子集（8 题、9 题），同名 `.json` 保存逐格证据、分项可用性、质量标记和输入哈希。全部目标格均有 4 次有效重复，均不与 dev/confirm 或本机排除任务重叠。
+
+这里的“低分”指官方二元总分；Astra 未发布 F2P/P2P/partial，不能据此确认两侧分项得分也低。集合关系、完整任务表及分项对照见 [Opus/Astra 共同低分筛选报告](../docs/deepswe-opus-astra-joint-low-subsets.md)。
+
 ## 对后续 agent-system 评测的解释
 
 后续把“agent 框架 + 模型”或“coder + reviewer 协作配置”作为一个整体 agent system 比较是合适的，也不改变当前的稳定性和区分度筛选主线。做整体效果排名时，不必拆解模型效应与框架效应：每个完整配置直接作为一个 treatment，在相同 task、预算、timeout 和重复次数下做配对比较即可。如果还要进一步声称“协作机制本身带来提升”，则需要增加同模型、同预算、无 reviewer 的 matched ablation，不能只比较两个整体配置。

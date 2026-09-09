@@ -1,0 +1,2119 @@
+{
+  "date": "2026-09-08",
+  "source_snapshot": {
+    "n_tasks": 113,
+    "n_trials": 31617,
+    "n_configs": 70,
+    "leaderboard_generated_at": "2026-09-03T22:24:37.984682+00:00"
+  },
+  "input_hashes_sha256": {
+    "official-v1.1/v1-delta.json": "e4c23e5d3580b1d62028c7185e401f60d7cde3c1186ccf8b55659ad7e47572f1",
+    "official-v1.1/trials.json": "82ce1362e3a3e70aef67e3565849e3fea42861ab32900f45052cccb5675d51bf",
+    "official-v1.1/release.json": "0b77963ed8c54ef40c5f744ade178b54bfae2662ed94f9235cee85eb542bdc85",
+    "official-v1.1/leaderboard-live.json": "005cbedb49f988ba3f0d9636300862ad7ace93ce1992b37faf9945fe5b383415",
+    "official-v1.1/tasks.json": "bae967f6472943564c3fc5232fba3c8e0ac465c1be5ccf9dd4895d4ee9df6242",
+    "selection/00_all.json": "47dbd0ae49f3ff76a5c3b94a3787ea66b6ea5ca174a61b585b767a9d2f02067e",
+    "selection/host-excluded.txt": "e2cb52be8a059233730f95365695b7ab457dae5a1d8c8f7cd80c39be422730e3",
+    "selection/05_sample_dev.txt": "5f8471aa1b5130f1824d4c1c1d113c072674084346811187809b8463ef56eaba",
+    "selection/05_sample_confirm.txt": "b3f648ce8ea596053a1a6bd692748f41a8887cd15d795c2594e12a8a53a930bb"
+  },
+  "column_order": [
+    "opus_high",
+    "astra_xhigh"
+  ],
+  "configs": [
+    "mini_swe_agent_claude_opus_5_high",
+    "mini_swe_agent_gpt_6_astra_xhigh"
+  ],
+  "rules": {
+    "source": "deep-swe",
+    "eval_scope": "full",
+    "included_in_score": true,
+    "errored": false,
+    "maximum_pass_rate_each": 0.25,
+    "minimum_effective_repeats_each": 3,
+    "pass_statistic": "passed boolean, validated against reward/score_value; missing component metrics are not zero",
+    "host_excluded": true,
+    "confirm_excluded": false,
+    "no_size_cap": true,
+    "family_check": "both families <= 50%, descriptive corroboration, not an additional exclusion",
+    "zero_pass_subset": "both target configs have zero passed trials, same minimum-repeat and host rules",
+    "ordering": "both-zero-pass tasks first, alphabetical within each group",
+    "quality_thresholds": {
+      "minimum_model_coverage": 27,
+      "minimum_effective_repeats_per_config": 3,
+      "maximum_error_rate": 0.05,
+      "maximum_verifier_timeouts": 1
+    },
+    "scoring_sensitive_absolute_delta": 0.1
+  },
+  "selected_task_ids": [
+    "bandit-structured-nosec-directives",
+    "gql-incremental-graphql-delivery",
+    "ink-grid-box-layout",
+    "meriyah-explicit-resource-declarations",
+    "obsidian-linter-auto-table-of-contents",
+    "obsidian-linter-link-format-conversion",
+    "sqlfmt-create-table-ddl-formatting",
+    "termenv-preserve-ansi-resets",
+    "vulture-persistent-analysis-cache",
+    "arktype-json-schema-refs-dependencies",
+    "igel-persist-feature-schema",
+    "prometheus-transactional-reload-status"
+  ],
+  "zero_pass_task_ids": [
+    "bandit-structured-nosec-directives",
+    "gql-incremental-graphql-delivery",
+    "ink-grid-box-layout",
+    "meriyah-explicit-resource-declarations",
+    "obsidian-linter-auto-table-of-contents",
+    "obsidian-linter-link-format-conversion",
+    "sqlfmt-create-table-ddl-formatting",
+    "termenv-preserve-ansi-resets",
+    "vulture-persistent-analysis-cache"
+  ],
+  "excluded_host_task_ids": [],
+  "summary": {
+    "n_tasks": 12,
+    "n_zero_pass_tasks": 9,
+    "opus_high": [
+      3,
+      48
+    ],
+    "astra_xhigh": [
+      1,
+      48
+    ],
+    "n_family_supported": 12,
+    "n_current_stable": 10,
+    "n_scoring_sensitive": 4,
+    "n_repositories": 11,
+    "languages": {
+      "python": 5,
+      "typescript": 6,
+      "go": 1
+    }
+  },
+  "candidates": [
+    {
+      "task": "bandit-structured-nosec-directives",
+      "cells": [
+        {
+          "passed": 0,
+          "n_effective": 4,
+          "pass_rate": 0.0,
+          "metrics": {
+            "reward": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "score_value": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "f2p": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.9710144927536232
+            },
+            "p2p": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.9929078014184397
+            },
+            "partial": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.9886039886039886
+            }
+          },
+          "trial_names": [
+            "bandit-structured-nosec-directiv__VuncDRJ",
+            "bandit-structured-nosec-directiv__evRVpYe",
+            "bandit-structured-nosec-directiv__nu7TzEM",
+            "bandit-structured-nosec-directiv__wqQBrXn"
+          ]
+        },
+        {
+          "passed": 0,
+          "n_effective": 4,
+          "pass_rate": 0.0,
+          "metrics": {
+            "reward": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "score_value": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "f2p": {
+              "n_available": 0,
+              "n_missing": 4,
+              "mean": null
+            },
+            "p2p": {
+              "n_available": 0,
+              "n_missing": 4,
+              "mean": null
+            },
+            "partial": {
+              "n_available": 0,
+              "n_missing": 4,
+              "mean": null
+            }
+          },
+          "trial_names": [
+            "bandit-structured-nosec-directiv__L2G3V6F",
+            "bandit-structured-nosec-directiv__irsZNY8",
+            "bandit-structured-nosec-directiv__nvgrfRW",
+            "bandit-structured-nosec-directiv__xKTjkSo"
+          ]
+        }
+      ],
+      "family": [
+        [
+          3,
+          20
+        ],
+        [
+          0,
+          20
+        ]
+      ],
+      "family_both_at_most_half": true,
+      "other_efforts": [
+        [
+          3,
+          16
+        ],
+        [
+          0,
+          16
+        ]
+      ],
+      "effort_cells": {
+        "claude-opus-5": {
+          "low": [
+            1,
+            4
+          ],
+          "medium": [
+            2,
+            4
+          ],
+          "high": [
+            0,
+            4
+          ],
+          "xhigh": [
+            0,
+            4
+          ],
+          "max": [
+            0,
+            4
+          ]
+        },
+        "gpt-6-astra": {
+          "low": [
+            0,
+            4
+          ],
+          "medium": [
+            0,
+            4
+          ],
+          "high": [
+            0,
+            4
+          ],
+          "xhigh": [
+            0,
+            4
+          ],
+          "max": [
+            0,
+            4
+          ]
+        }
+      },
+      "both_zero_pass": true,
+      "delta": -0.0278,
+      "scoring_sensitive": false,
+      "language": "python",
+      "repository": "PyCQA/bandit",
+      "quality": {
+        "total_trials": 280,
+        "excluded_trials": 1,
+        "error_rate": 0.0035714285714285713,
+        "verifier_timeouts": 0,
+        "minimum_effective_repeats": 3,
+        "model_coverage": 28,
+        "config_coverage": 70,
+        "historical_stable": true,
+        "current_stable": true,
+        "layer_01_exclusion_reasons": []
+      },
+      "host_excluded": false,
+      "dev": false,
+      "confirm": false
+    },
+    {
+      "task": "gql-incremental-graphql-delivery",
+      "cells": [
+        {
+          "passed": 0,
+          "n_effective": 4,
+          "pass_rate": 0.0,
+          "metrics": {
+            "reward": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "score_value": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "f2p": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.9705882352941176
+            },
+            "p2p": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.998766954377312
+            },
+            "partial": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.9981884057971013
+            }
+          },
+          "trial_names": [
+            "gql-incremental-graphql-delivery__R3wXkBV",
+            "gql-incremental-graphql-delivery__TC5A8U4",
+            "gql-incremental-graphql-delivery__mCigQ62",
+            "gql-incremental-graphql-delivery__sAhyApE"
+          ]
+        },
+        {
+          "passed": 0,
+          "n_effective": 4,
+          "pass_rate": 0.0,
+          "metrics": {
+            "reward": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "score_value": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "f2p": {
+              "n_available": 0,
+              "n_missing": 4,
+              "mean": null
+            },
+            "p2p": {
+              "n_available": 0,
+              "n_missing": 4,
+              "mean": null
+            },
+            "partial": {
+              "n_available": 0,
+              "n_missing": 4,
+              "mean": null
+            }
+          },
+          "trial_names": [
+            "gql-incremental-graphql-delivery__2gksPPW",
+            "gql-incremental-graphql-delivery__GCb8dZG",
+            "gql-incremental-graphql-delivery__mUBXSJH",
+            "gql-incremental-graphql-delivery__vpaLVp6"
+          ]
+        }
+      ],
+      "family": [
+        [
+          1,
+          20
+        ],
+        [
+          0,
+          20
+        ]
+      ],
+      "family_both_at_most_half": true,
+      "other_efforts": [
+        [
+          1,
+          16
+        ],
+        [
+          0,
+          16
+        ]
+      ],
+      "effort_cells": {
+        "claude-opus-5": {
+          "low": [
+            0,
+            4
+          ],
+          "medium": [
+            1,
+            4
+          ],
+          "high": [
+            0,
+            4
+          ],
+          "xhigh": [
+            0,
+            4
+          ],
+          "max": [
+            0,
+            4
+          ]
+        },
+        "gpt-6-astra": {
+          "low": [
+            0,
+            4
+          ],
+          "medium": [
+            0,
+            4
+          ],
+          "high": [
+            0,
+            4
+          ],
+          "xhigh": [
+            0,
+            4
+          ],
+          "max": [
+            0,
+            4
+          ]
+        }
+      },
+      "both_zero_pass": true,
+      "delta": -0.0278,
+      "scoring_sensitive": false,
+      "language": "python",
+      "repository": "graphql-python/gql",
+      "quality": {
+        "total_trials": 280,
+        "excluded_trials": 2,
+        "error_rate": 0.007142857142857143,
+        "verifier_timeouts": 2,
+        "minimum_effective_repeats": 3,
+        "model_coverage": 28,
+        "config_coverage": 70,
+        "historical_stable": true,
+        "current_stable": false,
+        "layer_01_exclusion_reasons": [
+          "verifier_timeouts"
+        ]
+      },
+      "host_excluded": false,
+      "dev": false,
+      "confirm": false
+    },
+    {
+      "task": "ink-grid-box-layout",
+      "cells": [
+        {
+          "passed": 0,
+          "n_effective": 4,
+          "pass_rate": 0.0,
+          "metrics": {
+            "reward": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "score_value": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "f2p": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.9299999999999999
+            },
+            "p2p": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 1.0
+            },
+            "partial": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.9763513513513513
+            }
+          },
+          "trial_names": [
+            "ink-grid-box-layout__MKTmqpn",
+            "ink-grid-box-layout__Pw3zgFM",
+            "ink-grid-box-layout__bbPozyb",
+            "ink-grid-box-layout__jMQUpX5"
+          ]
+        },
+        {
+          "passed": 0,
+          "n_effective": 4,
+          "pass_rate": 0.0,
+          "metrics": {
+            "reward": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "score_value": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "f2p": {
+              "n_available": 0,
+              "n_missing": 4,
+              "mean": null
+            },
+            "p2p": {
+              "n_available": 0,
+              "n_missing": 4,
+              "mean": null
+            },
+            "partial": {
+              "n_available": 0,
+              "n_missing": 4,
+              "mean": null
+            }
+          },
+          "trial_names": [
+            "ink-grid-box-layout__7Rn8cCC",
+            "ink-grid-box-layout__T8Fhung",
+            "ink-grid-box-layout__YP7t3DL",
+            "ink-grid-box-layout__jRTaUkK"
+          ]
+        }
+      ],
+      "family": [
+        [
+          2,
+          20
+        ],
+        [
+          0,
+          20
+        ]
+      ],
+      "family_both_at_most_half": true,
+      "other_efforts": [
+        [
+          2,
+          16
+        ],
+        [
+          0,
+          16
+        ]
+      ],
+      "effort_cells": {
+        "claude-opus-5": {
+          "low": [
+            1,
+            4
+          ],
+          "medium": [
+            1,
+            4
+          ],
+          "high": [
+            0,
+            4
+          ],
+          "xhigh": [
+            0,
+            4
+          ],
+          "max": [
+            0,
+            4
+          ]
+        },
+        "gpt-6-astra": {
+          "low": [
+            0,
+            4
+          ],
+          "medium": [
+            0,
+            4
+          ],
+          "high": [
+            0,
+            4
+          ],
+          "xhigh": [
+            0,
+            4
+          ],
+          "max": [
+            0,
+            4
+          ]
+        }
+      },
+      "both_zero_pass": true,
+      "delta": 0.0,
+      "scoring_sensitive": false,
+      "language": "typescript",
+      "repository": "vadimdemedes/ink",
+      "quality": {
+        "total_trials": 280,
+        "excluded_trials": 2,
+        "error_rate": 0.007142857142857143,
+        "verifier_timeouts": 0,
+        "minimum_effective_repeats": 3,
+        "model_coverage": 28,
+        "config_coverage": 70,
+        "historical_stable": true,
+        "current_stable": true,
+        "layer_01_exclusion_reasons": []
+      },
+      "host_excluded": false,
+      "dev": false,
+      "confirm": false
+    },
+    {
+      "task": "meriyah-explicit-resource-declarations",
+      "cells": [
+        {
+          "passed": 0,
+          "n_effective": 4,
+          "pass_rate": 0.0,
+          "metrics": {
+            "reward": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "score_value": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "f2p": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.9591836734693878
+            },
+            "p2p": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 1.0
+            },
+            "partial": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.9999611786171823
+            }
+          },
+          "trial_names": [
+            "meriyah-explicit-resource-declar__4aANCaj",
+            "meriyah-explicit-resource-declar__6XRYGyd",
+            "meriyah-explicit-resource-declar__9o2nxVM",
+            "meriyah-explicit-resource-declar__xUL6ezc"
+          ]
+        },
+        {
+          "passed": 0,
+          "n_effective": 4,
+          "pass_rate": 0.0,
+          "metrics": {
+            "reward": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "score_value": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "f2p": {
+              "n_available": 0,
+              "n_missing": 4,
+              "mean": null
+            },
+            "p2p": {
+              "n_available": 0,
+              "n_missing": 4,
+              "mean": null
+            },
+            "partial": {
+              "n_available": 0,
+              "n_missing": 4,
+              "mean": null
+            }
+          },
+          "trial_names": [
+            "meriyah-explicit-resource-declar__HfUhe9Z",
+            "meriyah-explicit-resource-declar__LywK6JB",
+            "meriyah-explicit-resource-declar__cZgV2Te",
+            "meriyah-explicit-resource-declar__szFMG5w"
+          ]
+        }
+      ],
+      "family": [
+        [
+          0,
+          20
+        ],
+        [
+          2,
+          20
+        ]
+      ],
+      "family_both_at_most_half": true,
+      "other_efforts": [
+        [
+          0,
+          16
+        ],
+        [
+          2,
+          16
+        ]
+      ],
+      "effort_cells": {
+        "claude-opus-5": {
+          "low": [
+            0,
+            4
+          ],
+          "medium": [
+            0,
+            4
+          ],
+          "high": [
+            0,
+            4
+          ],
+          "xhigh": [
+            0,
+            4
+          ],
+          "max": [
+            0,
+            4
+          ]
+        },
+        "gpt-6-astra": {
+          "low": [
+            1,
+            4
+          ],
+          "medium": [
+            1,
+            4
+          ],
+          "high": [
+            0,
+            4
+          ],
+          "xhigh": [
+            0,
+            4
+          ],
+          "max": [
+            0,
+            4
+          ]
+        }
+      },
+      "both_zero_pass": true,
+      "delta": -0.0833,
+      "scoring_sensitive": false,
+      "language": "typescript",
+      "repository": "meriyah/meriyah",
+      "quality": {
+        "total_trials": 280,
+        "excluded_trials": 0,
+        "error_rate": 0.0,
+        "verifier_timeouts": 0,
+        "minimum_effective_repeats": 4,
+        "model_coverage": 28,
+        "config_coverage": 70,
+        "historical_stable": true,
+        "current_stable": true,
+        "layer_01_exclusion_reasons": []
+      },
+      "host_excluded": false,
+      "dev": false,
+      "confirm": false
+    },
+    {
+      "task": "obsidian-linter-auto-table-of-contents",
+      "cells": [
+        {
+          "passed": 0,
+          "n_effective": 4,
+          "pass_rate": 0.0,
+          "metrics": {
+            "reward": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "score_value": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "f2p": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.676829268292683
+            },
+            "p2p": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 1.0
+            },
+            "partial": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.9886945392491466
+            }
+          },
+          "trial_names": [
+            "obsidian-linter-auto-table-of-co__6DYY7As",
+            "obsidian-linter-auto-table-of-co__SzXGD8V",
+            "obsidian-linter-auto-table-of-co__aL2qMMJ",
+            "obsidian-linter-auto-table-of-co__fwH4hF6"
+          ]
+        },
+        {
+          "passed": 0,
+          "n_effective": 4,
+          "pass_rate": 0.0,
+          "metrics": {
+            "reward": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "score_value": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "f2p": {
+              "n_available": 0,
+              "n_missing": 4,
+              "mean": null
+            },
+            "p2p": {
+              "n_available": 0,
+              "n_missing": 4,
+              "mean": null
+            },
+            "partial": {
+              "n_available": 0,
+              "n_missing": 4,
+              "mean": null
+            }
+          },
+          "trial_names": [
+            "obsidian-linter-auto-table-of-co__6tVqjKq",
+            "obsidian-linter-auto-table-of-co__Thw3UXk",
+            "obsidian-linter-auto-table-of-co__abzK3ow",
+            "obsidian-linter-auto-table-of-co__vSNEVrc"
+          ]
+        }
+      ],
+      "family": [
+        [
+          2,
+          20
+        ],
+        [
+          0,
+          20
+        ]
+      ],
+      "family_both_at_most_half": true,
+      "other_efforts": [
+        [
+          2,
+          16
+        ],
+        [
+          0,
+          16
+        ]
+      ],
+      "effort_cells": {
+        "claude-opus-5": {
+          "low": [
+            0,
+            4
+          ],
+          "medium": [
+            0,
+            4
+          ],
+          "high": [
+            0,
+            4
+          ],
+          "xhigh": [
+            0,
+            4
+          ],
+          "max": [
+            2,
+            4
+          ]
+        },
+        "gpt-6-astra": {
+          "low": [
+            0,
+            4
+          ],
+          "medium": [
+            0,
+            4
+          ],
+          "high": [
+            0,
+            4
+          ],
+          "xhigh": [
+            0,
+            4
+          ],
+          "max": [
+            0,
+            4
+          ]
+        }
+      },
+      "both_zero_pass": true,
+      "delta": -0.1389,
+      "scoring_sensitive": true,
+      "language": "typescript",
+      "repository": "platers/obsidian-linter",
+      "quality": {
+        "total_trials": 280,
+        "excluded_trials": 0,
+        "error_rate": 0.0,
+        "verifier_timeouts": 0,
+        "minimum_effective_repeats": 4,
+        "model_coverage": 28,
+        "config_coverage": 70,
+        "historical_stable": true,
+        "current_stable": true,
+        "layer_01_exclusion_reasons": []
+      },
+      "host_excluded": false,
+      "dev": false,
+      "confirm": false
+    },
+    {
+      "task": "obsidian-linter-link-format-conversion",
+      "cells": [
+        {
+          "passed": 0,
+          "n_effective": 4,
+          "pass_rate": 0.0,
+          "metrics": {
+            "reward": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "score_value": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "f2p": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.9791666666666666
+            },
+            "p2p": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 1.0
+            },
+            "partial": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.9989504617968095
+            }
+          },
+          "trial_names": [
+            "obsidian-linter-link-format-conv__D6DYGiJ",
+            "obsidian-linter-link-format-conv__GNugqbb",
+            "obsidian-linter-link-format-conv__dSZPVd9",
+            "obsidian-linter-link-format-conv__en8AQ7P"
+          ]
+        },
+        {
+          "passed": 0,
+          "n_effective": 4,
+          "pass_rate": 0.0,
+          "metrics": {
+            "reward": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "score_value": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "f2p": {
+              "n_available": 0,
+              "n_missing": 4,
+              "mean": null
+            },
+            "p2p": {
+              "n_available": 0,
+              "n_missing": 4,
+              "mean": null
+            },
+            "partial": {
+              "n_available": 0,
+              "n_missing": 4,
+              "mean": null
+            }
+          },
+          "trial_names": [
+            "obsidian-linter-link-format-conv__B7t8XW7",
+            "obsidian-linter-link-format-conv__UFkR8ds",
+            "obsidian-linter-link-format-conv__XC8kNu5",
+            "obsidian-linter-link-format-conv__mk5b62J"
+          ]
+        }
+      ],
+      "family": [
+        [
+          1,
+          20
+        ],
+        [
+          0,
+          20
+        ]
+      ],
+      "family_both_at_most_half": true,
+      "other_efforts": [
+        [
+          1,
+          16
+        ],
+        [
+          0,
+          16
+        ]
+      ],
+      "effort_cells": {
+        "claude-opus-5": {
+          "low": [
+            1,
+            4
+          ],
+          "medium": [
+            0,
+            4
+          ],
+          "high": [
+            0,
+            4
+          ],
+          "xhigh": [
+            0,
+            4
+          ],
+          "max": [
+            0,
+            4
+          ]
+        },
+        "gpt-6-astra": {
+          "low": [
+            0,
+            4
+          ],
+          "medium": [
+            0,
+            4
+          ],
+          "high": [
+            0,
+            4
+          ],
+          "xhigh": [
+            0,
+            4
+          ],
+          "max": [
+            0,
+            4
+          ]
+        }
+      },
+      "both_zero_pass": true,
+      "delta": 0.0278,
+      "scoring_sensitive": false,
+      "language": "typescript",
+      "repository": "platers/obsidian-linter",
+      "quality": {
+        "total_trials": 280,
+        "excluded_trials": 0,
+        "error_rate": 0.0,
+        "verifier_timeouts": 0,
+        "minimum_effective_repeats": 4,
+        "model_coverage": 28,
+        "config_coverage": 70,
+        "historical_stable": true,
+        "current_stable": true,
+        "layer_01_exclusion_reasons": []
+      },
+      "host_excluded": false,
+      "dev": false,
+      "confirm": false
+    },
+    {
+      "task": "sqlfmt-create-table-ddl-formatting",
+      "cells": [
+        {
+          "passed": 0,
+          "n_effective": 4,
+          "pass_rate": 0.0,
+          "metrics": {
+            "reward": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "score_value": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "f2p": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.953125
+            },
+            "p2p": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.8809897879025923
+            },
+            "partial": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.8827586206896552
+            }
+          },
+          "trial_names": [
+            "sqlfmt-create-table-ddl-formatti__ZtF6j3o",
+            "sqlfmt-create-table-ddl-formatti__hqik8Gp",
+            "sqlfmt-create-table-ddl-formatti__ufLkE5q",
+            "sqlfmt-create-table-ddl-formatti__yb3QAbA"
+          ]
+        },
+        {
+          "passed": 0,
+          "n_effective": 4,
+          "pass_rate": 0.0,
+          "metrics": {
+            "reward": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "score_value": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "f2p": {
+              "n_available": 0,
+              "n_missing": 4,
+              "mean": null
+            },
+            "p2p": {
+              "n_available": 0,
+              "n_missing": 4,
+              "mean": null
+            },
+            "partial": {
+              "n_available": 0,
+              "n_missing": 4,
+              "mean": null
+            }
+          },
+          "trial_names": [
+            "sqlfmt-create-table-ddl-formatti__9s3EQcM",
+            "sqlfmt-create-table-ddl-formatti__fWnfEtt",
+            "sqlfmt-create-table-ddl-formatti__i5b2fKZ",
+            "sqlfmt-create-table-ddl-formatti__yC42es5"
+          ]
+        }
+      ],
+      "family": [
+        [
+          4,
+          20
+        ],
+        [
+          1,
+          20
+        ]
+      ],
+      "family_both_at_most_half": true,
+      "other_efforts": [
+        [
+          4,
+          16
+        ],
+        [
+          1,
+          16
+        ]
+      ],
+      "effort_cells": {
+        "claude-opus-5": {
+          "low": [
+            1,
+            4
+          ],
+          "medium": [
+            2,
+            4
+          ],
+          "high": [
+            0,
+            4
+          ],
+          "xhigh": [
+            1,
+            4
+          ],
+          "max": [
+            0,
+            4
+          ]
+        },
+        "gpt-6-astra": {
+          "low": [
+            1,
+            4
+          ],
+          "medium": [
+            0,
+            4
+          ],
+          "high": [
+            0,
+            4
+          ],
+          "xhigh": [
+            0,
+            4
+          ],
+          "max": [
+            0,
+            4
+          ]
+        }
+      },
+      "both_zero_pass": true,
+      "delta": -0.1944,
+      "scoring_sensitive": true,
+      "language": "python",
+      "repository": "tconbeer/sqlfmt",
+      "quality": {
+        "total_trials": 280,
+        "excluded_trials": 1,
+        "error_rate": 0.0035714285714285713,
+        "verifier_timeouts": 0,
+        "minimum_effective_repeats": 3,
+        "model_coverage": 28,
+        "config_coverage": 70,
+        "historical_stable": true,
+        "current_stable": true,
+        "layer_01_exclusion_reasons": []
+      },
+      "host_excluded": false,
+      "dev": false,
+      "confirm": false
+    },
+    {
+      "task": "termenv-preserve-ansi-resets",
+      "cells": [
+        {
+          "passed": 0,
+          "n_effective": 4,
+          "pass_rate": 0.0,
+          "metrics": {
+            "reward": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "score_value": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "f2p": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.9214285714285714
+            },
+            "p2p": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 1.0
+            },
+            "partial": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.9774590163934426
+            }
+          },
+          "trial_names": [
+            "termenv-preserve-ansi-resets__GXxrZzD",
+            "termenv-preserve-ansi-resets__dC55uWp",
+            "termenv-preserve-ansi-resets__mTpjNi7",
+            "termenv-preserve-ansi-resets__zwvTnxo"
+          ]
+        },
+        {
+          "passed": 0,
+          "n_effective": 4,
+          "pass_rate": 0.0,
+          "metrics": {
+            "reward": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "score_value": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "f2p": {
+              "n_available": 0,
+              "n_missing": 4,
+              "mean": null
+            },
+            "p2p": {
+              "n_available": 0,
+              "n_missing": 4,
+              "mean": null
+            },
+            "partial": {
+              "n_available": 0,
+              "n_missing": 4,
+              "mean": null
+            }
+          },
+          "trial_names": [
+            "termenv-preserve-ansi-resets__3cwkAMX",
+            "termenv-preserve-ansi-resets__YUg8Qp7",
+            "termenv-preserve-ansi-resets__ZrtuhFq",
+            "termenv-preserve-ansi-resets__nE4BEQV"
+          ]
+        }
+      ],
+      "family": [
+        [
+          3,
+          20
+        ],
+        [
+          0,
+          20
+        ]
+      ],
+      "family_both_at_most_half": true,
+      "other_efforts": [
+        [
+          3,
+          16
+        ],
+        [
+          0,
+          16
+        ]
+      ],
+      "effort_cells": {
+        "claude-opus-5": {
+          "low": [
+            3,
+            4
+          ],
+          "medium": [
+            0,
+            4
+          ],
+          "high": [
+            0,
+            4
+          ],
+          "xhigh": [
+            0,
+            4
+          ],
+          "max": [
+            0,
+            4
+          ]
+        },
+        "gpt-6-astra": {
+          "low": [
+            0,
+            4
+          ],
+          "medium": [
+            0,
+            4
+          ],
+          "high": [
+            0,
+            4
+          ],
+          "xhigh": [
+            0,
+            4
+          ],
+          "max": [
+            0,
+            4
+          ]
+        }
+      },
+      "both_zero_pass": true,
+      "delta": -0.0758,
+      "scoring_sensitive": false,
+      "language": "go",
+      "repository": "muesli/termenv",
+      "quality": {
+        "total_trials": 280,
+        "excluded_trials": 3,
+        "error_rate": 0.010714285714285714,
+        "verifier_timeouts": 0,
+        "minimum_effective_repeats": 1,
+        "model_coverage": 28,
+        "config_coverage": 70,
+        "historical_stable": false,
+        "current_stable": false,
+        "layer_01_exclusion_reasons": [
+          "minimum_effective_repeats"
+        ]
+      },
+      "host_excluded": false,
+      "dev": false,
+      "confirm": false
+    },
+    {
+      "task": "vulture-persistent-analysis-cache",
+      "cells": [
+        {
+          "passed": 0,
+          "n_effective": 4,
+          "pass_rate": 0.0,
+          "metrics": {
+            "reward": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "score_value": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "f2p": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.9791666666666667
+            },
+            "p2p": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.9864406779661017
+            },
+            "partial": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.9858934169278997
+            }
+          },
+          "trial_names": [
+            "vulture-persistent-analysis-cach__5XBRrwB",
+            "vulture-persistent-analysis-cach__KPu7DMD",
+            "vulture-persistent-analysis-cach__jpKyi6t",
+            "vulture-persistent-analysis-cach__vR7TWUM"
+          ]
+        },
+        {
+          "passed": 0,
+          "n_effective": 4,
+          "pass_rate": 0.0,
+          "metrics": {
+            "reward": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "score_value": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "f2p": {
+              "n_available": 0,
+              "n_missing": 4,
+              "mean": null
+            },
+            "p2p": {
+              "n_available": 0,
+              "n_missing": 4,
+              "mean": null
+            },
+            "partial": {
+              "n_available": 0,
+              "n_missing": 4,
+              "mean": null
+            }
+          },
+          "trial_names": [
+            "vulture-persistent-analysis-cach__HVFJQKp",
+            "vulture-persistent-analysis-cach__QMByrGH",
+            "vulture-persistent-analysis-cach__Uu2TGXN",
+            "vulture-persistent-analysis-cach__YG45dQg"
+          ]
+        }
+      ],
+      "family": [
+        [
+          0,
+          20
+        ],
+        [
+          0,
+          20
+        ]
+      ],
+      "family_both_at_most_half": true,
+      "other_efforts": [
+        [
+          0,
+          16
+        ],
+        [
+          0,
+          16
+        ]
+      ],
+      "effort_cells": {
+        "claude-opus-5": {
+          "low": [
+            0,
+            4
+          ],
+          "medium": [
+            0,
+            4
+          ],
+          "high": [
+            0,
+            4
+          ],
+          "xhigh": [
+            0,
+            4
+          ],
+          "max": [
+            0,
+            4
+          ]
+        },
+        "gpt-6-astra": {
+          "low": [
+            0,
+            4
+          ],
+          "medium": [
+            0,
+            4
+          ],
+          "high": [
+            0,
+            4
+          ],
+          "xhigh": [
+            0,
+            4
+          ],
+          "max": [
+            0,
+            4
+          ]
+        }
+      },
+      "both_zero_pass": true,
+      "delta": -0.6667,
+      "scoring_sensitive": true,
+      "language": "python",
+      "repository": "jendrikseipp/vulture",
+      "quality": {
+        "total_trials": 280,
+        "excluded_trials": 1,
+        "error_rate": 0.0035714285714285713,
+        "verifier_timeouts": 0,
+        "minimum_effective_repeats": 3,
+        "model_coverage": 28,
+        "config_coverage": 70,
+        "historical_stable": true,
+        "current_stable": true,
+        "layer_01_exclusion_reasons": []
+      },
+      "host_excluded": false,
+      "dev": false,
+      "confirm": false
+    },
+    {
+      "task": "arktype-json-schema-refs-dependencies",
+      "cells": [
+        {
+          "passed": 1,
+          "n_effective": 4,
+          "pass_rate": 0.25,
+          "metrics": {
+            "reward": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.25
+            },
+            "score_value": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.25
+            },
+            "f2p": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.94
+            },
+            "p2p": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 1.0
+            },
+            "partial": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.9991197183098592
+            }
+          },
+          "trial_names": [
+            "arktype-json-schema-refs-depende__CK9id65",
+            "arktype-json-schema-refs-depende__TmNsSE3",
+            "arktype-json-schema-refs-depende__hL3JDne",
+            "arktype-json-schema-refs-depende__wzHKH2c"
+          ]
+        },
+        {
+          "passed": 1,
+          "n_effective": 4,
+          "pass_rate": 0.25,
+          "metrics": {
+            "reward": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.25
+            },
+            "score_value": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.25
+            },
+            "f2p": {
+              "n_available": 0,
+              "n_missing": 4,
+              "mean": null
+            },
+            "p2p": {
+              "n_available": 0,
+              "n_missing": 4,
+              "mean": null
+            },
+            "partial": {
+              "n_available": 0,
+              "n_missing": 4,
+              "mean": null
+            }
+          },
+          "trial_names": [
+            "arktype-json-schema-refs-depende__bdeKCVQ",
+            "arktype-json-schema-refs-depende__pXQ3CdZ",
+            "arktype-json-schema-refs-depende__r9foxE9",
+            "arktype-json-schema-refs-depende__x6vgBdH"
+          ]
+        }
+      ],
+      "family": [
+        [
+          8,
+          20
+        ],
+        [
+          6,
+          20
+        ]
+      ],
+      "family_both_at_most_half": true,
+      "other_efforts": [
+        [
+          7,
+          16
+        ],
+        [
+          5,
+          16
+        ]
+      ],
+      "effort_cells": {
+        "claude-opus-5": {
+          "low": [
+            1,
+            4
+          ],
+          "medium": [
+            1,
+            4
+          ],
+          "high": [
+            1,
+            4
+          ],
+          "xhigh": [
+            2,
+            4
+          ],
+          "max": [
+            3,
+            4
+          ]
+        },
+        "gpt-6-astra": {
+          "low": [
+            0,
+            4
+          ],
+          "medium": [
+            0,
+            4
+          ],
+          "high": [
+            1,
+            4
+          ],
+          "xhigh": [
+            1,
+            4
+          ],
+          "max": [
+            4,
+            4
+          ]
+        }
+      },
+      "both_zero_pass": false,
+      "delta": 0.1111,
+      "scoring_sensitive": true,
+      "language": "typescript",
+      "repository": "arktypeio/arktype",
+      "quality": {
+        "total_trials": 280,
+        "excluded_trials": 0,
+        "error_rate": 0.0,
+        "verifier_timeouts": 0,
+        "minimum_effective_repeats": 4,
+        "model_coverage": 28,
+        "config_coverage": 70,
+        "historical_stable": true,
+        "current_stable": true,
+        "layer_01_exclusion_reasons": []
+      },
+      "host_excluded": false,
+      "dev": false,
+      "confirm": false
+    },
+    {
+      "task": "igel-persist-feature-schema",
+      "cells": [
+        {
+          "passed": 1,
+          "n_effective": 4,
+          "pass_rate": 0.25,
+          "metrics": {
+            "reward": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.25
+            },
+            "score_value": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.25
+            },
+            "f2p": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.4375
+            },
+            "p2p": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 1.0
+            },
+            "partial": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.4807692307692308
+            }
+          },
+          "trial_names": [
+            "igel-persist-feature-schema__AuszG37",
+            "igel-persist-feature-schema__e8UqdpR",
+            "igel-persist-feature-schema__vQGjjft",
+            "igel-persist-feature-schema__zcbTgt6"
+          ]
+        },
+        {
+          "passed": 0,
+          "n_effective": 4,
+          "pass_rate": 0.0,
+          "metrics": {
+            "reward": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "score_value": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "f2p": {
+              "n_available": 0,
+              "n_missing": 4,
+              "mean": null
+            },
+            "p2p": {
+              "n_available": 0,
+              "n_missing": 4,
+              "mean": null
+            },
+            "partial": {
+              "n_available": 0,
+              "n_missing": 4,
+              "mean": null
+            }
+          },
+          "trial_names": [
+            "igel-persist-feature-schema__A8FLVHG",
+            "igel-persist-feature-schema__S7UVmMF",
+            "igel-persist-feature-schema__m4x5QGp",
+            "igel-persist-feature-schema__tsgCNQU"
+          ]
+        }
+      ],
+      "family": [
+        [
+          8,
+          20
+        ],
+        [
+          0,
+          20
+        ]
+      ],
+      "family_both_at_most_half": true,
+      "other_efforts": [
+        [
+          7,
+          16
+        ],
+        [
+          0,
+          16
+        ]
+      ],
+      "effort_cells": {
+        "claude-opus-5": {
+          "low": [
+            3,
+            4
+          ],
+          "medium": [
+            2,
+            4
+          ],
+          "high": [
+            1,
+            4
+          ],
+          "xhigh": [
+            0,
+            4
+          ],
+          "max": [
+            2,
+            4
+          ]
+        },
+        "gpt-6-astra": {
+          "low": [
+            0,
+            4
+          ],
+          "medium": [
+            0,
+            4
+          ],
+          "high": [
+            0,
+            4
+          ],
+          "xhigh": [
+            0,
+            4
+          ],
+          "max": [
+            0,
+            4
+          ]
+        }
+      },
+      "both_zero_pass": false,
+      "delta": 0.0889,
+      "scoring_sensitive": false,
+      "language": "python",
+      "repository": "nidhaloff/igel",
+      "quality": {
+        "total_trials": 280,
+        "excluded_trials": 3,
+        "error_rate": 0.010714285714285714,
+        "verifier_timeouts": 0,
+        "minimum_effective_repeats": 3,
+        "model_coverage": 28,
+        "config_coverage": 70,
+        "historical_stable": true,
+        "current_stable": true,
+        "layer_01_exclusion_reasons": []
+      },
+      "host_excluded": false,
+      "dev": false,
+      "confirm": false
+    },
+    {
+      "task": "prometheus-transactional-reload-status",
+      "cells": [
+        {
+          "passed": 1,
+          "n_effective": 4,
+          "pass_rate": 0.25,
+          "metrics": {
+            "reward": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.25
+            },
+            "score_value": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.25
+            },
+            "f2p": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.5833333333333333
+            },
+            "p2p": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.9939024390243902
+            },
+            "partial": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.9304123711340206
+            }
+          },
+          "trial_names": [
+            "prometheus-transactional-reload__3CuXf2J",
+            "prometheus-transactional-reload__ECGsEZ7",
+            "prometheus-transactional-reload__EPojeWr",
+            "prometheus-transactional-reload__qY59r7r"
+          ]
+        },
+        {
+          "passed": 0,
+          "n_effective": 4,
+          "pass_rate": 0.0,
+          "metrics": {
+            "reward": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "score_value": {
+              "n_available": 4,
+              "n_missing": 0,
+              "mean": 0.0
+            },
+            "f2p": {
+              "n_available": 0,
+              "n_missing": 4,
+              "mean": null
+            },
+            "p2p": {
+              "n_available": 0,
+              "n_missing": 4,
+              "mean": null
+            },
+            "partial": {
+              "n_available": 0,
+              "n_missing": 4,
+              "mean": null
+            }
+          },
+          "trial_names": [
+            "prometheus-transactional-reload__A69FAge",
+            "prometheus-transactional-reload__EMy3YhB",
+            "prometheus-transactional-reload__P7JgbMh",
+            "prometheus-transactional-reload__xiUyLZk"
+          ]
+        }
+      ],
+      "family": [
+        [
+          5,
+          20
+        ],
+        [
+          0,
+          20
+        ]
+      ],
+      "family_both_at_most_half": true,
+      "other_efforts": [
+        [
+          4,
+          16
+        ],
+        [
+          0,
+          16
+        ]
+      ],
+      "effort_cells": {
+        "claude-opus-5": {
+          "low": [
+            1,
+            4
+          ],
+          "medium": [
+            0,
+            4
+          ],
+          "high": [
+            1,
+            4
+          ],
+          "xhigh": [
+            1,
+            4
+          ],
+          "max": [
+            2,
+            4
+          ]
+        },
+        "gpt-6-astra": {
+          "low": [
+            0,
+            4
+          ],
+          "medium": [
+            0,
+            4
+          ],
+          "high": [
+            0,
+            4
+          ],
+          "xhigh": [
+            0,
+            4
+          ],
+          "max": [
+            0,
+            4
+          ]
+        }
+      },
+      "both_zero_pass": false,
+      "delta": 0.0833,
+      "scoring_sensitive": false,
+      "language": "typescript",
+      "repository": "prometheus/prometheus",
+      "quality": {
+        "total_trials": 280,
+        "excluded_trials": 0,
+        "error_rate": 0.0,
+        "verifier_timeouts": 0,
+        "minimum_effective_repeats": 4,
+        "model_coverage": 28,
+        "config_coverage": 70,
+        "historical_stable": true,
+        "current_stable": true,
+        "layer_01_exclusion_reasons": []
+      },
+      "host_excluded": false,
+      "dev": false,
+      "confirm": false
+    }
+  ]
+}

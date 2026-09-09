@@ -1,0 +1,8 @@
+bandit-structured-nosec-directives
+gql-incremental-graphql-delivery
+ink-grid-box-layout
+obsidian-linter-auto-table-of-contents
+obsidian-linter-link-format-conversion
+sqlfmt-create-table-ddl-formatting
+termenv-preserve-ansi-resets
+vulture-persistent-analysis-cache
