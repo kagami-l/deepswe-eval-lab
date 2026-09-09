@@ -5,16 +5,17 @@
 
 ## 状态与结论
 
-方案已在仓库内实现，不修改 Pier site-packages：
+方案曾在仓库内实现，不修改 Pier site-packages。统一 Agent runtime 上线后该实现失去调用方，
+运行入口 `wip/scripts/run_opencode_eval.sh` 于 2026-09-08 移除，其余文件于 2026-09-09 删除
+（见 `wip/agents/deprecated.md`）；本文保留为问题分析与设计记录。删除前的文件如下，可从 git 历史找回：
 
 - 自定义 adapter：`wip/agents/opencode_watchdog_agent.py`
 - 容器内 runner：`wip/agents/opencode_watchdog_runner.mjs`
 - shared runtime：`wip/docker/opencode-runtime/Dockerfile`
 - shared environment：`wip/environments/opencode_runtime.py`
 - fake-process 测试：`wip/agents/test_opencode_watchdog.py`
-- 运行入口：原 `wip/scripts/run_opencode_eval.sh` 已于 2026-09-08 移除；adapter 已弃用，见 `wip/agents/deprecated.md`
 
-已移除的运行脚本默认使用 shared runtime watchdog adapter：一次构建固定版本的 Node/OpenCode
+运行脚本默认使用 shared runtime watchdog adapter：一次构建固定版本的 Node/OpenCode
 runtime，之后直接运行每个任务的原始镜像，并把 runtime 只读挂载到
 `/opt/opencode-runtime`。这避免了 Pier 为每个不同基础镜像重复执行 apt、NVM 和 npm 安装。
 可用 `--per-task-runtime` 回退到逐任务安装；Pier 内置 OpenCode adapter 仍保持原样。

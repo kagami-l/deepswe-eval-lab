@@ -215,6 +215,11 @@ wip/
 `wip/agents/deep_swe_collab/`、现有 `run_*_eval.sh`、mini-swe/OpenCode shared
 runtime 和 Kimi adapter 暂时不改。
 
+> 更新（2026-09-09）：`wip/agents/deep_swe_collab/` 已删除，其 direct engine、prompt、
+> review schema 和 workspace 隔离已迁入 `wip/agents/deep_swe_agent/`。codex、kimi、opencode
+> 三个 `run_*_eval.sh` 已于 2026-09-08 移除，对应旧 adapter 的弃用状态见
+> `wip/agents/deprecated.md`。
+
 ## 7. CLI 设计
 
 以下命令均从仓库的 `wip` 目录执行：
