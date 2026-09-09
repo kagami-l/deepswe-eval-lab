@@ -1048,6 +1048,15 @@ adapter 用运行配置回填 model/cwd，并将缺失 tools 映射为 `[]`，�
 - 首次发现：2026-09-08
 - 证据目录：[CLI-009-codex-missing-cost](./CLI-009-codex-missing-cost/README.md)
 
+### cligent 0.27.0 跟进（2026-09-09）
+
+上游新增独立的可选 `estimateCost(usage, options)`，支持调用方价格或 models.dev 缓存
+价格，保留 partial/complete、假设和适用费率。该 API 不修改 `DoneUsage.cost`；
+上游 Codex spec 的 `codex-17` 明确 exec 不报告费用。因此本次提供了估算替代能力，
+没有新增 Codex 原生费用报告。本项目已升级依赖，暂未将估算接入统计脚本；本 issue
+仍为 Open，后续需确定是否接受独立估算作为需求的解决方式，不能将其视为实付费用。
+详见 [0.27 升级记录](../reviews/20260909-cligent-0.27.0-upgrade.md)。
+
 ### 现象与影响
 
 对 `wip/one_task.txt` 中的 `abs-module-cache-flags` 分别执行 single 和 collab smoke。
@@ -1105,6 +1114,18 @@ Codex 的缺失值在 deep-swe 保持 unknown，没有当成零，也没有用�
 - 严重程度：`High`；状态：`Open`（缺失现象已确认，根因待上游定位）
 - 首次发现：2026-09-08
 - 证据目录：[CLI-010-codex-resume-missing-token](./CLI-010-codex-resume-missing-token/README.md)
+
+### cligent 0.27.0 跟进（2026-09-09）
+
+上游新增在原生 terminal `done` 前发出的 `codex:usage`，报告 snapshot、baseline、delta
+和 token 省略原因，解决本 issue 的关键诊断缺口。同时修复执行已启动但没有原生终止
+usage 时未清除旧基线的问题，防止中断工作的消耗被归入后续恢复轮。
+
+这不等于已定位本样本的根因：这里两轮都成功终止，而昨日未保存原生快照，无法证明命中
+该中断分支。上游仍会在缺少基线、计数下降、字段变化或子集无效时省略 token；Codex
+有效报告也仍是 partial。0.27 已安装，调用方回归确认新诊断可落盘且不会被计入 token。
+尚未用 0.27 重跑真实 resume smoke，因此保持 Open，原始证据及数值不变。
+详见 [0.27 升级记录](../reviews/20260909-cligent-0.27.0-upgrade.md)。
 
 ### 复现场景与实际结果
 

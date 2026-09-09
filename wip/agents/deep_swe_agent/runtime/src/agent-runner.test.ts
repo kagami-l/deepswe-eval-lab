@@ -247,6 +247,61 @@ test('the event file sink preserves OpenCode output deltas', async (t) => {
   }
 });
 
+test('Codex usage diagnostics survive runner persistence without becoming billable usage', async (t) => {
+  const tempDir = await mkdtemp(join(tmpdir(), 'deep-swe-codex-usage-'));
+  t.after(() => rm(tempDir, { recursive: true, force: true }));
+  for (const reported of [true, false]) {
+    const diagnostic = {
+      type: 'codex:usage', agent: 'codex', sessionId: 'same-thread',
+      payload: {
+        status: reported ? 'reported' : 'omitted',
+        reason: reported ? 'reported' : 'missing-baseline',
+        resumed: true, threadId: 'same-thread',
+        snapshot: { inputTokens: 1000, outputTokens: 100 },
+        ...(reported ? {
+          baseline: { inputTokens: 900, outputTokens: 90 },
+          delta: { inputTokens: 100, outputTokens: 10 },
+        } : {}),
+      },
+    };
+    const usage = {
+      toolUses: 6,
+      ...(reported ? { tokens: {
+        coverage: 'partial',
+        totals: { input: { total: 100 }, output: { total: 10 } },
+      } } : {}),
+    };
+    const runner = new CligentRunner('modifier', {
+      adapter: 'codex', model: 'gpt-5.6-luna', permissions: 'auto',
+    });
+    Object.assign(runner, { cligent: {
+      async *run() {
+        yield diagnostic;
+        yield { type: 'done', payload: { status: 'success', usage } };
+      },
+    } });
+    const paths = ['round', 'global'].map((name) => join(tempDir, `${name}-${reported}.jsonl`));
+    const result = await runner.runTurn({
+      prompt: 'revise', cwd: tempDir, resumeSession: true,
+      timeoutMs: 1000, wallClockTimeoutKind: 'total_deadline',
+      inactivityTimeoutMs: 1000, diagnosticDir: tempDir, label: 'revise-a1',
+    }, createEventFileSink(paths));
+    assert.equal(result.ok, true);
+    assert.equal(result.usage?.inputTokens, reported ? 100 : null);
+    assert.equal(result.usage?.outputTokens, reported ? 10 : null);
+    assert.equal(result.usage?.costUsd, null);
+    assert.equal(result.usage?.toolUses, 6);
+    for (const path of paths) {
+      const events = (await readFile(path, 'utf8')).trim().split('\n').map((line) => JSON.parse(line));
+      const diagnosticIndex = events.findIndex((event) => event.type === 'codex:usage');
+      const doneIndex = events.findIndex((event) => event.type === 'done');
+      assert.ok(diagnosticIndex >= 0 && diagnosticIndex < doneIndex);
+      assert.deepEqual(events[diagnosticIndex].payload, diagnostic.payload);
+      assert.deepEqual(events[doneIndex].payload.usage, usage);
+    }
+  }
+});
+
 test('done without tokens preserves unknown accounting and independent tool counts', async () => {
   const fakeCligent = {
     async *run(): AsyncGenerator<Record<string, unknown>> {
