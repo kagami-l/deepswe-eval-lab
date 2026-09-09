@@ -79,7 +79,7 @@ uv run python scripts/run_agent_eval.py score-patches --job-path ../jobs/<job-na
 不支持 `--pricing`。single/collab 共用同一入口。
 
 脚本从每轮原始报告重新计算 job、角色、trial 和 turn 用量，忽略 summary 的旧扁平投影。
-文本和 `reportSchemaVersion=2` JSON 区分 `observedInputTokens/observedOutputTokens`
+文本和 `reportSchemaVersion=3` JSON 区分 `observedInputTokens/observedOutputTokens`
 小计与完整 `inputTokens/outputTokens`；只有所有轮次均为 complete 时后者才有值。
 缓存读写已包含在 input total，reasoning 已包含在 output total，不能再相加。
 文本展示这些细项及报告轮次；细项缺失保持未知，真实零保留为 0。
@@ -93,13 +93,34 @@ uv run python scripts/run_agent_eval.py score-patches --job-path ../jobs/<job-na
 # 在 wip/ 目录下执行
 uv run python scripts/token_usage.py ../jobs/<job-name>
 uv run python scripts/token_usage.py ../jobs/<job-name> --json
+# 日志没有计价 provider 时，显式给指定角色选择 models.dev provider（不按 agent 猜测）
+uv run python scripts/token_usage.py ../jobs/<job-name> --cost-provider modifier=openai
 ```
 
-费用仅来自每轮上游 `cost`，保留 provider-reported、agent-estimate 或 account-estimate
-来源。`observedCostUsd` 是已报告小计，`costUsd` 仅在完整覆盖时有值；费用覆盖与 token
-覆盖独立计算。模型 records 的费用已包含在本轮费用中，不再重复相加，也不构造 input/cache/output
-费用分栏。完整角色费用不能冒充整个 job 费用。没有上游费用时保持未知，不按配置模型估价。
-所有原始 records（包括 requests、pricedUnits）保留在 JSON 的 `usageReports` 中。
+费用逐轮优先使用 cligent `cost`（包括真实零），保留 provider-reported、agent-estimate 或
+account-estimate 来源；没有 cost 才调用已安装 cligent 的 `estimateCost()`。脚本不按
+Codex/Claude 等 agent 分支，也不维护价格表或自行计算 token 价格。
+
+估算通过 Node 桥接脚本 `token_usage_cost.mjs` 调用 runtime 中固定版本的 cligent，需本地
+Node 和 runtime npm 依赖。读取原始模型/provider records；模型缺失时将 summary 的配置模型
+作为 cligent 的计价假设。`--cost-provider [ROLE=]PROVIDER` 可重复，角色设置优先于全局设置，
+只影响缺失费用的估算。provider 无法确定时保留 `missing-provider`，不根据 agent 名称映射。
+价格查询、24 小时缓存和 stale 回退均由 cligent 管理；`--cost-cache PATH` 可指定缓存位置。
+也可通过 `--cost-prices JSON` 显式传入 cligent `TokenPrices`（每百万 token 的美元费率），
+此模式由 cligent 跳过网络与缓存。该选项不同于已移除的旧 `--pricing` 价格表格式。
+
+`usageReports` 保留原始值，包括所有 records、requests、pricedUnits，不写入估算。
+新增的每轮 `costResolutions` 保存选用的 reported cost、完整 cligent estimate 结果或
+unavailable 原因。估算结果含价格来源、时间、stale、模型、费率和假设，来源标记为
+`cligent-estimate`，不冒充 agent 报告费用。模型明细只解释费用，不额外累加。
+
+`observedCostUsd` 在报告 v3 中是按优先级选用后的可得费用小计，可能同时包含原始报告和
+补充估算；`reportedCostUsd`、`estimatedCostUsd` 单独列出这两部分。`costReportTurns`、
+`costEstimateTurns`、`missingCostTurns` 对应各类轮次。只有每轮都有费用且所有补充估算均为
+complete 时，`costUsd` 才有值；部分 token 的估算继续为 partial，缺 token 无法估算。
+原始 cost 的覆盖不依赖 token 是否齐全。所有 cost 统计采用同一优先级，缺失不当成零。
+complete 只表示用量范围完整，不表示已与账单核对。缺少 Node、catalog、价格或有效 token
+时保留原因，其他 token 和原始费用照常输出。
 
 ## 旧基线：用共享 mini-swe-agent runtime 运行评测
 

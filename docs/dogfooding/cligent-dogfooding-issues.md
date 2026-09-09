@@ -1053,8 +1053,10 @@ adapter 用运行配置回填 model/cwd，并将缺失 tools 映射为 `[]`，�
 上游新增独立的可选 `estimateCost(usage, options)`，支持调用方价格或 models.dev 缓存
 价格，保留 partial/complete、假设和适用费率。该 API 不修改 `DoneUsage.cost`；
 上游 Codex spec 的 `codex-17` 明确 exec 不报告费用。因此本次提供了估算替代能力，
-没有新增 Codex 原生费用报告。本项目已升级依赖，暂未将估算接入统计脚本；本 issue
-仍为 Open，后续需确定是否接受独立估算作为需求的解决方式，不能将其视为实付费用。
+没有新增 Codex 原生费用报告。本项目已升级依赖，并按用户选择在事后统计脚本接入
+“cligent cost 优先、缺失时 estimateCost”的通用策略。原始费用与补充估算分开保留，
+不按 agent 分支；无法估算或只有部分用量时保持 unavailable/partial。
+本 issue 仍为 Open 表示原生费用能力缺口，估算替代方案已接入，不等同实付费用。
 详见 [0.27 升级记录](../reviews/20260909-cligent-0.27.0-upgrade.md)。
 
 ### 现象与影响

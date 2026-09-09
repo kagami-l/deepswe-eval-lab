@@ -141,7 +141,7 @@ class UsageUpgradeTests(unittest.TestCase):
             with redirect_stdout(StringIO()) as output:
                 print_report(result)
             self.assertIn("cost coverage partial", output.getvalue())
-            self.assertIn("observed subtotal", output.getvalue())
+        self.assertIn("available subtotal", output.getvalue())
 
     def test_new_tokens_without_cost_are_not_priced_as_the_requested_model(self):
         from wip.scripts.token_usage import _usage_cost

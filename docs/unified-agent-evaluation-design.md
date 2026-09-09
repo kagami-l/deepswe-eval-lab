@@ -740,8 +740,13 @@ infrastructure_failed
 保持未知，不按请求的主模型或假定缓存比例给新版报告补算费用。
 
 cligent 0.27.0 的 `codex:usage` 诊断会原样保留在 round/global events，包含计数快照、
-基线及 reported/omitted 原因；诊断计数不参与用量汇总。可选 `estimateCost` API
-尚未接入统计脚本，它产生独立估算，不会自动补充 `DoneUsage.cost`。
+基线及 reported/omitted 原因；诊断计数不参与用量汇总。
+
+事后 token 统计脚本逐轮优先选用 cligent cost，缺失时调用 `estimateCost()`，不按底层
+agent 分支。估算仅保存在报告 v3 的 `costResolutions`，不回写 runtime summary 或原始
+`usageReports`。统计报告的可得费用小计可能同时含报告费用和估算，二者分别列明；估算
+保留 cligent 的来源、价格和假设。缺少 provider 时显式选择计价 provider，不根据 agent
+猜测；partial token 的估算不会被宣称为完整费用。详见 [脚本说明](../wip/scripts/README.md)。
 
 Pier 和 ATIF 的完整总量字段只接受完整范围；partial 小计及来源留在 metadata/extra。
 历史 flat 事件与 summary 仍可读取，不能据此补造已丢失的覆盖范围。取消和超时兜底

@@ -3,8 +3,8 @@
 
 Only usageSchema=2 with one usageReports slot per turn is accepted. Native
 input/output totals include cache/reasoning subsets. Partial reports are observed
-subtotals, not complete totals. Costs come exclusively from terminal cost reports;
-model records explain those totals and are never added to them again.
+subtotals, not complete totals. Prefer cligent terminal cost; otherwise call its
+estimateCost API. Preserve raw reports and separate reported/estimated subtotals.
 """
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ import json
 import math
 import statistics
 import sys
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,67 @@ TOKEN_FIELDS = {
     "output": ("total", "visible", "reasoning"),
 }
 COST_SOURCES = {"provider-reported", "agent-estimate", "account-estimate"}
+
+
+
+RUNTIME_DIR = Path(__file__).resolve().parents[1] / "agents/deep_swe_agent/runtime"
+
+
+def _estimate_costs(requests: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Delegate pricing, cache handling and arithmetic to the pinned cligent API."""
+    if not requests:
+        return []
+    try:
+        process = subprocess.run(
+            ["node", "--input-type=module", "--eval",
+             Path(__file__).with_name("token_usage_cost.mjs").read_text()],
+            cwd=RUNTIME_DIR, input=json.dumps(requests), capture_output=True,
+            text=True, timeout=60, check=True,
+        )
+        results = json.loads(process.stdout)
+        if not isinstance(results, list) or len(results) != len(requests):
+            raise ValueError("cligent returned an invalid estimate batch")
+        for result in results:
+            if not isinstance(result, dict) or result.get("status") not in {"estimated", "unavailable"}:
+                raise ValueError("cligent returned an invalid estimate result")
+            if result["status"] == "estimated" and (
+                not _number(result.get("amount")) or result.get("currency") != "USD"
+                or result.get("coverage") not in {"complete", "partial"}
+            ):
+                raise ValueError("cligent returned an invalid estimate amount/coverage")
+        return results
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        # Cost lookup must not discard otherwise valid token/native-cost reports.
+        message = str(exc)
+        if isinstance(exc, subprocess.CalledProcessError):
+            message = exc.stderr.strip() or message
+        return [{"status": "unavailable", "reason": "estimator-unavailable",
+                 "message": message} for _ in requests]
+
+
+def _native_cost_resolution(report: dict[str, Any] | None) -> dict[str, Any]:
+    if report is not None and "cost" in report:
+        return {"kind": "reported", "cost": report["cost"]}
+    return {"kind": "unavailable", "estimate": {
+        "status": "unavailable", "reason": "not-estimated",
+        "message": "No cligent cost estimate was requested for this accounting view.",
+    }}
+
+
+def _cost_amount(resolution: dict[str, Any]) -> float | None:
+    if resolution["kind"] == "reported":
+        return resolution["cost"]["amount"]
+    if resolution["kind"] == "estimated":
+        return resolution["estimate"]["amount"]
+    return None
+
+
+def _cost_source(resolution: dict[str, Any]) -> str | None:
+    if resolution["kind"] == "reported":
+        return resolution["cost"]["source"]
+    if resolution["kind"] == "estimated":
+        return "cligent-estimate"
+    return None
 
 
 def _load_json(path: Path) -> Any | None:
@@ -127,14 +189,24 @@ def _model_usage(reports: list[dict[str, Any] | None]) -> list[dict[str, Any]]:
 
 
 def _accounting(
-    reports: list[dict[str, Any] | None], *, tool_uses: int = 0, wall_ms: int = 0
+    reports: list[dict[str, Any] | None], *, tool_uses: int = 0, wall_ms: int = 0,
+    cost_resolutions: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     tokens = [r["tokens"] for r in reports if r is not None and "tokens" in r]
-    costs = [r["cost"] for r in reports if r is not None and "cost" in r]
+    resolutions = cost_resolutions if cost_resolutions is not None else [
+        _native_cost_resolution(r) for r in reports
+    ]
+    assert len(resolutions) == len(reports)
+    available_costs = [r for r in resolutions if _cost_amount(r) is not None]
+    reported_costs = [r for r in resolutions if r["kind"] == "reported"]
+    estimated_costs = [r for r in resolutions if r["kind"] == "estimated"]
     token_coverage = _coverage(
         len(tokens), len(reports), all(t["coverage"] == "complete" for t in tokens)
     )
-    cost_coverage = _coverage(len(costs), len(reports))
+    cost_coverage = _coverage(
+        len(available_costs), len(reports),
+        all(r["estimate"]["coverage"] == "complete" for r in estimated_costs),
+    )
     details = {}
     for side, keys in TOKEN_FIELDS.items():
         for key in keys:
@@ -151,7 +223,7 @@ def _accounting(
             }
     observed_input = details["input.total"]["observed"]
     observed_output = details["output.total"]["observed"]
-    observed_cost = _sum_known([c["amount"] for c in costs])
+    observed_cost = _sum_known([_cost_amount(r) for r in available_costs])
     return {
         "usageSchema": 2,
         "usageReports": reports,
@@ -169,18 +241,26 @@ def _accounting(
         "outputTokens": observed_output if token_coverage == "complete" else None,
         "tokenDetails": details,
         "costCoverage": cost_coverage,
-        "costReportTurns": len(costs),
-        "missingCostTurns": len(reports) - len(costs),
+        "costResolutions": resolutions,
+        "costReportTurns": len(reported_costs),
+        "costEstimateTurns": len(estimated_costs),
+        "costAvailableTurns": len(available_costs),
+        "partialCostEstimateTurns": sum(
+            r["estimate"]["coverage"] == "partial" for r in estimated_costs
+        ),
+        "missingCostTurns": len(reports) - len(available_costs),
+        "reportedCostUsd": _sum_known([_cost_amount(r) for r in reported_costs]),
+        "estimatedCostUsd": _sum_known([_cost_amount(r) for r in estimated_costs]),
         "observedCostUsd": observed_cost,
         "costUsd": observed_cost if cost_coverage == "complete" else None,
-        "costSources": sorted({c["source"] for c in costs}),
+        "costSources": sorted({_cost_source(r) for r in available_costs}),
         "modelRecordTurns": sum("records" in t for t in tokens),
         "modelUsage": _model_usage(reports),
     }
 
 
 def _usage_cost(usage: dict[str, Any]) -> dict[str, Any] | None:
-    accounting = _accounting(_reports(usage, "usage"))
+    accounting = _accounting(_reports(usage, "usage"), cost_resolutions=usage.get("costResolutions"))
     if accounting["observedCostUsd"] is None:
         return None
     models = sorted({m["model"] for m in accounting["modelUsage"] if m["model"] is not None})
@@ -188,14 +268,19 @@ def _usage_cost(usage: dict[str, Any]) -> dict[str, Any] | None:
         "models": models,
         "totalUsd": accounting["observedCostUsd"],
         "completeTotalUsd": accounting["costUsd"],
+        "reportedUsd": accounting["reportedCostUsd"],
+        "estimatedUsd": accounting["estimatedCostUsd"],
         "sources": accounting["costSources"],
         "coverage": accounting["costCoverage"],
         "estimated": any(s != "provider-reported" for s in accounting["costSources"]),
     }
 
 
-def _trial_rows(job_dir: Path) -> tuple[list[dict[str, Any]], list[str], dict[str, str]]:
+def _trial_rows(
+    job_dir: Path, cost_options: dict[str, dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[str], dict[str, str]]:
     rows, skipped, labels = [], [], {}
+    requests, pending = [], []
     for trial in sorted(job_dir.iterdir()):
         if not trial.is_dir() or trial.name.startswith(".") or trial.name == "patch-scores":
             continue
@@ -219,6 +304,15 @@ def _trial_rows(job_dir: Path) -> tuple[list[dict[str, Any]], list[str], dict[st
                 reports, tool_uses=spec["toolUses"], wall_ms=spec["wallMs"]
             )
             identity = (summary.get("roles") or {}).get(role, {})
+            options = {key: identity[key] for key in ("model", "provider") if identity.get(key)}
+            options.update(cost_options.get("*", {}))
+            options.update(cost_options.get(role, {}))
+            for index, report in enumerate(reports):
+                if report is not None and "cost" in report:
+                    continue  # A genuine zero cost is authoritative too.
+                requests.append({"usage": report if report is not None else {"toolUses": 0},
+                                 "options": options})
+                pending.append((role_usage, role, index))
             label = f"{identity.get('adapter', role)}/{identity.get('model', '?')}"
             if role in labels and labels[role] != label:
                 labels[role] = "multiple configured models (see reported model records)"
@@ -233,6 +327,17 @@ def _trial_rows(job_dir: Path) -> tuple[list[dict[str, Any]], list[str], dict[st
             "outcome": summary["result"].get("outcome"),
             "usage": role_usage,
         })
+    for (usages, role, index), estimate in zip(pending, _estimate_costs(requests), strict=True):
+        usages[role]["costResolutions"][index] = {
+            "kind": "estimated" if estimate["status"] == "estimated" else "unavailable",
+            "estimate": estimate,
+        }
+    for row in rows:
+        for role, usage in row["usage"].items():
+            row["usage"][role] = _accounting(
+                usage["usageReports"], tool_uses=usage["toolUses"], wall_ms=usage["wallMs"],
+                cost_resolutions=usage["costResolutions"],
+            )
     return rows, skipped, labels
 
 
@@ -241,6 +346,7 @@ def _aggregate(usages: list[dict[str, Any]]) -> dict[str, Any]:
         [r for u in usages for r in u["usageReports"]],
         tool_uses=sum(u["toolUses"] for u in usages),
         wall_ms=sum(u["wallMs"] for u in usages),
+        cost_resolutions=[r for u in usages for r in u["costResolutions"]],
     )
 
 
@@ -258,8 +364,10 @@ def _stats(values: list[int | float]) -> dict[str, float]:
     }
 
 
-def build_report(job_dir: Path) -> dict[str, Any]:
-    rows, skipped, labels = _trial_rows(job_dir)
+def build_report(
+    job_dir: Path, *, cost_options: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    rows, skipped, labels = _trial_rows(job_dir, cost_options or {})
     roles = list(dict.fromkeys(role for row in rows for role in row["usage"]))
     totals = {
         role: _aggregate([row["usage"][role] for row in rows if role in row["usage"]])
@@ -318,7 +426,7 @@ def build_report(job_dir: Path) -> dict[str, Any]:
             per_role[role] = bucket
         split[group] = per_role
     return {
-        "reportSchemaVersion": 2,
+        "reportSchemaVersion": 3,
         "jobDir": str(job_dir),
         "roleModels": labels,
         "trials": rows,
@@ -341,7 +449,7 @@ def _fmt_usd(value: int | float | None) -> str:
 
 def _print_accounting(usage: dict[str, Any], *, details: bool = False) -> None:
     print(
-        f"  observed subtotal: in {_fmt(usage['observedInputTokens'])}"
+        f"  available subtotal: in {_fmt(usage['observedInputTokens'])}"
         f"  out {_fmt(usage['observedOutputTokens'])}"
         f"  cost {_fmt_usd(usage['observedCostUsd'])}"
     )
@@ -355,8 +463,13 @@ def _print_accounting(usage: dict[str, Any], *, details: bool = False) -> None:
         f" missing {usage['missingTokenTurns']})"
     )
     print(
-        f"  cost coverage {usage['costCoverage']}; reports {usage['costReportTurns']}/{usage['turns']}"
-        f" turns; sources {', '.join(usage['costSources']) or 'unavailable'}"
+        f"  cost coverage {usage['costCoverage']}; reported {usage['costReportTurns']},"
+        f" estimated {usage['costEstimateTurns']}, missing {usage['missingCostTurns']}"
+        f" / {usage['turns']} turns; sources {', '.join(usage['costSources']) or 'unavailable'}"
+    )
+    print(
+        f"  cost split: reported {_fmt_usd(usage['reportedCostUsd'])};"
+        f" cligent-estimated {_fmt_usd(usage['estimatedCostUsd'])}"
     )
     if not details:
         return
@@ -372,7 +485,7 @@ def _print_accounting(usage: dict[str, Any], *, details: bool = False) -> None:
     if usage["modelUsage"]:
         print(
             f"  reported model records ({usage['modelRecordTurns']}/{usage['turns']} turns;"
-            " already included above, not additional usage):"
+            " detail only; not added to totals):"
         )
         for model in usage["modelUsage"]:
             print(
@@ -393,7 +506,9 @@ def print_report(report: dict[str, Any]) -> None:
         print("Excluded trials: " + ", ".join(report["skippedTrials"]))
     print("Input includes cacheRead/cacheWrite; output includes reasoning. Do not add subsets again.")
     print("Partial = observed scope only. Missing = unknown, never zero. Costs are USD.")
-    print("agent-estimate / account-estimate are estimates, not bills; no API-rate estimate is added.")
+    print("Cost priority: cligent reported cost, then cligent estimateCost(); no agent-specific pricing.")
+    print("agent-estimate / account-estimate / cligent-estimate are estimates, not bills.")
+    print("Cost totals may combine reported and estimated amounts; complete describes scope, not billing certainty.")
     print("\n## Job usage (all roles)")
     _print_accounting(report["jobTotals"])
     for role, usage in report["totals"].items():
@@ -409,14 +524,30 @@ def print_report(report: dict[str, Any]) -> None:
         print(f"\n{row['trial']} reward={row['reward']}")
         for role, usage in row["usage"].items():
             for index, native in enumerate(usage["usageReports"], 1):
-                turn = _accounting([native])
+                resolution = usage["costResolutions"][index - 1]
+                turn = _accounting([native], cost_resolutions=[resolution])
                 print(
                     f"  {role} turn {index}: tokens={turn['tokenCoverage']}"
                     f" in {_fmt(turn['observedInputTokens'])} out {_fmt(turn['observedOutputTokens'])}"
-                    f" cost {_fmt_usd(turn['observedCostUsd'])}"
+                    f" cost {_fmt_usd(turn['observedCostUsd'])} ({turn['costCoverage']})"
                     f" source={', '.join(turn['costSources']) or 'unavailable'}"
                 )
-    print("\n## Per-trial observed subtotal statistics")
+                if resolution["kind"] == "unavailable":
+                    estimate = resolution["estimate"]
+                    print(f"    cost unavailable: {estimate['reason']}: {estimate['message']}")
+                elif resolution["kind"] == "estimated":
+                    estimate = resolution["estimate"]
+                    print(f"    estimate source: {json.dumps(estimate['source'], sort_keys=True)}")
+                    for record in estimate["records"]:
+                        print(
+                            f"    estimated {record.get('provider', '?')}/{record.get('model', '?')}:"
+                            f" {_fmt_usd(record['amount'])}; USD/M token rates"
+                            f" {json.dumps(record['prices'], sort_keys=True)}"
+                        )
+                    for assumption in estimate["assumptions"]:
+                        print(f"    assumption: {assumption}")
+    print("\n## Per-trial available subtotal statistics")
+    print("Tokens are observed; costs follow the reported-then-estimated priority above.")
     print("Only trials reporting each metric enter its statistics; these are not complete-job totals.")
     for role, metrics in report["stats"].items():
         print(f"  {role}")
@@ -447,13 +578,32 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("job_dir", type=Path, help="Pier job directory")
     parser.add_argument("--json", action="store_true", help="emit structured report JSON")
+    parser.add_argument("--cost-provider", action="append", default=[], metavar="[ROLE=]PROVIDER",
+                        help="cligent catalog pricing provider; optionally scoped to a role")
+    parser.add_argument("--cost-prices", type=Path, metavar="JSON",
+                        help="explicit cligent TokenPrices JSON (USD per million tokens)")
+    parser.add_argument("--cost-cache", type=Path, metavar="PATH",
+                        help="cligent pricing cache path (default: cligent OS cache)")
     args = parser.parse_args(argv)
     job_dir = args.job_dir.expanduser().resolve()
     if not job_dir.is_dir():
         print(f"not a directory: {job_dir}", file=sys.stderr)
         return 2
     try:
-        report = build_report(job_dir)
+        options: dict[str, dict[str, Any]] = {"*": {}}
+        for entry in args.cost_provider:
+            role, provider = entry.split("=", 1) if "=" in entry else ("*", entry)
+            if not role or not provider:
+                raise ValueError("--cost-provider requires [ROLE=]PROVIDER")
+            options.setdefault(role, {})["provider"] = provider
+        if args.cost_prices:
+            prices = _load_json(args.cost_prices.expanduser())
+            if not isinstance(prices, dict):
+                raise ValueError("--cost-prices must be a readable TokenPrices JSON object")
+            options["*"]["prices"] = prices
+        if args.cost_cache:
+            options["*"]["cachePath"] = str(args.cost_cache.expanduser().resolve())
+        report = build_report(job_dir, cost_options=options)
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 2
