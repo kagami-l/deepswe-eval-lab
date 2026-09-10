@@ -1,0 +1,310 @@
+{
+  "trials": 40,
+  "tasks": 10,
+  "repeats": 4,
+  "jobs": [
+    {
+      "job": "collab-codex-claude-complementary-opus-astra-medium-10-tasks-20260909-140937",
+      "n": 10,
+      "initial": 5,
+      "final": 6,
+      "conformance": {
+        "matched": 1,
+        "mismatched": [],
+        "skipped": 0,
+        "unavailable": [
+          "bandit-interprocedural-taint-checks/bandit-interprocedural-taint-che__KF2Ygu7",
+          "helm-array-merge-strategies/helm-array-merge-strategies__BStaRaX",
+          "httpx-streaming-json-iteration/httpx-streaming-json-iteration__GYpL3jQ",
+          "koota-deferred-mutation-buffer/koota-deferred-mutation-buffer__NpG5N86",
+          "optique-conditional-option-dependencies/optique-conditional-option-depen__ps4gqAh",
+          "scc-bounded-memory-spilling/scc-bounded-memory-spilling__pUf7krF",
+          "testem-bail-on-test-failure/testem-bail-on-test-failure__adCSMim",
+          "ts-pattern-match-each/ts-pattern-match-each__RcQxmE7",
+          "wazero-multi-module-snapshots/wazero-multi-module-snapshots__TsT8A3h"
+        ]
+      }
+    },
+    {
+      "job": "collab-codex-claude-complementary-opus-astra-medium-10-tasks-20260909-225200",
+      "n": 20,
+      "initial": 10,
+      "final": 13,
+      "conformance": {
+        "matched": 20,
+        "mismatched": [],
+        "skipped": 0,
+        "unavailable": []
+      }
+    },
+    {
+      "job": "collab-codex-claude-complementary-opus-astra-medium-10-tasks-20260910-113656",
+      "n": 10,
+      "initial": 5,
+      "final": 6,
+      "conformance": {
+        "matched": 10,
+        "mismatched": [],
+        "skipped": 0,
+        "unavailable": []
+      }
+    }
+  ],
+  "tasks_detail": [
+    {
+      "task": "wazero-multi-module-snapshots",
+      "group": "opus",
+      "initial": 0,
+      "final": 4,
+      "initial_seq": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "final_seq": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "reviews": 10,
+      "revisions": 6
+    },
+    {
+      "task": "ts-pattern-match-each",
+      "group": "opus",
+      "initial": 0,
+      "final": 0,
+      "initial_seq": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "final_seq": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "reviews": 4,
+      "revisions": 0
+    },
+    {
+      "task": "python-statemachine-state-data-scoping",
+      "group": "opus",
+      "initial": 0,
+      "final": 0,
+      "initial_seq": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "final_seq": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "reviews": 9,
+      "revisions": 6
+    },
+    {
+      "task": "helm-array-merge-strategies",
+      "group": "opus",
+      "initial": 0,
+      "final": 1,
+      "initial_seq": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "final_seq": [
+        0,
+        1,
+        0,
+        0
+      ],
+      "reviews": 8,
+      "revisions": 5
+    },
+    {
+      "task": "testem-bail-on-test-failure",
+      "group": "opus",
+      "initial": 0,
+      "final": 0,
+      "initial_seq": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "final_seq": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "reviews": 4,
+      "revisions": 0
+    },
+    {
+      "task": "httpx-streaming-json-iteration",
+      "group": "astra",
+      "initial": 4,
+      "final": 4,
+      "initial_seq": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "final_seq": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "reviews": 7,
+      "revisions": 3
+    },
+    {
+      "task": "koota-deferred-mutation-buffer",
+      "group": "astra",
+      "initial": 4,
+      "final": 4,
+      "initial_seq": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "final_seq": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "reviews": 11,
+      "revisions": 9
+    },
+    {
+      "task": "bandit-interprocedural-taint-checks",
+      "group": "astra",
+      "initial": 4,
+      "final": 4,
+      "initial_seq": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "final_seq": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "reviews": 4,
+      "revisions": 0
+    },
+    {
+      "task": "optique-conditional-option-dependencies",
+      "group": "astra",
+      "initial": 4,
+      "final": 4,
+      "initial_seq": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "final_seq": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "reviews": 8,
+      "revisions": 5
+    },
+    {
+      "task": "scc-bounded-memory-spilling",
+      "group": "astra",
+      "initial": 4,
+      "final": 4,
+      "initial_seq": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "final_seq": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "reviews": 8,
+      "revisions": 4
+    }
+  ],
+  "initial_pass": 20,
+  "final_pass": 25,
+  "pair_counts": {
+    "0→1": 5,
+    "0→0": 15,
+    "1→1": 20
+  },
+  "outcomes": {
+    "approved": 34,
+    "degraded": 3,
+    "max_reviews_reached": 3
+  },
+  "reviews": {
+    "approve": 34,
+    "revise": 39
+  },
+  "review_count": 73,
+  "revision_count": 38,
+  "raw_verifier_status": {
+    "success": 78
+  },
+  "stage_records": 115,
+  "stage_transitions": {
+    "0→0": 10,
+    "1→1": 20,
+    "0→1": 5
+  },
+  "approved_failed": 14,
+  "token_coverage": {
+    "modifier": {
+      "partial": 41,
+      "missing": 39
+    },
+    "reviewer": {
+      "complete": 73,
+      "missing": 2
+    }
+  },
+  "timing": {
+    "modifier": {
+      "total_minutes": 534.0660166666667,
+      "mean_minutes": 13.351650416666667,
+      "median_minutes": 9.144241666666666
+    },
+    "reviewer": {
+      "total_minutes": 742.7723833333332,
+      "mean_minutes": 18.569309583333332,
+      "median_minutes": 15.218658333333334
+    },
+    "initial": {
+      "total_minutes": 338.38925,
+      "mean_minutes": 8.45973125,
+      "median_minutes": 8.194816666666666
+    }
+  }
+}
