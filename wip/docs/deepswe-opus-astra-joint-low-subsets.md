@@ -82,3 +82,42 @@ Astra medium、xhigh 在这批任务的 F2P、P2P、partial 均为缺失，无�
 - 可以先用 8/9 题零通过子集探测协作是否能突破公开双失败，再用完整 13/12 题池观察结果是否稳健。两模型各题至少 4 次内部重复：medium 主池共 104 次 trial，xhigh 主池共 96 次。若要同题比较 effort，可在 13 题联合池上同时运行 Opus high、Astra medium、Astra xhigh，共 156 次 trial；Opus 结果无需为两个配对重复运行。
 
 内部确认和工件逐条审计尚未开展。本次产物是基于公开结果构造的机制探测集合，不用于总体模型排名，也不能据筛选池分数估计两模型的整体协作收益。
+
+## 其他模型和配置能否通过（2026-09-10 核对）
+
+**13 道共同低分题全部有其他模型的通过记录；双侧 0/4 的 9 题联合集也全部有。** 即使排除 `claude-opus-5` 和 `gpt-6-astra` 的所有 effort，结论仍成立。这里使用的是 **2026-09-08 下载的 70 配置快照**，没有在 09-10 重新同步远端。逐配置计数和通过 trial ID 保存在 [补充证据 JSON](../data/selection/joint-low-opus-astra-other-configs.json)。
+
+下表“全配置”包括快照中全部 70 配置，沿用有效评分过滤；其总通过率受模型/effort 配置组成影响，只描述该快照。实例优先选有效通过率高、重复完整的配置，并尽量展示不同模型；每格只有少量重复，不能把观测通过率当作真实成功率保证。
+
+### 双侧零通过的 9 道任务
+
+前述 medium 的 8 题零通过集全部属于 xhigh 的 9 题零通过集；xhigh 额外包含 `meriyah`。
+
+| 任务 | 全配置通过 / 有效次数 | 有通过的配置数 | 其他模型的通过实例（排除 Opus-5/Astra 全家族） |
+| --- | ---: | ---: | --- |
+| `bandit-structured-nosec-directives` | 19/279 | 13 | `glm-5-3 [max]` 3/4；`claude-sonnet-5 [low]` 2/4 |
+| `gql-incremental-graphql-delivery` | 10/278 | 8 | `claude-sonnet-5 [max]` 2/4；`glm-5-2 [max]` 2/4 |
+| `ink-grid-box-layout` | 73/278 | 41 | `claude-sonnet-5 [medium]` 4/4；`gemini-3-7-flash [low]` 4/4 |
+| `meriyah-explicit-resource-declarations` | 61/280 | 31 | `gemini-3-8-flash [medium]` 4/4；`gpt-5-5 [xhigh]` 4/4 |
+| `obsidian-linter-auto-table-of-contents` | 7/280 | 4 | `kimi-k3 [max]` 3/4；`claude-fable-5 [xhigh]` 1/4 |
+| `obsidian-linter-link-format-conversion` | 69/280 | 41 | `claude-sonnet-5 [max]` 4/4；`glm-5-2 [high]` 4/4 |
+| `sqlfmt-create-table-ddl-formatting` | 56/279 | 38 | `claude-fable-5 [medium]` 4/4；`gpt-5-6-luna [xhigh]` 3/4 |
+| `termenv-preserve-ansi-resets` | 33/277 | 26 | `claude-fable-5 [low]` 2/4；`gpt-5-6-luna [max]` 2/4 |
+| `vulture-persistent-analysis-cache` | 87/279 | 41 | `claude-sonnet-5 [xhigh]` 4/4；`gemini-3-7-flash [low]` 4/4 |
+
+- `bandit-structured`：`glm-5-3 [max]` 为 3/4；同模型换 effort，`claude-opus-5 [medium]` 也有 2/4。
+- `gql`：全快照只有 10/278，通过最多的配置是 `claude-sonnet-5 [max]` 和 `glm-5-2 [max]`，均为 2/4；属于在这份公开结果上普遍较难的题。
+- `obsidian-linter-auto-table-of-contents`：全快照只有 7/280，但 `kimi-k3 [max]` 为 3/4；另有 `claude-opus-5 [max]` 2/4。总体很难，同时也存在配置差异。
+- `termenv`：全配置最佳是 `claude-opus-5 [low]` 3/4。排除 Opus-5/Astra 全家族后，其他模型最高为 2/4。不能根据 low 优于 high 的这 4 次样本推断 effort 降档普遍更好。
+- 9 道零通过题中，有 7 道在 Opus-5/Astra 家族以外找到至少 3/4 的配置；只有 `gql` 和 `termenv` 的外部模型最佳不超过 2/4。`vulture` 虽有多个外部配置 4/4，仍保留其评分版本高度敏感的标记（Δ −0.6667）。
+
+### 其余 4 道共同低分任务
+
+| 任务 | 全配置通过 / 有效次数 | 有通过的配置数 | 其他模型的通过实例（排除 Opus-5/Astra 全家族） |
+| --- | ---: | ---: | --- |
+| `arktype-json-schema-refs-dependencies` | 109/280 | 56 | `claude-sonnet-5 [high]` 4/4；`gpt-5-4 [xhigh]` 4/4 |
+| `effect-sse-httpapi-streaming` | 52/280 | 33 | `glm-5-3-flash [max]` 3/4；`gpt-5-5 [medium]` 3/4 |
+| `igel-persist-feature-schema` | 123/277 | 48 | `claude-fable-5 [xhigh]` 4/4；`claude-opus-4-8 [high]` 4/4 |
+| `prometheus-transactional-reload-status` | 64/280 | 34 | `deepseek-v4-flash [max]` 4/4；`grok-4-6 [high]` 4/4 |
+
+这些记录支持继续分析“特定模型/配置的共同失败”及可借鉴的成功轨迹。它们尚不能证明其他模型采用了同一种可迁移的方法，或双模型协作必然能复用成功方案；这需要进一步查看通过 trial 的 patch、trajectory 和 verifier 输出。本次仅统计通过记录，未下载或审计这些工件。
