@@ -1,0 +1,335 @@
+{
+  "trials": 40,
+  "tasks": 10,
+  "repeats": 4,
+  "jobs": [
+    {
+      "job": "collab-claude-codex-complementary-opus-astra-medium-10-tasks-20260909-141135",
+      "n": 10,
+      "initial": 5,
+      "final": 5,
+      "conformance": {
+        "matched": 3,
+        "mismatched": [],
+        "skipped": 0,
+        "unavailable": [
+          "bandit-interprocedural-taint-checks/bandit-interprocedural-taint-che__SNNhDSU",
+          "httpx-streaming-json-iteration/httpx-streaming-json-iteration__PxKpipL",
+          "koota-deferred-mutation-buffer/koota-deferred-mutation-buffer__UPFdjrk",
+          "scc-bounded-memory-spilling/scc-bounded-memory-spilling__6dBJxmY",
+          "testem-bail-on-test-failure/testem-bail-on-test-failure__YJ7WNtR",
+          "ts-pattern-match-each/ts-pattern-match-each__UoNHwZA",
+          "wazero-multi-module-snapshots/wazero-multi-module-snapshots__BdjyeYM"
+        ]
+      }
+    },
+    {
+      "job": "collab-claude-codex-complementary-opus-astra-medium-10-tasks-20260909-225214",
+      "n": 20,
+      "initial": 12,
+      "final": 10,
+      "conformance": {
+        "matched": 20,
+        "mismatched": [],
+        "skipped": 0,
+        "unavailable": []
+      }
+    },
+    {
+      "job": "collab-claude-codex-complementary-opus-astra-medium-10-tasks-20260910-113555",
+      "n": 10,
+      "initial": 7,
+      "final": 6,
+      "conformance": {
+        "matched": 10,
+        "mismatched": [],
+        "skipped": 0,
+        "unavailable": []
+      }
+    }
+  ],
+  "tasks_detail": [
+    {
+      "task": "wazero-multi-module-snapshots",
+      "group": "opus",
+      "initial": 4,
+      "final": 2,
+      "initial_seq": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "final_seq": [
+        1,
+        0,
+        0,
+        1
+      ],
+      "reviews": 12,
+      "revisions": 9
+    },
+    {
+      "task": "ts-pattern-match-each",
+      "group": "opus",
+      "initial": 4,
+      "final": 0,
+      "initial_seq": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "final_seq": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "reviews": 11,
+      "revisions": 7
+    },
+    {
+      "task": "python-statemachine-state-data-scoping",
+      "group": "opus",
+      "initial": 2,
+      "final": 2,
+      "initial_seq": [
+        0,
+        0,
+        1,
+        1
+      ],
+      "final_seq": [
+        0,
+        0,
+        1,
+        1
+      ],
+      "reviews": 10,
+      "revisions": 7
+    },
+    {
+      "task": "helm-array-merge-strategies",
+      "group": "opus",
+      "initial": 2,
+      "final": 1,
+      "initial_seq": [
+        0,
+        0,
+        1,
+        1
+      ],
+      "final_seq": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "reviews": 12,
+      "revisions": 12
+    },
+    {
+      "task": "testem-bail-on-test-failure",
+      "group": "opus",
+      "initial": 4,
+      "final": 4,
+      "initial_seq": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "final_seq": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "reviews": 12,
+      "revisions": 12
+    },
+    {
+      "task": "httpx-streaming-json-iteration",
+      "group": "astra",
+      "initial": 1,
+      "final": 3,
+      "initial_seq": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "final_seq": [
+        1,
+        1,
+        1,
+        0
+      ],
+      "reviews": 12,
+      "revisions": 10
+    },
+    {
+      "task": "koota-deferred-mutation-buffer",
+      "group": "astra",
+      "initial": 0,
+      "final": 1,
+      "initial_seq": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "final_seq": [
+        0,
+        0,
+        1,
+        0
+      ],
+      "reviews": 10,
+      "revisions": 9
+    },
+    {
+      "task": "bandit-interprocedural-taint-checks",
+      "group": "astra",
+      "initial": 4,
+      "final": 4,
+      "initial_seq": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "final_seq": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "reviews": 12,
+      "revisions": 12
+    },
+    {
+      "task": "optique-conditional-option-dependencies",
+      "group": "astra",
+      "initial": 2,
+      "final": 2,
+      "initial_seq": [
+        0,
+        0,
+        1,
+        1
+      ],
+      "final_seq": [
+        0,
+        0,
+        1,
+        1
+      ],
+      "reviews": 12,
+      "revisions": 12
+    },
+    {
+      "task": "scc-bounded-memory-spilling",
+      "group": "astra",
+      "initial": 1,
+      "final": 2,
+      "initial_seq": [
+        0,
+        0,
+        1,
+        0
+      ],
+      "final_seq": [
+        1,
+        0,
+        1,
+        0
+      ],
+      "reviews": 11,
+      "revisions": 9
+    }
+  ],
+  "initial_pass": 24,
+  "final_pass": 21,
+  "pair_counts": {
+    "1→1": 17,
+    "1→0": 7,
+    "0→0": 12,
+    "0→1": 4
+  },
+  "outcomes": {
+    "approved": 11,
+    "max_reviews_reached": 24,
+    "degraded": 5
+  },
+  "reviews": {
+    "revise": 103,
+    "approve": 11
+  },
+  "review_count": 114,
+  "revision_count": 99,
+  "raw_verifier_status": {
+    "success": 139
+  },
+  "stage_records": 155,
+  "stage_transitions": {
+    "1→1": 39,
+    "0→0": 25,
+    "0→1": 4,
+    "1→0": 7
+  },
+  "approved_failed": 8,
+  "token_coverage": {
+    "modifier": {
+      "complete": 139,
+      "missing": 4
+    },
+    "reviewer": {
+      "partial": 114
+    }
+  },
+  "timing": {
+    "modifier": {
+      "total_minutes": 1857.35695,
+      "mean_minutes": 46.43392375,
+      "median_minutes": 46.209625
+    },
+    "reviewer": {
+      "total_minutes": 174.36609999999996,
+      "mean_minutes": 4.3591524999999995,
+      "median_minutes": 4.725716666666667
+    },
+    "initial": {
+      "total_minutes": 813.6043333333332,
+      "mean_minutes": 20.340108333333333,
+      "median_minutes": 17.856749999999998
+    }
+  },
+  "tests": {
+    "initial": {
+      "f2p": {
+        "passed": 2712,
+        "total": 2736,
+        "trial_macro_rate": 0.9880657150790045
+      },
+      "p2p": {
+        "passed": 23756,
+        "total": 23760,
+        "trial_macro_rate": 0.9916666666666667
+      }
+    },
+    "final": {
+      "f2p": {
+        "passed": 2374,
+        "total": 2736,
+        "trial_macro_rate": 0.8888664144723407
+      },
+      "p2p": {
+        "passed": 23756,
+        "total": 23760,
+        "trial_macro_rate": 0.9916666666666667
+      }
+    }
+  }
+}
